@@ -3,14 +3,14 @@ import 'package:mone_task_app/worker/model/task_worker_model.dart';
 import 'package:mone_task_app/worker/service/task_worker_service.dart';
 import 'package:mone_task_app/worker/widgets/dealog.dart';
 
-class AdminHomeUi extends StatefulWidget {
-  const AdminHomeUi({super.key});
+class TaskWorkerUi extends StatefulWidget {
+  const TaskWorkerUi({super.key});
 
   @override
-  State<AdminHomeUi> createState() => _AdminHomeUiState();
+  State<TaskWorkerUi> createState() => _TaskWorkerUiState();
 }
 
-class _AdminHomeUiState extends State<AdminHomeUi> {
+class _TaskWorkerUiState extends State<TaskWorkerUi> {
   late Future<List<TaskWorkerModel>> tasksFuture;
 
   @override

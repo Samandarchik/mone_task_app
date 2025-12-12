@@ -19,8 +19,7 @@ class AppDioClient {
         headers: {
           'Content-Type': 'application/json',
           'Accept': 'application/json',
-          'Authorization':
-              'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoyLCJyb2xlIjoibWVuZWdlciIsImZpbGlhbF9pZCI6MSwiZXhwIjoxNzY1OTE4OTk3LCJpYXQiOjE3NjUzMTQxOTcsInN1YiI6IjIifQ.86YXU_cvErMHnbj61KccKpEIlHxvMLsAm7A7rJY8S-k',
+          'Authorization': 'Bearer $token',
         },
         connectTimeout: const Duration(seconds: 30),
         receiveTimeout: const Duration(seconds: 30),

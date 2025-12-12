@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
+import 'package:mone_task_app/admin/ui/admin_ui.dart';
 import 'package:mone_task_app/worker/ui/task_worker_ui.dart';
 import 'package:mone_task_app/core/context_extension.dart';
 import 'package:mone_task_app/home/model/login_model.dart';
@@ -100,7 +101,7 @@ class _LoginPageState extends State<LoginPage> {
     });
 
     print("status okey");
-    context.pushAndRemove(AdminHomeUi());
+    context.pushAndRemove(TaskWorkerUi());
     await _saveAccount(_phoneController.text, _passwordController.text);
 
     // final user = result['user'];
@@ -149,7 +150,7 @@ class _LoginPageState extends State<LoginPage> {
 
       // 🔹 To'g'ri yo'naltirish logikasi:
 
-      context.pushAndRemove(AdminHomeUi());
+      context.pushAndRemove(TaskWorkerUi());
     } else {
       _showErrorDialog(result['message'] ?? 'Login xatosi');
     }

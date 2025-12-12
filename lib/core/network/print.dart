@@ -2,28 +2,27 @@ import 'package:flutter/foundation.dart';
 
 void pPrint(Object? object, [int level = 3, String? title]) {
   if (kDebugMode) {
-    String color;
     switch (level) {
       case 1:
-        color = '\x1B[32m'; // green
+        // green
         break;
       case 2:
-        color = '\x1B[33m'; // yellow
+        // yellow
         break;
       case 3:
-        color = '\x1B[31m'; // red
+        // red
         break;
       case 4:
-        color = '\x1B[34m'; // blue
+        // blue
         break;
       case 5:
-        color = '\x1B[35m'; // magenta
+        // magenta
         break;
       case 6:
-        color = '\x1B[36m'; // cyan
+        // cyan
         break;
       default:
-        color = '\x1B[37m'; // white
+      // white
     }
 
     title ??= 'Debug';
