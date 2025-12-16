@@ -101,7 +101,7 @@ class _LoginPageState extends State<LoginPage> {
     });
 
     print("status okey");
-    context.pushAndRemove(TaskWorkerUi());
+    // context.pushAndRemove(TaskWorkerUi());
     await _saveAccount(_phoneController.text, _passwordController.text);
 
     // final user = result['user'];
@@ -109,19 +109,17 @@ class _LoginPageState extends State<LoginPage> {
     SharedPreferences prefs = await SharedPreferences.getInstance();
     await prefs.setString('access_token', result['access_token']);
 
-    // await prefs.setString('user', jsonEncode(user));
-    // await prefs.setString("role", user["role"] ?? '');
-    // print(result["user"]);
+    await prefs.setString("role", result["role"]);
     // 🔹 To'g'ri yo'naltirish logikasi:
     // Oddiy user tizimi
-    // if (user["role"] == "admin") {
-    //   context.pushAndRemove(AdminDashboard());
-    // }
-    // if (user["role"] == "operator") {
-    //   context.pushAndRemove(AgentDashboard());
-    // }
-    // if (user["role"] == "delivery") {
-    //   context.pushAndRemove(DeliveryHome());
+    if (result["role"] == "admin") {
+      context.push(AdminTaskUi());
+    }
+    if (result["role"] == "checker") {
+      // context.pushAndRemove(AgentDashboard());
+    }
+    // if (result["role"] == "delivery") {
+    context.push(TaskWorkerUi());
     // }
   }
 
@@ -150,7 +148,7 @@ class _LoginPageState extends State<LoginPage> {
 
       // 🔹 To'g'ri yo'naltirish logikasi:
 
-      context.pushAndRemove(TaskWorkerUi());
+      context.push(AdminTaskUi());
     } else {
       _showErrorDialog(result['message'] ?? 'Login xatosi');
     }

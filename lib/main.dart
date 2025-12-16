@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:mone_task_app/admin/ui/admin_ui.dart';
 import 'package:mone_task_app/core/di/di.dart';
+import 'package:mone_task_app/home/service/login_service.dart';
 import 'package:mone_task_app/worker/model/task_worker_model.dart';
 import 'package:mone_task_app/worker/ui/task_worker_ui.dart';
 
@@ -24,7 +25,7 @@ class MyApp extends StatelessWidget {
         ),
       ),
       debugShowCheckedModeBanner: false,
-      home: const AdminTaskUi(),
+      home: const LoginPage(),
     );
   }
 }

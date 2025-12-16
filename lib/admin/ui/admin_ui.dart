@@ -29,10 +29,10 @@ class _AdminTaskUiState extends State<AdminTaskUi> {
           bottom: const TabBar(
             isScrollable: true, // 🔥 Scroll bo‘ladi
             tabs: [
-              Tab(text: "Filial 1"),
-              Tab(text: "Filial 2"),
-              Tab(text: "Filial 3"),
-              Tab(text: "Filial 4"),
+              Tab(text: "Гелион"),
+              Tab(text: "Мархабо"),
+              Tab(text: "Фреско"),
+              Tab(text: "Сибирский"),
             ],
           ),
           actions: [
