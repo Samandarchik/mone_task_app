@@ -9,4 +9,5 @@ abstract final class AppUrls {
   static const String addTask = '$baseUrl/admin/tasks/';
   static const String deleteTask = '$baseUrl/admin/tasks/';
   static const String roles = '$baseUrl/admin/roles/';
+  static const String taskProof = '$baseUrl/checker/task-proofs/';
 }

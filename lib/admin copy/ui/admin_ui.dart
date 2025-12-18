@@ -1,19 +1,18 @@
-import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
-import 'package:mone_task_app/admin/model/admin_task_model.dart';
-import 'package:mone_task_app/admin/service/task_worker_service.dart';
+import 'package:mone_task_app/admin%20copy/model/checker_check_task_model.dart';
+import 'package:mone_task_app/admin copy/service/task_worker_service.dart';
 import 'package:mone_task_app/admin/ui/add_admin_task.dart';
 import 'package:mone_task_app/admin/ui/dialog.dart';
 
-class AdminTaskUi extends StatefulWidget {
-  const AdminTaskUi({super.key});
+class CheckerHomeUi extends StatefulWidget {
+  const CheckerHomeUi({super.key});
 
   @override
-  State<AdminTaskUi> createState() => _AdminTaskUiState();
+  State<CheckerHomeUi> createState() => _CheckerHomeUiState();
 }
 
-class _AdminTaskUiState extends State<AdminTaskUi> {
-  late Future<List<AdminTaskModel>> tasksFuture;
+class _CheckerHomeUiState extends State<CheckerHomeUi> {
+  late Future<List<CheckerCheckTaskModel>> tasksFuture;
 
   @override
   void initState() {
@@ -30,6 +29,7 @@ class _AdminTaskUiState extends State<AdminTaskUi> {
         appBar: AppBar(
           title: const Text("Worker Tasks"),
           bottom: const TabBar(
+            padding: EdgeInsets.zero,
             isScrollable: true, // 🔥 Scroll bo‘ladi
             tabs: [
               Tab(text: "Гелион"),
@@ -56,7 +56,7 @@ class _AdminTaskUiState extends State<AdminTaskUi> {
               return const Center(child: CircularProgressIndicator());
             }
 
-            final allTasks = snapshot.data as List<AdminTaskModel>;
+            final allTasks = snapshot.data as List<CheckerCheckTaskModel>;
 
             return TabBarView(
               children: [
@@ -74,8 +74,8 @@ class _AdminTaskUiState extends State<AdminTaskUi> {
   }
 
   /// 🔥 Har bir filial uchun widget
-  Widget buildFilialTasks(List<AdminTaskModel> tasks, int filialId) {
-    List<AdminTaskModel> filtered = tasks
+  Widget buildFilialTasks(List<CheckerCheckTaskModel> tasks, int filialId) {
+    List<CheckerCheckTaskModel> filtered = tasks
         .where((task) => task.filialId == filialId)
         .toList();
 
@@ -95,13 +95,14 @@ class _AdminTaskUiState extends State<AdminTaskUi> {
       },
 
       child: ListView.builder(
+        padding: EdgeInsets.zero,
         itemCount: filtered.length,
         itemBuilder: (_, i) => InkWell(
           onLongPress: () async {
             final isDelete = await NativeDialog.showDeleteDialog();
 
             if (isDelete) {
-              await AdminTaskService().deleteTask(filtered[i].id);
+              await AdminTaskService().deleteTask(filtered[i].id ?? 0);
 
               setState(() {
                 tasksFuture = AdminTaskService().fetchTasks();
@@ -113,10 +114,10 @@ class _AdminTaskUiState extends State<AdminTaskUi> {
             padding: const EdgeInsets.all(8),
             decoration: BoxDecoration(
               border: Border(bottom: BorderSide(color: Colors.white, width: 3)),
-              color: getStatusColor(filtered[i].taskStatus),
+              color: getStatusColor(filtered[i].taskStatus ?? ""),
             ),
             child: Text(
-              filtered[i].description,
+              filtered[i].description ?? "",
               style: TextStyle(fontSize: 16),
             ),
           ),
@@ -139,7 +140,9 @@ Color getStatusColor(String status) {
 }
 
 /// 🔥 TASK TYPE BO‘YICHA FILTER
-List<AdminTaskModel> filterTasksByDate(List<AdminTaskModel> tasks) {
+List<CheckerCheckTaskModel> filterTasksByDate(
+  List<CheckerCheckTaskModel> tasks,
+) {
   final now = DateTime.now();
 
   return tasks.where((task) {

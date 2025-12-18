@@ -1,6 +1,6 @@
 import 'package:dio/dio.dart';
+import 'package:mone_task_app/admin%20copy/model/checker_check_task_model.dart';
 import 'package:mone_task_app/admin/model/add_admin_task.dart';
-import 'package:mone_task_app/admin/model/admin_task_model.dart';
 import 'package:mone_task_app/core/constants/urls.dart';
 import 'package:mone_task_app/core/di/di.dart';
 import 'package:mone_task_app/worker/model/response_task_model.dart';
@@ -8,9 +8,9 @@ import 'package:mone_task_app/worker/model/response_task_model.dart';
 class AdminTaskService {
   final Dio _dio = sl<Dio>();
 
-  Future<List<AdminTaskModel>> fetchTasks() async {
+  Future<List<CheckerCheckTaskModel>> fetchTasks() async {
     try {
-      final response = await _dio.get(AppUrls.adminTasks);
+      final response = await _dio.get(AppUrls.taskProof);
 
       if (response.data == null) {
         throw Exception("Task ma'lumotlari mavjud emas");
@@ -22,7 +22,7 @@ class AdminTaskService {
         throw Exception("Server noto‘g‘ri format qaytardi");
       }
 
-      return data.map((e) => AdminTaskModel.fromJson(e)).toList();
+      return data.map((e) => CheckerCheckTaskModel.fromJson(e)).toList();
     } catch (e) {
       rethrow; // UI ushlashi uchun
     }

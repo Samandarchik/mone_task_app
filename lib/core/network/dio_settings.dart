@@ -1,28 +1,36 @@
 import 'package:dio/dio.dart';
 import 'package:mone_task_app/core/constants/urls.dart';
 import 'package:mone_task_app/core/network/print.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:talker_dio_logger/talker_dio_logger_interceptor.dart';
 import 'package:talker_dio_logger/talker_dio_logger_settings.dart';
 import '../data/local/token_storage.dart';
 
 class AppDioClient {
-  final TokenStorage tokenStorage;
-
-  AppDioClient({required this.tokenStorage});
-
-  Future<Dio> createDio() async {
-    final token = await tokenStorage.getToken();
-
+  Dio createDio() {
     final dio = Dio(
       BaseOptions(
         baseUrl: AppUrls.baseUrl,
-        headers: {
-          'Content-Type': 'application/json',
-          'Accept': 'application/json',
-          'Authorization': 'Bearer $token',
-        },
         connectTimeout: const Duration(seconds: 30),
         receiveTimeout: const Duration(seconds: 30),
+      ),
+    );
+
+    dio.interceptors.add(
+      InterceptorsWrapper(
+        onRequest: (options, handler) async {
+          final prefs = await SharedPreferences.getInstance();
+          final token = prefs.getString("access_token");
+
+          options.headers['Content-Type'] = 'application/json';
+          options.headers['Accept'] = 'application/json';
+
+          if (token != null) {
+            options.headers['Authorization'] = 'Bearer $token';
+          }
+
+          return handler.next(options);
+        },
       ),
     );
 
@@ -30,15 +38,11 @@ class AppDioClient {
       TalkerDioLogger(
         settings: const TalkerDioLoggerSettings(
           enabled: true,
-          printErrorHeaders: true,
+          printRequestHeaders: true,
           printRequestData: true,
+          printResponseData: true,
           printErrorData: true,
           printErrorMessage: true,
-          printRequestHeaders: true,
-          printResponseData: true,
-          printResponseHeaders: true,
-          printResponseMessage: true,
-          printResponseRedirects: true,
         ),
       ),
     );
