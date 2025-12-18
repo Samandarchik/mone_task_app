@@ -3,9 +3,6 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:mone_task_app/admin%20copy/ui/admin_ui.dart';
 import 'package:mone_task_app/admin/ui/admin_ui.dart';
-import 'package:mone_task_app/core/data/local/base_storage.dart';
-import 'package:mone_task_app/core/data/local/token_storage.dart';
-import 'package:mone_task_app/core/di/di.dart';
 import 'package:mone_task_app/worker/ui/task_worker_ui.dart';
 import 'package:mone_task_app/core/context_extension.dart';
 import 'package:mone_task_app/home/model/login_model.dart';
@@ -88,41 +85,39 @@ class _LoginPageState extends State<LoginPage> {
   Future<void> _login() async {
     if (!_formKey.currentState!.validate()) return;
 
-    setState(() {
-      _isLoading = true;
-    });
+    setState(() => _isLoading = true);
 
-    // Faqat ApiService ishlatiladi
-    final result = await ApiService().login(
-      LoginModel(
-        username: _phoneController.text.trim(),
-        password: _passwordController.text.trim(),
-      ),
-    );
+    try {
+      final result = await ApiService().login(
+        LoginModel(
+          username: _phoneController.text.trim(),
+          password: _passwordController.text.trim(),
+        ),
+      );
 
-    setState(() {
-      _isLoading = false;
-    });
-    // context.pushAndRemove(TaskWorkerUi());
-    await _saveAccount(_phoneController.text, _passwordController.text);
+      setState(() => _isLoading = false);
 
-    // final user = result['user'];
+      // ✅ FAQAT SUCCESS BO'LSA
+      if (result["access_token"] != null && result["role"] != null) {
+        final prefs = await SharedPreferences.getInstance();
 
-    SharedPreferences prefs = await SharedPreferences.getInstance();
-    await prefs.setString("role", result["role"]);
-    await prefs.setString("full_name", result["full_name"]);
+        await prefs.setString('access_token', result['access_token']);
+        await prefs.setString('role', result['role']);
 
-    TokenStorage tokenStorage = TokenStorage(sl<BaseStorage>());
-    // 🔹 To'g'ri yo'naltirish logikasi:
-    // Oddiy user tizimi
-    tokenStorage.putToken(result['access_token']);
-
-    if (result["role"] == "admin") {
-      context.push(AdminTaskUi());
-    } else if (result["role"] == "checker") {
-      context.pushAndRemove(CheckerHomeUi());
-    } else {
-      context.push(TaskWorkerUi());
+        // navigation
+        if (result["role"] == "admin") {
+          context.pushAndRemove(AdminTaskUi());
+        } else if (result["role"] == "checker") {
+          context.pushAndRemove(CheckerHomeUi());
+        } else {
+          context.pushAndRemove(TaskWorkerUi());
+        }
+      } else {
+        _showError("Login yoki parol noto‘g‘ri");
+      }
+    } catch (e) {
+      setState(() => _isLoading = false);
+      _showError("Login yoki parol noto‘g‘ri");
     }
   }
 
@@ -431,5 +426,11 @@ class _LoginPageState extends State<LoginPage> {
     _phoneController.dispose();
     _passwordController.dispose();
     super.dispose();
+  }
+
+  void _showError(String text) {
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(text), backgroundColor: Colors.red));
   }
 }

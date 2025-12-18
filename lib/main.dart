@@ -53,8 +53,10 @@ class SpleshScreenState extends State<SpleshScreen> {
       context.pushAndRemove(AdminTaskUi());
     } else if (role == "checker") {
       context.pushAndRemove(CheckerHomeUi());
-    } else {
+    } else if (role != null) {
       context.pushAndRemove(TaskWorkerUi());
+    } else {
+      context.pushAndRemove(LoginPage());
     }
   }
 
