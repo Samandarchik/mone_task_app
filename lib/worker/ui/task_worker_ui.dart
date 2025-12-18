@@ -1,11 +1,8 @@
-import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:mone_task_app/worker/model/task_worker_model.dart';
 import 'package:mone_task_app/worker/model/response_task_model.dart';
 import 'package:mone_task_app/worker/service/task_worker_service.dart';
-import 'package:mone_task_app/worker/widgets/dealog.dart';
-import 'package:http/http.dart' as http;
 
 class TaskWorkerUi extends StatefulWidget {
   const TaskWorkerUi({super.key});
@@ -30,62 +27,7 @@ class _TaskWorkerUiState extends State<TaskWorkerUi> {
     });
   }
 
-  /// 🔥 BACKEND GA YUBORISH
-  Future<void> _uploadTaskToBackend(RequestTaskModel requestData) async {
-    try {
-      // Loading dialog ko'rsatish
-      showDialog(
-        context: context,
-        barrierDismissible: false,
-        builder: (ctx) =>
-            const Center(child: CircularProgressIndicator.adaptive()),
-      );
-
-      final uri = Uri.parse("YOUR_API_URL/task/complete"); // ← API URL
-      final request = http.MultipartRequest('POST', uri);
-
-      // Task ma'lumotlarini qo'shish
-      request.fields['task_id'] = requestData.id.toString();
-      request.fields['worker_id'] =
-          'USER_ID'; // ← User ID (SharedPreferences dan oling)
-      request.fields['comment'] = requestData.text ?? '';
-
-      // Agar fayl tanlangan bo'lsa
-      if (requestData.file != null) {
-        final file = await http.MultipartFile.fromPath(
-          'file', // ← backend field nomi
-          requestData.file!.path,
-          filename: requestData.file!.name,
-        );
-        request.files.add(file);
-      }
-
-      // Yuborish
-      final response = await request.send();
-      final responseBody = await response.stream.bytesToString();
-
-      Navigator.pop(context); // Loading yopish
-
-      if (response.statusCode == 200 || response.statusCode == 201) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text("✅ Muvaffaqiyatli yuborildi!"),
-            backgroundColor: Colors.green,
-          ),
-        );
-        _refresh(); // Tasklar yangilanadi
-      } else {
-        throw Exception("Xatolik: ${response.statusCode}\n$responseBody");
-      }
-    } catch (e) {
-      Navigator.pop(context); // Loading yopish
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text("❌ Xatolik: $e"), backgroundColor: Colors.red),
-      );
-    }
-  }
-
-  /// 🔥 AVTOMATIK KAMERADAN VIDEO OLISH
+  /// 🔥 AVTOMATIK KAMERADAN VIDEO OLISH VA YUBORISH
   Future<void> _recordVideoAndUpload(TaskWorkerModel task) async {
     try {
       // Kameradan video olish
@@ -105,15 +47,44 @@ class _TaskWorkerUiState extends State<TaskWorkerUi> {
         return;
       }
 
-      // Video olingandan keyin backend ga yuborish
+      // Loading ko'rsatish
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (ctx) =>
+            const Center(child: CircularProgressIndicator.adaptive()),
+      );
+
+      // RequestTaskModel yaratish
       final requestData = RequestTaskModel(
         id: task.id,
-        text: "Video orqali bajarildi", // Default izoh
+        text: "Video orqali bajarildi",
         file: video,
       );
 
-      await _uploadTaskToBackend(requestData);
+      // Backend ga yuborish
+      bool success = await TaskWorkerService().completeTask(requestData);
+
+      Navigator.pop(context); // Loading yopish
+
+      if (success) {
+        _refresh();
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text("✅ Muvaffaqiyatli yuborildi!"),
+            backgroundColor: Colors.green,
+          ),
+        );
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text("❌ Yuborishda xatolik!"),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
     } catch (e) {
+      Navigator.pop(context); // Loading yopish
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text("❌ Xatolik: $e"), backgroundColor: Colors.red),
       );
