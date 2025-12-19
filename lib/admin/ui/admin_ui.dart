@@ -1,9 +1,11 @@
-import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:mone_task_app/admin/model/admin_task_model.dart';
 import 'package:mone_task_app/admin/service/task_worker_service.dart';
 import 'package:mone_task_app/admin/ui/add_admin_task.dart';
 import 'package:mone_task_app/admin/ui/dialog.dart';
+import 'package:mone_task_app/core/context_extension.dart';
+import 'package:mone_task_app/home/service/login_service.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class AdminTaskUi extends StatefulWidget {
   const AdminTaskUi({super.key});
@@ -28,7 +30,7 @@ class _AdminTaskUiState extends State<AdminTaskUi> {
       initialIndex: 0, // 🔥 Default Filial 1
       child: Scaffold(
         appBar: AppBar(
-          title: const Text("Worker Tasks"),
+          title: const Text("Admin Panel"),
           bottom: const TabBar(
             isScrollable: true, // 🔥 Scroll bo‘ladi
             tabs: [
@@ -45,6 +47,15 @@ class _AdminTaskUiState extends State<AdminTaskUi> {
                 context,
                 MaterialPageRoute(builder: (context) => AddAdminTask()),
               ),
+            ),
+            IconButton(
+              icon: const Icon(Icons.logout),
+              onPressed: () async {
+                SharedPreferences prefs = await SharedPreferences.getInstance();
+                prefs.remove("access_token");
+                prefs.remove("role");
+                context.pushAndRemove(LoginPage());
+              },
             ),
           ],
         ),

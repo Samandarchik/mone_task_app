@@ -103,6 +103,7 @@ class _LoginPageState extends State<LoginPage> {
 
         await prefs.setString('access_token', result['access_token']);
         await prefs.setString('role', result['role']);
+        await prefs.setString('full_name', result['full_name']);
 
         // navigation
         if (result["role"] == "admin") {
@@ -129,49 +130,25 @@ class _LoginPageState extends State<LoginPage> {
     });
 
     final result = await ApiService().login(
-      LoginModel(username: "akbarali", password: "111"),
+      LoginModel(username: "akbarali1", password: "111"),
     );
 
     setState(() {
       _isLoading = false;
     });
 
-    if (result['success'] == true) {
-      // TextInput.finishAutofillContext();
+    // TextInput.finishAutofillContext();
 
-      await _saveAccount(_phoneController.text, _passwordController.text);
+    await _saveAccount(_phoneController.text, _passwordController.text);
 
-      SharedPreferences prefs = await SharedPreferences.getInstance();
-      await prefs.setString('access_token', result['access_token']);
+    SharedPreferences prefs = await SharedPreferences.getInstance();
+    await prefs.setString('access_token', result['access_token']);
+    await prefs.setString('role', result['role']);
+    await prefs.setString('full_name', result['full_name']);
 
-      // 🔹 To'g'ri yo'naltirish logikasi:
+    // 🔹 To'g'ri yo'naltirish logikasi:
 
-      context.push(AdminTaskUi());
-    } else {
-      _showErrorDialog(result['message'] ?? 'Login xatosi');
-    }
-  }
-
-  void _showErrorDialog(String message) {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Row(
-          children: [
-            Icon(Icons.error, color: Colors.red),
-            SizedBox(width: 10),
-            Text('error'),
-          ],
-        ),
-        content: Text(message),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: Text('OK'),
-          ),
-        ],
-      ),
-    );
+    context.push(AdminTaskUi());
   }
 
   @override
