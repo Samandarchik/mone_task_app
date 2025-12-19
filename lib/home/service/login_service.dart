@@ -105,6 +105,12 @@ class _LoginPageState extends State<LoginPage> {
         await prefs.setString('role', result['role']);
         await prefs.setString('full_name', result['full_name']);
 
+        // ✅ MUVAFFAQIYATLI LOGIN BO'LGANDA AKKAUNTNI SAQLASH
+        await _saveAccount(
+          _phoneController.text.trim(),
+          _passwordController.text.trim(),
+        );
+
         // navigation
         if (result["role"] == "admin") {
           context.pushAndRemove(AdminTaskUi());
@@ -114,11 +120,11 @@ class _LoginPageState extends State<LoginPage> {
           context.pushAndRemove(TaskWorkerUi());
         }
       } else {
-        _showError("Login yoki parol noto‘g‘ri");
+        _showError("Login yoki parol noto'g'ri");
       }
     } catch (e) {
       setState(() => _isLoading = false);
-      _showError("Login yoki parol noto‘g‘ri");
+      _showError("Login yoki parol noto'g'ri");
     }
   }
 

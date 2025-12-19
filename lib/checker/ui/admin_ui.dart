@@ -29,7 +29,6 @@ class _CheckerHomeUiState extends State<CheckerHomeUi> {
     SharedPreferences prefs = await SharedPreferences.getInstance();
     setState(() {
       fullName = prefs.getString('full_name') ?? '';
-      print(fullName);
     });
   }
 
