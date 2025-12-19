@@ -1,7 +1,7 @@
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
-import 'package:mone_task_app/admin%20copy/ui/admin_ui.dart';
+import 'package:mone_task_app/checker/ui/admin_ui.dart';
 import 'package:mone_task_app/admin/ui/admin_ui.dart';
 import 'package:mone_task_app/worker/ui/task_worker_ui.dart';
 import 'package:mone_task_app/core/context_extension.dart';

@@ -1,8 +1,11 @@
 import 'package:flutter/material.dart';
-import 'package:mone_task_app/admin%20copy/model/checker_check_task_model.dart';
-import 'package:mone_task_app/admin copy/service/task_worker_service.dart';
+import 'package:mone_task_app/checker/model/checker_check_task_model.dart';
+import 'package:mone_task_app/checker/service/task_worker_service.dart';
 import 'package:mone_task_app/admin/ui/add_admin_task.dart';
 import 'package:mone_task_app/admin/ui/dialog.dart';
+import 'package:mone_task_app/core/context_extension.dart';
+import 'package:mone_task_app/home/service/login_service.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class CheckerHomeUi extends StatefulWidget {
   const CheckerHomeUi({super.key});
@@ -18,6 +21,16 @@ class _CheckerHomeUiState extends State<CheckerHomeUi> {
   void initState() {
     super.initState();
     tasksFuture = AdminTaskService().fetchTasks();
+    getUserFullName();
+  }
+
+  String fullName = "";
+  void getUserFullName() async {
+    SharedPreferences prefs = await SharedPreferences.getInstance();
+    setState(() {
+      fullName = prefs.getString('full_name') ?? '';
+      print(fullName);
+    });
   }
 
   @override
@@ -27,7 +40,7 @@ class _CheckerHomeUiState extends State<CheckerHomeUi> {
       initialIndex: 0, // 🔥 Default Filial 1
       child: Scaffold(
         appBar: AppBar(
-          title: const Text("Worker Tasks"),
+          title: Text(fullName),
           bottom: const TabBar(
             padding: EdgeInsets.zero,
             isScrollable: true, // 🔥 Scroll bo‘ladi
@@ -45,6 +58,15 @@ class _CheckerHomeUiState extends State<CheckerHomeUi> {
                 context,
                 MaterialPageRoute(builder: (context) => AddAdminTask()),
               ),
+            ),
+            IconButton(
+              icon: const Icon(Icons.logout),
+              onPressed: () async {
+                SharedPreferences prefs = await SharedPreferences.getInstance();
+                prefs.remove("access_token");
+                prefs.remove("role");
+                context.pushAndRemove(LoginPage());
+              },
             ),
           ],
         ),
