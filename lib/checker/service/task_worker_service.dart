@@ -91,4 +91,11 @@ class AdminTaskService {
       rethrow;
     }
   }
+
+  Future<void> updateTaskStatus(int taskId) async {
+    try {
+      final response = await _dio.post("${AppUrls.taskProof}$taskId/approve");
+      print(response.statusCode);
+    } catch (e) {}
+  }
 }

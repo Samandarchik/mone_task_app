@@ -1,7 +1,7 @@
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
-import 'package:mone_task_app/checker/ui/admin_ui.dart';
+import 'package:mone_task_app/checker/ui/checker_home_ui.dart';
 import 'package:mone_task_app/admin/ui/admin_ui.dart';
 import 'package:mone_task_app/worker/ui/task_worker_ui.dart';
 import 'package:mone_task_app/core/context_extension.dart';
@@ -154,7 +154,7 @@ class _LoginPageState extends State<LoginPage> {
 
     // 🔹 To'g'ri yo'naltirish logikasi:
 
-    context.push(AdminTaskUi());
+    context.push(TaskWorkerUi());
   }
 
   @override
