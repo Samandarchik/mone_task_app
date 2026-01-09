@@ -96,18 +96,12 @@ class _LoginPageState extends State<LoginPage> {
       );
 
       setState(() => _isLoading = false);
-
-      print(result["user"]["username"]);
-      print(result['token']);
       // ✅ FAQAT SUCCESS BO'LSA
       if (result["token"] != null) {
         final prefs = await SharedPreferences.getInstance();
-        // print("fullname  ${prefs.getString("full_name")}");
-
         await prefs.setString('access_token', result['token']);
         await prefs.setString('role', result['user']["role"]);
         await prefs.setString('full_name', result['user']["username"]);
-        print("object");
         // ✅ MUVAFFAQIYATLI LOGIN BO'LGANDA AKKAUNTNI SAQLASH
         await _saveAccount(
           _phoneController.text.trim(),
@@ -116,7 +110,7 @@ class _LoginPageState extends State<LoginPage> {
         // navigation
         if (result["user"]["role"] == "super_admin") {
           context.pushAndRemove(AdminTaskUi());
-        } else if (result["role"] == "checker") {
+        } else if (result["user"]["role"] == "checker") {
           context.pushAndRemove(CheckerHomeUi());
         } else {
           context.pushAndRemove(TaskWorkerUi());
@@ -151,8 +145,8 @@ class _LoginPageState extends State<LoginPage> {
 
     SharedPreferences prefs = await SharedPreferences.getInstance();
     await prefs.setString('access_token', result['token']);
-    await prefs.setString('role', result['user["role"]']);
-    await prefs.setString('full_name', result['user["username"]']);
+    await prefs.setString('role', result['user']["role"]);
+    await prefs.setString('full_name', result['user']["username"]);
 
     // 🔹 To'g'ri yo'naltirish logikasi:
 

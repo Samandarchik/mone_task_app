@@ -3,7 +3,6 @@ import 'package:mone_task_app/admin/model/add_admin_task.dart';
 import 'package:mone_task_app/admin/model/admin_task_model.dart';
 import 'package:mone_task_app/core/constants/urls.dart';
 import 'package:mone_task_app/core/di/di.dart';
-import 'package:mone_task_app/worker/model/response_task_model.dart';
 
 class AdminTaskService {
   final Dio _dio = sl<Dio>();
@@ -23,25 +22,6 @@ class AdminTaskService {
       }
 
       return data.map((e) => AdminTaskModel.fromJson(e)).toList();
-    } catch (e) {
-      rethrow; // UI ushlashi uchun
-    }
-  }
-
-  Future<bool> completeTask(RequestTaskModel request) async {
-    try {
-      final formData = FormData.fromMap({
-        "task_id": request.id,
-        if (request.text != null) "text": request.text,
-        if (request.file != null)
-          "file": await MultipartFile.fromFile(
-            request.file!.path,
-            filename: request.file!.name,
-          ),
-      });
-
-      final response = await _dio.post(AppUrls.completeTask, data: formData);
-      return response.statusCode == 200;
     } catch (e) {
       rethrow; // UI ushlashi uchun
     }

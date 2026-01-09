@@ -30,17 +30,13 @@ class TaskWorkerService {
   Future<bool> completeTask(RequestTaskModel request) async {
     try {
       final formData = FormData.fromMap({
-        "task_id": request.id,
-        if (request.text != null) "text": request.text,
-        if (request.file != null)
-          "file": await MultipartFile.fromFile(
-            request.file!.path,
-            filename: request.file!.name,
-          ),
+        "video": await MultipartFile.fromFile(
+          request.file!.path,
+          filename: request.file!.name,
+        ),
       });
 
-      final response = await _dio.post(AppUrls.completeTask, data: formData);
-      print("Response status: ${response.statusCode}");
+      final response = await _dio.post("${AppUrls.tasks}", data: formData);
       return response.statusCode == 200;
     } catch (e) {
       rethrow; // UI ushlashi uchun

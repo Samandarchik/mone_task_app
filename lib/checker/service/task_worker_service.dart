@@ -10,13 +10,13 @@ class AdminTaskService {
 
   Future<List<CheckerCheckTaskModel>> fetchTasks() async {
     try {
-      final response = await _dio.get(AppUrls.taskProof);
+      final response = await _dio.get(AppUrls.tasks);
 
       if (response.data == null) {
         throw Exception("Task ma'lumotlari mavjud emas");
       }
 
-      final data = response.data;
+      final data = response.data['data'];
 
       if (data is! List) {
         throw Exception("Server noto‘g‘ri format qaytardi");
@@ -31,16 +31,16 @@ class AdminTaskService {
   Future<bool> completeTask(RequestTaskModel request) async {
     try {
       final formData = FormData.fromMap({
-        "task_id": request.id,
-        if (request.text != null) "text": request.text,
-        if (request.file != null)
-          "file": await MultipartFile.fromFile(
-            request.file!.path,
-            filename: request.file!.name,
-          ),
+        "video": await MultipartFile.fromFile(
+          request.file!.path,
+          filename: request.file!.name,
+        ),
       });
 
-      final response = await _dio.post(AppUrls.completeTask, data: formData);
+      final response = await _dio.post(
+        "${AppUrls.tasks}/${request.id}/submit",
+        data: formData,
+      );
       return response.statusCode == 200;
     } catch (e) {
       rethrow; // UI ushlashi uchun
@@ -92,10 +92,16 @@ class AdminTaskService {
     }
   }
 
-  Future<void> updateTaskStatus(int taskId) async {
+  Future<bool> updateTaskStatus(int taskId, int status) async {
     try {
-      final response = await _dio.post("${AppUrls.taskProof}$taskId/approve");
+      final response = await _dio.post(
+        "${AppUrls.tasks}/$taskId/check",
+        data: {"status": status},
+      );
       print(response.statusCode);
-    } catch (e) {}
+      return response.statusCode == 200;
+    } catch (e) {
+      return false;
+    }
   }
 }

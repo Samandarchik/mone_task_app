@@ -1,0 +1,4 @@
+
+            onLongPress: () => AdminTaskService().updateTaskStatus(filtered[i].taskId, 1),
+            onDoubleTap: () =>
+                AdminTaskService().updateTaskStatus(filtered[i].taskId, 3),
