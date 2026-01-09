@@ -37,7 +37,8 @@ class _TaskWorkerUiState extends State<TaskWorkerUi> {
     final XFile? video = await showDialog<XFile?>(
       context: context,
       barrierDismissible: false,
-      builder: (context) => VideoRecorderDialog(maxDuration: 30),
+      builder: (context) =>
+          VideoRecorderDialog(maxDuration: 40, taskId: task.id),
     );
 
     if (video != null) {
@@ -57,11 +58,7 @@ class _TaskWorkerUiState extends State<TaskWorkerUi> {
       );
 
       // RequestTaskModel yaratish
-      final requestData = RequestTaskModel(
-        id: task.id,
-        text: "Video orqali bajarildi",
-        file: video,
-      );
+      final requestData = RequestTaskModel(id: task.id, file: video);
 
       // Backend ga yuborish
       bool success = await TaskWorkerService().completeTask(requestData);

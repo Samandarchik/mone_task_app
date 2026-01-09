@@ -2,15 +2,21 @@ import 'dart:io';
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:camera/camera.dart';
+import 'package:mone_task_app/worker/model/response_task_model.dart';
+import 'package:mone_task_app/worker/service/task_worker_service.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:video_player/video_player.dart';
-import 'package:image_picker/image_picker.dart';
 
 /// Telegram uslubidagi video recorder dialog
 class VideoRecorderDialog extends StatefulWidget {
+  final int taskId;
   final int maxDuration;
 
-  const VideoRecorderDialog({super.key, required this.maxDuration});
+  const VideoRecorderDialog({
+    super.key,
+    required this.maxDuration,
+    required this.taskId,
+  });
 
   @override
   State<VideoRecorderDialog> createState() => _VideoRecorderDialogState();
@@ -33,6 +39,7 @@ class _VideoRecorderDialogState extends State<VideoRecorderDialog> {
     initCamera();
   }
 
+  TaskWorkerService taskWorkerService = TaskWorkerService();
   Future<void> initCamera() async {
     // Permission so'rash
     final cameraStatus = await Permission.camera.request();
@@ -206,6 +213,10 @@ class _VideoRecorderDialogState extends State<VideoRecorderDialog> {
   void _sendVideo() {
     _timer?.cancel();
     if (recordedVideo != null) {
+      taskWorkerService.completeTask(
+        RequestTaskModel(id: widget.taskId, file: recordedVideo),
+      );
+      print("yuborish funksiyasi");
       Navigator.pop(context, recordedVideo);
     }
   }
@@ -426,15 +437,24 @@ class _VideoRecorderDialogState extends State<VideoRecorderDialog> {
                   const SizedBox(height: 20),
 
                   // Instruction text
-                  Text(
-                    recordedVideo != null
-                        ? "Qayta yozish yoki yuborish"
-                        : (isRecording
-                              ? "To'xtatish uchun bosing"
-                              : "Boshlash uchun bosing"),
-                    textAlign: TextAlign.center,
-                    style: const TextStyle(color: Colors.white, fontSize: 14),
-                  ),
+                  if (recordedVideo != null)
+                    const Text(
+                      "Qayta yozish yoki yuborish",
+                      textAlign: TextAlign.center,
+                      style: TextStyle(color: Colors.white, fontSize: 14),
+                    )
+                  else if (isRecording)
+                    const Text(
+                      "To'xtatish uchun bosing",
+                      textAlign: TextAlign.center,
+                      style: TextStyle(color: Colors.white, fontSize: 14),
+                    )
+                  else
+                    const Text(
+                      "Boshlash uchun bosing",
+                      textAlign: TextAlign.center,
+                      style: TextStyle(color: Colors.white, fontSize: 14),
+                    ),
                 ],
               ),
             ),

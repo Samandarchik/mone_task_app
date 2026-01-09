@@ -36,7 +36,10 @@ class TaskWorkerService {
         ),
       });
 
-      final response = await _dio.post("${AppUrls.tasks}", data: formData);
+      final response = await _dio.post(
+        "${AppUrls.tasks}/${request.id}/submit",
+        data: formData,
+      );
       return response.statusCode == 200;
     } catch (e) {
       rethrow; // UI ushlashi uchun
