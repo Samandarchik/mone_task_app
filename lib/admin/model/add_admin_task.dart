@@ -1,6 +1,6 @@
 class AddAdminTaskModel {
   String description;
-  String taskType;
+  int taskType;
   int role;
   List<int> filialsId;
 

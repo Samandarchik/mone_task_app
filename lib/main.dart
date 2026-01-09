@@ -49,7 +49,8 @@ class SpleshScreenState extends State<SpleshScreen> {
   void _loadSavedAccounts() async {
     SharedPreferences prefs = await SharedPreferences.getInstance();
     String? role = prefs.getString("role");
-    if (role == "admin") {
+    print(role);
+    if (role == "super_admin") {
       context.pushAndRemove(AdminTaskUi());
     } else if (role == "checker") {
       context.pushAndRemove(CheckerHomeUi());

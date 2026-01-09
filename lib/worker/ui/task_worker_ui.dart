@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:mone_task_app/core/context_extension.dart';
-import 'package:mone_task_app/core/di/di.dart';
 import 'package:mone_task_app/home/service/login_service.dart';
+import 'package:mone_task_app/utils/get_color.dart';
 import 'package:mone_task_app/worker/model/task_worker_model.dart';
 import 'package:mone_task_app/worker/model/response_task_model.dart';
 import 'package:mone_task_app/worker/service/task_worker_service.dart';
@@ -124,7 +124,6 @@ class _TaskWorkerUiState extends State<TaskWorkerUi> {
           }
 
           List<TaskWorkerModel> tasks = snapshot.data ?? [];
-          tasks = filterTasksByDate(tasks);
 
           return RefreshIndicator(
             onRefresh: () async => _refresh(),
@@ -161,7 +160,7 @@ class _TaskWorkerUiState extends State<TaskWorkerUi> {
                             ),
                             const SizedBox(height: 4),
                             Text(
-                              "Type: ${getTypeName(tasks[i].taskType)}",
+                              getTypeName(tasks[i].taskType),
                               style: TextStyle(
                                 fontSize: 12,
                                 color: Colors.grey.shade600,
@@ -180,48 +179,5 @@ class _TaskWorkerUiState extends State<TaskWorkerUi> {
         },
       ),
     );
-  }
-}
-
-/// 🔥 STATUS COLOR
-Color getStatusColor(String status) {
-  switch (status) {
-    case "completed":
-      return Colors.green.shade100;
-    case "checking":
-      return Colors.orange.shade100;
-    default:
-      return Colors.red.shade100;
-  }
-}
-
-/// 🔥 TASK TYPE BO'YICHA FILTER
-List<TaskWorkerModel> filterTasksByDate(List<TaskWorkerModel> tasks) {
-  final now = DateTime.now();
-
-  return tasks.where((task) {
-    switch (task.taskType) {
-      case "daily":
-        return true;
-      case "weekly":
-        return now.weekday == DateTime.monday;
-      case "monthly":
-        return now.day == 1;
-      default:
-        return true;
-    }
-  }).toList();
-}
-
-String getTypeName(String type) {
-  switch (type) {
-    case "daily":
-      return "Ежедневно";
-    case "weekly":
-      return "Еженедельно";
-    case "monthly":
-      return "Ежемесячно";
-    default:
-      return "Unknown";
   }
 }

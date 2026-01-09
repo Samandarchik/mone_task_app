@@ -10,13 +10,13 @@ class AdminTaskService {
 
   Future<List<AdminTaskModel>> fetchTasks() async {
     try {
-      final response = await _dio.get(AppUrls.adminTasks);
+      final response = await _dio.get(AppUrls.tasks);
 
       if (response.data == null) {
         throw Exception("Task ma'lumotlari mavjud emas");
       }
 
-      final data = response.data;
+      final data = response.data["data"];
 
       if (data is! List) {
         throw Exception("Server noto‘g‘ri format qaytardi");
@@ -59,7 +59,7 @@ class AdminTaskService {
   Future<bool> createTask(AddAdminTaskModel task) async {
     try {
       final response = await _dio.post(
-        AppUrls.addTask, // 🔥 shu yerga sizning POST URL’ingiz tushadi
+        AppUrls.tasks, // 🔥 shu yerga sizning POST URL’ingiz tushadi
         data: {
           "description": task.description,
           "task_type": task.taskType,
@@ -77,7 +77,7 @@ class AdminTaskService {
   Future<bool> addTask(AddAdminTaskModel task) async {
     try {
       final response = await _dio.post(
-        AppUrls.addTask, // 🔥 shu yerga sizning POST URL’ingiz tushadi
+        AppUrls.tasks, // 🔥 shu yerga sizning POST URL’ingiz tushadi
         data: {
           "description": task.description,
           "task_type": task.taskType,

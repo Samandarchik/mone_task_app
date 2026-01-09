@@ -1,28 +1,28 @@
 class AdminTaskModel {
-  int id;
-  String description;
-  String taskType;
-  int role;
+  int taskId;
   int filialId;
-  String taskStatus;
+  String task;
+  int type;
+  int status;
+  String? videoUrl;
 
   AdminTaskModel({
-    required this.id,
-    required this.description,
-    required this.taskType,
-    required this.role,
+    required this.taskId,
+    required this.task,
+    required this.type,
     required this.filialId,
-    required this.taskStatus,
+    required this.status,
+    this.videoUrl,
   });
 
   factory AdminTaskModel.fromJson(Map<String, dynamic> json) {
     return AdminTaskModel(
-      id: json['id'],
-      description: json['description'],
-      taskType: json['task_type'],
-      role: json['role'],
-      filialId: json['filial_id'],
-      taskStatus: json['task_status'],
+      taskId: json['taskId'],
+      task: json['task'],
+      type: json['type'],
+      filialId: json['filialId'],
+      status: json['status'],
+      videoUrl: json["videoUrl"],
     );
   }
 }

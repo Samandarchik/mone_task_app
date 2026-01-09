@@ -14,7 +14,7 @@ class _AddAdminTaskState extends State<AddAdminTask> {
   AdminTaskService taskService = AdminTaskService();
   late TextEditingController controller;
   int role = 3;
-  String sellectedType = "daily";
+  int sellectedType = 1;
   List<int> selectedFilials = []; // tanlangan filiallar listi
 
   @override

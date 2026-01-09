@@ -97,22 +97,24 @@ class _LoginPageState extends State<LoginPage> {
 
       setState(() => _isLoading = false);
 
+      print(result["user"]["username"]);
+      print(result['token']);
       // ✅ FAQAT SUCCESS BO'LSA
-      if (result["access_token"] != null && result["role"] != null) {
+      if (result["token"] != null) {
         final prefs = await SharedPreferences.getInstance();
+        // print("fullname  ${prefs.getString("full_name")}");
 
-        await prefs.setString('access_token', result['access_token']);
-        await prefs.setString('role', result['role']);
-        await prefs.setString('full_name', result['full_name']);
-
+        await prefs.setString('access_token', result['token']);
+        await prefs.setString('role', result['user']["role"]);
+        await prefs.setString('full_name', result['user']["username"]);
+        print("object");
         // ✅ MUVAFFAQIYATLI LOGIN BO'LGANDA AKKAUNTNI SAQLASH
         await _saveAccount(
           _phoneController.text.trim(),
           _passwordController.text.trim(),
         );
-
         // navigation
-        if (result["role"] == "admin") {
+        if (result["user"]["role"] == "super_admin") {
           context.pushAndRemove(AdminTaskUi());
         } else if (result["role"] == "checker") {
           context.pushAndRemove(CheckerHomeUi());
@@ -148,9 +150,9 @@ class _LoginPageState extends State<LoginPage> {
     await _saveAccount(_phoneController.text, _passwordController.text);
 
     SharedPreferences prefs = await SharedPreferences.getInstance();
-    await prefs.setString('access_token', result['access_token']);
-    await prefs.setString('role', result['role']);
-    await prefs.setString('full_name', result['full_name']);
+    await prefs.setString('access_token', result['token']);
+    await prefs.setString('role', result['user["role"]']);
+    await prefs.setString('full_name', result['user["username"]']);
 
     // 🔹 To'g'ri yo'naltirish logikasi:
 

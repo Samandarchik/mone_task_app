@@ -4,8 +4,10 @@ import 'package:mone_task_app/admin/service/task_worker_service.dart';
 import 'package:mone_task_app/admin/ui/add_admin_task.dart';
 import 'package:mone_task_app/admin/ui/dialog.dart';
 import 'package:mone_task_app/core/context_extension.dart';
+import 'package:mone_task_app/core/data/local/token_storage.dart';
+import 'package:mone_task_app/core/di/di.dart';
 import 'package:mone_task_app/home/service/login_service.dart';
-import 'package:shared_preferences/shared_preferences.dart';
+import 'package:mone_task_app/utils/get_color.dart';
 
 class AdminTaskUi extends StatefulWidget {
   const AdminTaskUi({super.key});
@@ -35,9 +37,9 @@ class _AdminTaskUiState extends State<AdminTaskUi> {
             isScrollable: true, // 🔥 Scroll bo‘ladi
             tabs: [
               Tab(text: "Гелион"),
+              Tab(text: "Сибирский"),
               Tab(text: "Мархабо"),
               Tab(text: "Фреско"),
-              Tab(text: "Сибирский"),
             ],
           ),
           actions: [
@@ -51,9 +53,8 @@ class _AdminTaskUiState extends State<AdminTaskUi> {
             IconButton(
               icon: const Icon(Icons.logout),
               onPressed: () async {
-                SharedPreferences prefs = await SharedPreferences.getInstance();
-                prefs.remove("access_token");
-                prefs.remove("role");
+                TokenStorage tokenStorage = sl<TokenStorage>();
+                tokenStorage.removeToken();
                 context.pushAndRemove(LoginPage());
               },
             ),
@@ -64,7 +65,7 @@ class _AdminTaskUiState extends State<AdminTaskUi> {
           future: tasksFuture,
           builder: (context, snapshot) {
             if (!snapshot.hasData) {
-              return const Center(child: CircularProgressIndicator());
+              return const Center(child: CircularProgressIndicator.adaptive());
             }
 
             final allTasks = snapshot.data as List<AdminTaskModel>;
@@ -90,8 +91,6 @@ class _AdminTaskUiState extends State<AdminTaskUi> {
         .where((task) => task.filialId == filialId)
         .toList();
 
-    filtered = filterTasksByDate(filtered); // daily/weekly filter
-
     if (filtered.isEmpty) {
       return const Center(child: Text("Ushbu filial uchun task yo'q"));
     }
@@ -112,7 +111,7 @@ class _AdminTaskUiState extends State<AdminTaskUi> {
             final isDelete = await NativeDialog.showDeleteDialog();
 
             if (isDelete) {
-              await AdminTaskService().deleteTask(filtered[i].id);
+              await AdminTaskService().deleteTask(filtered[i].taskId);
 
               setState(() {
                 tasksFuture = AdminTaskService().fetchTasks();
@@ -124,48 +123,12 @@ class _AdminTaskUiState extends State<AdminTaskUi> {
             padding: const EdgeInsets.all(8),
             decoration: BoxDecoration(
               border: Border(bottom: BorderSide(color: Colors.white, width: 3)),
-              color: getStatusColor(filtered[i].taskStatus),
+              color: getStatusColor(filtered[i].status),
             ),
-            child: Text(
-              filtered[i].description,
-              style: TextStyle(fontSize: 16),
-            ),
+            child: Text(filtered[i].task, style: TextStyle(fontSize: 16)),
           ),
         ),
       ),
     );
   }
-}
-
-/// 🔥 STATUS COLOR
-Color getStatusColor(String status) {
-  switch (status) {
-    case "completed":
-      return Colors.green.shade100;
-    case "checking":
-      return Colors.orange.shade100;
-    default:
-      return Colors.red.shade100;
-  }
-}
-
-/// 🔥 TASK TYPE BO‘YICHA FILTER
-List<AdminTaskModel> filterTasksByDate(List<AdminTaskModel> tasks) {
-  final now = DateTime.now();
-
-  return tasks.where((task) {
-    switch (task.taskType) {
-      case "daily":
-        return true;
-
-      case "weekly":
-        return now.weekday == DateTime.monday;
-
-      case "monthly":
-        return now.day == 1;
-
-      default:
-        return true;
-    }
-  }).toList();
 }

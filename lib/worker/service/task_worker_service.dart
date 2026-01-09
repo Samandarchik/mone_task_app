@@ -9,13 +9,13 @@ class TaskWorkerService {
 
   Future<List<TaskWorkerModel>> fetchTasks() async {
     try {
-      final response = await _dio.get(AppUrls.workerTasks);
+      final response = await _dio.get(AppUrls.tasks);
 
       if (response.data == null) {
         throw Exception("Task ma'lumotlari mavjud emas");
       }
 
-      final data = response.data;
+      final data = response.data["data"];
 
       if (data is! List) {
         throw Exception("Server noto‘g‘ri format qaytardi");

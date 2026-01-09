@@ -4,6 +4,7 @@ import 'package:mone_task_app/checker/service/task_worker_service.dart';
 import 'package:mone_task_app/admin/ui/add_admin_task.dart';
 import 'package:mone_task_app/core/context_extension.dart';
 import 'package:mone_task_app/home/service/login_service.dart';
+import 'package:mone_task_app/utils/get_color.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -153,17 +154,17 @@ class _CheckerHomeUiState extends State<CheckerHomeUi> {
         itemBuilder: (_, i) => Card(
           margin: const EdgeInsets.only(bottom: 12),
           elevation: 2,
-          color: getStatusColor(filtered[i].taskStatus ?? ""),
+          color: getStatusColor(filtered[i].status),
           child: InkWell(
             onTap: () {
-              print("Tapped on task id: ${filtered[i].id}");
+              print("Tapped on task id: ${filtered[i].taskId}");
               print("Tapped on task taskId: ${filtered[i].taskId}");
-              AdminTaskService().updateTaskStatus(filtered[i].taskId!);
+              AdminTaskService().updateTaskStatus(filtered[i].taskId);
               // Video iOS native player'da ochish
 
-              if (filtered[i].filePath != null &&
-                  filtered[i].filePath!.isNotEmpty) {
-                _openVideoInNativePlayer(filtered[i].filePath!);
+              if (filtered[i].videoUrl != null &&
+                  filtered[i].videoUrl!.isNotEmpty) {
+                _openVideoInNativePlayer(filtered[i].videoUrl!);
               }
             },
 
@@ -174,7 +175,7 @@ class _CheckerHomeUiState extends State<CheckerHomeUi> {
                 children: [
                   // Task description
                   Text(
-                    filtered[i].description ?? "",
+                    filtered[i].task,
                     style: const TextStyle(
                       fontSize: 16,
                       fontWeight: FontWeight.w500,
@@ -193,13 +194,11 @@ class _CheckerHomeUiState extends State<CheckerHomeUi> {
                           vertical: 4,
                         ),
                         decoration: BoxDecoration(
-                          color: getStatusBadgeColor(
-                            filtered[i].taskStatus ?? "",
-                          ),
+                          color: getStatusColor(filtered[i].status),
                           borderRadius: BorderRadius.circular(12),
                         ),
                         child: Text(
-                          getStatusText(filtered[i].taskStatus ?? ""),
+                          filtered[i].task,
                           style: const TextStyle(
                             fontSize: 12,
                             color: Colors.white,
@@ -209,8 +208,8 @@ class _CheckerHomeUiState extends State<CheckerHomeUi> {
                       ),
 
                       // Video mavjudligi
-                      if (filtered[i].filePath != null &&
-                          filtered[i].filePath!.isNotEmpty)
+                      if (filtered[i].videoUrl != null &&
+                          filtered[i].videoUrl!.isNotEmpty)
                         Container(
                           padding: const EdgeInsets.symmetric(
                             horizontal: 8,
@@ -249,39 +248,5 @@ class _CheckerHomeUiState extends State<CheckerHomeUi> {
         ),
       ),
     );
-  }
-
-  String getStatusText(String status) {
-    switch (status) {
-      case "completed":
-        return "Bajarilgan";
-      case "checking":
-        return "Tekshirilmoqda";
-      default:
-        return "Yangi";
-    }
-  }
-
-  Color getStatusBadgeColor(String status) {
-    switch (status) {
-      case "completed":
-        return Colors.green;
-      case "checking":
-        return Colors.orange;
-      default:
-        return Colors.red;
-    }
-  }
-}
-
-// Status Color
-Color getStatusColor(String status) {
-  switch (status) {
-    case "completed":
-      return Colors.green.shade50;
-    case "checking":
-      return Colors.orange.shade50;
-    default:
-      return Colors.red.shade50;
   }
 }

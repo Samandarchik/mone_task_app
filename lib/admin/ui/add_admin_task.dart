@@ -14,7 +14,7 @@ class _AddAdminTaskState extends State<AddAdminTask> {
   AdminTaskService taskService = AdminTaskService();
   late TextEditingController controller;
   int role = 3;
-  String sellectedType = "daily";
+  int sellectedType = 1;
   List<int> selectedFilials = []; // tanlangan filiallar listi
 
   @override
@@ -94,7 +94,7 @@ class _AddAdminTaskState extends State<AddAdminTask> {
                   if (controller.text.isNotEmpty &&
                       selectedFilials.isNotEmpty) {
                     AddAdminTaskModel model = AddAdminTaskModel(
-                      taskType: sellectedType,
+                      taskType: 1,
                       role: role,
                       filialsId: selectedFilials, // list yuboriladi
                       description: controller.text,
@@ -122,12 +122,6 @@ class _AddAdminTaskState extends State<AddAdminTask> {
   }
 }
 
-List<Map<String, dynamic>> items = [
-  {"id": 3, "name": "Мененджер"},
-  {"id": 4, "name": "Касса"},
-  {"id": 5, "name": "Инспектор"},
-];
-
 List<Map<String, dynamic>> filials = [
   {"id": 1, "name": "Гелион"},
   {"id": 2, "name": "Мархабо"},
@@ -136,7 +130,7 @@ List<Map<String, dynamic>> filials = [
 ];
 
 List<Map<String, dynamic>> types = [
-  {"id": 1, "name": "Ежедневная", "type": "daily"},
-  {"id": 2, "name": "Еженедельная", "type": "weekly"},
-  {"id": 3, "name": "Ежемесячная", "type": "monthly"},
+  {"id": 1, "name": "Ежедневная"},
+  {"id": 2, "name": "Еженедельная"},
+  {"id": 3, "name": "Ежемесячная"},
 ];

@@ -59,7 +59,7 @@ class AdminTaskService {
   Future<bool> createTask(AddAdminTaskModel task) async {
     try {
       final response = await _dio.post(
-        AppUrls.addTask, // 🔥 shu yerga sizning POST URL’ingiz tushadi
+        AppUrls.tasks, // 🔥 shu yerga sizning POST URL’ingiz tushadi
         data: {
           "description": task.description,
           "task_type": task.taskType,
@@ -77,7 +77,7 @@ class AdminTaskService {
   Future<bool> addTask(AddAdminTaskModel task) async {
     try {
       final response = await _dio.post(
-        AppUrls.addTask, // 🔥 shu yerga sizning POST URL’ingiz tushadi
+        AppUrls.tasks, // 🔥 shu yerga sizning POST URL’ingiz tushadi
         data: {
           "description": task.description,
           "task_type": task.taskType,
