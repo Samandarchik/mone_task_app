@@ -12,7 +12,6 @@ class ApiService {
         AppUrls.login,
         data: {'login': loginModel.username, 'password': loginModel.password},
       );
-      print("status code ${response.statusCode}\n data:${response.data}");
       if (response.statusCode == 200) {
         return response.data;
       } else {

@@ -125,14 +125,12 @@ class _LoginPageState extends State<LoginPage> {
   }
 
   Future<void> _createAccount() async {
-    if (!_formKey.currentState!.validate()) return;
-
     setState(() {
       _isLoading = true;
     });
 
     final result = await ApiService().login(
-      LoginModel(username: "akbarali1", password: "111"),
+      LoginModel(username: "944560055", password: "112233"),
     );
 
     setState(() {
@@ -144,13 +142,13 @@ class _LoginPageState extends State<LoginPage> {
     await _saveAccount(_phoneController.text, _passwordController.text);
 
     SharedPreferences prefs = await SharedPreferences.getInstance();
-    await prefs.setString('access_token', result['token']);
-    await prefs.setString('role', result['user']["role"]);
-    await prefs.setString('full_name', result['user']["username"]);
-
+    if (result["success"] == true) {
+      await prefs.setString('access_token', result['token']);
+      await prefs.setString('role', result['user']["role"]);
+      await prefs.setString('full_name', result['user']["username"]);
+      context.push(TaskWorkerUi());
+    }
     // 🔹 To'g'ri yo'naltirish logikasi:
-
-    context.push(TaskWorkerUi());
   }
 
   @override
@@ -322,7 +320,7 @@ class _LoginPageState extends State<LoginPage> {
                                     ],
                                   )
                                 : Text(
-                                    'Create account',
+                                    'Попробуйте!',
                                     style: TextStyle(
                                       fontSize: 18,
                                       fontWeight: FontWeight.bold,
@@ -384,7 +382,7 @@ class _LoginPageState extends State<LoginPage> {
                           SizedBox(height: 20),
                         ],
                         Text(
-                          "app version: 0.0.2",
+                          "app version: 0.0.3",
                           style: TextStyle(fontSize: 12),
                         ),
                         SizedBox(height: 20),
