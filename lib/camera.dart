@@ -129,41 +129,73 @@ class _VideoRecorderDialogState extends State<VideoRecorderDialog> {
   Future<void> startRecord() async {
     if (!isCameraReady || isRecording) return;
 
-    await _cameraController!.startVideoRecording();
+    try {
+      await _cameraController!.startVideoRecording();
 
-    setState(() {
-      isRecording = true;
-      _secondsElapsed = 0;
-    });
-
-    _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
       setState(() {
-        _secondsElapsed++;
+        isRecording = true;
+        _secondsElapsed = 0;
       });
 
-      if (_secondsElapsed >= widget.maxDuration) {
-        stopRecord();
+      _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
+        if (!mounted) {
+          timer.cancel();
+          return;
+        }
+
+        setState(() {
+          _secondsElapsed++;
+        });
+
+        if (_secondsElapsed >= widget.maxDuration) {
+          stopRecord();
+        }
+      });
+    } catch (e) {
+      debugPrint("Video yozishni boshlashda xatolik: $e");
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text("Video yozish boshlanmadi: $e")));
       }
-    });
+    }
   }
 
   Future<void> stopRecord() async {
-    if (!isRecording) return;
+    if (!isRecording || _cameraController == null) return;
 
     _timer?.cancel();
 
-    final file = await _cameraController!.stopVideoRecording();
-    recordedVideo = file;
+    try {
+      // Video yozilayotganligini tekshirish
+      if (!_cameraController!.value.isRecordingVideo) {
+        setState(() => isRecording = false);
+        return;
+      }
 
-    _videoController?.dispose();
-    _videoController = VideoPlayerController.file(File(file.path));
+      final file = await _cameraController!.stopVideoRecording();
+      recordedVideo = file;
 
-    await _videoController!.initialize();
-    _videoController!
-      ..setLooping(true)
-      ..play();
+      _videoController?.dispose();
+      _videoController = VideoPlayerController.file(File(file.path));
 
-    setState(() => isRecording = false);
+      await _videoController!.initialize();
+      _videoController!
+        ..setLooping(true)
+        ..play();
+
+      if (mounted) {
+        setState(() => isRecording = false);
+      }
+    } catch (e) {
+      debugPrint("Video to'xtatishda xatolik: $e");
+      if (mounted) {
+        setState(() => isRecording = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text("Video to'xtatishda xatolik: $e")),
+        );
+      }
+    }
   }
 
   void _cancel() {
@@ -171,9 +203,11 @@ class _VideoRecorderDialogState extends State<VideoRecorderDialog> {
     Navigator.pop(context, null);
   }
 
-  void _save() {
+  void _sendVideo() {
     _timer?.cancel();
-    Navigator.pop(context, recordedVideo);
+    if (recordedVideo != null) {
+      Navigator.pop(context, recordedVideo);
+    }
   }
 
   String _formatTime(int seconds) {
@@ -361,14 +395,17 @@ class _VideoRecorderDialogState extends State<VideoRecorderDialog> {
                               size: 40,
                             ),
                           ),
-                        ),
+                        )
+                      else
+                        // Placeholder when video is recorded
+                        const SizedBox(width: 90, height: 90),
 
                       const SizedBox(width: 40),
 
                       // Send button
                       if (recordedVideo != null)
                         GestureDetector(
-                          onTap: _save,
+                          onTap: _sendVideo,
                           child: Container(
                             width: 60,
                             height: 60,
@@ -377,7 +414,7 @@ class _VideoRecorderDialogState extends State<VideoRecorderDialog> {
                               color: Colors.green,
                             ),
                             child: const Icon(
-                              Icons.check,
+                              Icons.send,
                               color: Colors.white,
                               size: 30,
                             ),
