@@ -32,6 +32,7 @@ class _VideoRecorderDialogState extends State<VideoRecorderDialog> {
   Timer? _timer;
   XFile? recordedVideo;
   List<CameraDescription> cameras = [];
+  TaskWorkerService taskWorkerService = TaskWorkerService();
 
   @override
   void initState() {
@@ -39,7 +40,6 @@ class _VideoRecorderDialogState extends State<VideoRecorderDialog> {
     initCamera();
   }
 
-  TaskWorkerService taskWorkerService = TaskWorkerService();
   Future<void> initCamera() async {
     // Permission so'rash
     final cameraStatus = await Permission.camera.request();
@@ -99,7 +99,13 @@ class _VideoRecorderDialogState extends State<VideoRecorderDialog> {
   }
 
   Future<void> toggleCamera() async {
-    if (!isCameraReady || cameras.length < 2) return;
+    if (!isCameraReady || cameras.length < 2 || recordedVideo != null) return;
+
+    // Agar video yozilayotgan bo'lsa, avval to'xtatish kerak
+    if (isRecording) {
+      await stopRecord();
+      return;
+    }
 
     setState(() {
       isCameraReady = false;
@@ -216,7 +222,6 @@ class _VideoRecorderDialogState extends State<VideoRecorderDialog> {
       taskWorkerService.completeTask(
         RequestTaskModel(id: widget.taskId, file: recordedVideo),
       );
-      print("yuborish funksiyasi");
       Navigator.pop(context, recordedVideo);
     }
   }
