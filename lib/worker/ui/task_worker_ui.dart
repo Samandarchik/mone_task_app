@@ -18,7 +18,6 @@ class TaskWorkerUi extends StatefulWidget {
 }
 
 class _TaskWorkerUiState extends State<TaskWorkerUi> {
-  final ImagePicker _picker = ImagePicker();
   late Future<List<TaskWorkerModel>> tasksFuture;
 
   @override

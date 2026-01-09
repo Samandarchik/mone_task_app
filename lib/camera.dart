@@ -6,8 +6,6 @@ import 'package:permission_handler/permission_handler.dart';
 import 'package:video_player/video_player.dart';
 import 'package:image_picker/image_picker.dart';
 
-late List<CameraDescription> cameras;
-
 /// Telegram uslubidagi video recorder dialog
 class VideoRecorderDialog extends StatefulWidget {
   final int maxDuration;
@@ -27,6 +25,7 @@ class _VideoRecorderDialogState extends State<VideoRecorderDialog> {
   int _secondsElapsed = 0;
   Timer? _timer;
   XFile? recordedVideo;
+  List<CameraDescription> cameras = [];
 
   @override
   void initState() {
@@ -50,9 +49,23 @@ class _VideoRecorderDialogState extends State<VideoRecorderDialog> {
       return;
     }
 
+    // Kameralarni olish
+    try {
+      cameras = await availableCameras();
+    } catch (e) {
+      debugPrint("Kameralarni olishda xatolik: $e");
+      if (mounted) {
+        Navigator.pop(context, null);
+      }
+      return;
+    }
+
     // Kamera borligini tekshirish
     if (cameras.isEmpty) {
       debugPrint("Kamera topilmadi");
+      if (mounted) {
+        Navigator.pop(context, null);
+      }
       return;
     }
 
@@ -74,12 +87,12 @@ class _VideoRecorderDialogState extends State<VideoRecorderDialog> {
 
     setState(() {
       isCameraReady = true;
-      isFrontCamera = true;
+      isFrontCamera = camera.lensDirection == CameraLensDirection.front;
     });
   }
 
   Future<void> toggleCamera() async {
-    if (!isCameraReady) return;
+    if (!isCameraReady || cameras.length < 2) return;
 
     setState(() {
       isCameraReady = false;
