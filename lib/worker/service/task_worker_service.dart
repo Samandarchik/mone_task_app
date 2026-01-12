@@ -32,7 +32,7 @@ class TaskWorkerService {
 
   Future<bool> completeTask(RequestTaskModel request) async {
     try {
-      final compressedVideo = await compressVideo(File(request.file!.path));
+      final compressedVideo = await compressVideoTo500(File(request.file!.path));
 
       final formData = FormData.fromMap({
         "video": await MultipartFile.fromFile(
