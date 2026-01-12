@@ -34,12 +34,13 @@ class _TaskWorkerUiState extends State<TaskWorkerUi> {
 
   /// Video olish dialogini ochish
   Future<void> _showVideoRecorder(TaskWorkerModel task) async {
-    final XFile? video = await showDialog<XFile?>(
-      context: context,
-      barrierDismissible: false,
-      builder: (context) =>
-          VideoRecorderDialog(maxDuration: 40, taskId: task.id),
+    final XFile? video = await TelegramVideoRecorder.show(
+      context,
+      taskId: task.id,
+      maxDuration: 40,
     );
+
+    if (!context.mounted) return;
 
     if (video != null) {
       await _uploadVideo(task, video);

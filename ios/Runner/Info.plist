@@ -2,6 +2,12 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
+	<key>NSCameraUsageDescription</key>
+	<string>Video yozish uchun kamera kerak</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Ovozli video yozish uchun mikrofon kerak</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>Videoni saqlash uchun</string>
 	<key>CADisableMinimumFrameDurationOnPhone</key>
 	<true/>
 	<key>CFBundleDevelopmentRegion</key>
@@ -26,10 +32,6 @@
 	<string>$(FLUTTER_BUILD_NUMBER)</string>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
-	<key>NSCameraUsageDescription</key>
-	<string>Kamera orqali task bajarilganini tasdiqlash uchun kerak</string>
-	<key>NSMicrophoneUsageDescription</key>
-	<string>Video yozish uchun kerak</string>
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
 	<key>UILaunchStoryboardName</key>

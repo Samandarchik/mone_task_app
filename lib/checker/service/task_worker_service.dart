@@ -98,7 +98,6 @@ class AdminTaskService {
         "${AppUrls.tasks}/$taskId/check",
         data: {"status": status},
       );
-      print(response.statusCode);
       return response.statusCode == 200;
     } catch (e) {
       return false;

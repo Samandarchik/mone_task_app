@@ -68,7 +68,7 @@ class AdminTaskService {
 
       return response.statusCode == 200 || response.statusCode == 201;
     } catch (e) {
-      rethrow;
+      return false;
     }
   }
 }

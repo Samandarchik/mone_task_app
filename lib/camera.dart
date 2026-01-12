@@ -7,24 +7,82 @@ import 'package:mone_task_app/worker/service/task_worker_service.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:video_player/video_player.dart';
 
-/// Telegram uslubidagi video recorder dialog
-class VideoRecorderDialog extends StatefulWidget {
+/// Telegram uslubidagi aylanma video recorder dialog
+class TelegramVideoRecorder extends StatefulWidget {
   final int taskId;
   final int maxDuration;
 
-  const VideoRecorderDialog({
+  const TelegramVideoRecorder({
     super.key,
     required this.maxDuration,
     required this.taskId,
   });
 
+  /// Dialog ochishdan oldin permission tekshirish
+  static Future<XFile?> show(
+    BuildContext context, {
+    required int taskId,
+    required int maxDuration,
+  }) async {
+    // iOS va Android uchun permission so'rash
+    final statuses = await [Permission.camera, Permission.microphone].request();
+
+    // Permission tekshirish
+    if (statuses[Permission.camera] != PermissionStatus.granted ||
+        statuses[Permission.microphone] != PermissionStatus.granted) {
+      if (!context.mounted) return null;
+
+      // iOS uchun Settings ga yo'naltirish
+      final shouldOpenSettings = await showDialog<bool>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('Ruxsat kerak'),
+          content: const Text(
+            'Video yozish uchun kamera va mikrofon ruxsati kerak. '
+            'Sozlamalar orqali ruxsat bering.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Bekor qilish'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.pop(context, true),
+              child: const Text('Sozlamalar'),
+            ),
+          ],
+        ),
+      );
+
+      if (shouldOpenSettings == true) {
+        await openAppSettings();
+      }
+      return null;
+    }
+
+    // Permission berilgan bo'lsa, dialogni ochish
+    if (!context.mounted) return null;
+
+    final result = await showDialog<XFile?>(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) =>
+          TelegramVideoRecorder(taskId: taskId, maxDuration: maxDuration),
+    );
+
+    return result;
+  }
+
   @override
-  State<VideoRecorderDialog> createState() => _VideoRecorderDialogState();
+  State<TelegramVideoRecorder> createState() => _TelegramVideoRecorderState();
 }
 
-class _VideoRecorderDialogState extends State<VideoRecorderDialog> {
+class _TelegramVideoRecorderState extends State<TelegramVideoRecorder>
+    with SingleTickerProviderStateMixin {
   CameraController? _cameraController;
   VideoPlayerController? _videoController;
+  AnimationController? _recordAnimationController;
+
   bool isRecording = false;
   bool isCameraReady = false;
   bool isFrontCamera = true;
@@ -33,75 +91,73 @@ class _VideoRecorderDialogState extends State<VideoRecorderDialog> {
   XFile? recordedVideo;
   List<CameraDescription> cameras = [];
   TaskWorkerService taskWorkerService = TaskWorkerService();
+  String? _errorMessage;
 
   @override
   void initState() {
     super.initState();
-    initCamera();
+    _recordAnimationController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1000),
+    )..repeat(reverse: true);
+    _initializeCamera();
   }
 
-  Future<void> initCamera() async {
-    // Permission so'rash
-    final cameraStatus = await Permission.camera.request();
-    final micStatus = await Permission.microphone.request();
-
-    if (!cameraStatus.isGranted || !micStatus.isGranted) {
-      debugPrint("Permission berilmadi");
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text("Kamera va mikrofon ruxsati kerak!")),
-        );
-        Navigator.pop(context, null);
-      }
-      return;
-    }
-
-    // Kameralarni olish
+  Future<void> _initializeCamera() async {
     try {
+      // Kameralarni olish
       cameras = await availableCameras();
+
+      if (cameras.isEmpty) {
+        setState(() {
+          _errorMessage = "Qurilmada kamera topilmadi";
+        });
+        return;
+      }
+
+      // Front kamerani topish
+      final camera = cameras.firstWhere(
+        (c) => c.lensDirection == CameraLensDirection.front,
+        orElse: () => cameras.first,
+      );
+
+      await _setupCamera(camera);
     } catch (e) {
-      debugPrint("Kameralarni olishda xatolik: $e");
-      if (mounted) {
-        Navigator.pop(context, null);
-      }
-      return;
+      debugPrint("Kamera xatosi: $e");
+      setState(() {
+        _errorMessage = "Kamera xatosi: $e";
+      });
     }
+  }
 
-    // Kamera borligini tekshirish
-    if (cameras.isEmpty) {
-      debugPrint("Kamera topilmadi");
-      if (mounted) {
-        Navigator.pop(context, null);
-      }
-      return;
-    }
-
-    // Front kamerani topish
-    final camera = cameras.firstWhere(
-      (c) => c.lensDirection == CameraLensDirection.front,
-      orElse: () => cameras.first,
-    );
-
+  Future<void> _setupCamera(CameraDescription camera) async {
     _cameraController = CameraController(
       camera,
-      ResolutionPreset.medium,
+      ResolutionPreset.high,
       enableAudio: true,
+      imageFormatGroup: ImageFormatGroup.yuv420,
     );
 
-    await _cameraController!.initialize();
+    try {
+      await _cameraController!.initialize();
 
-    if (!mounted) return;
+      if (!mounted) return;
 
-    setState(() {
-      isCameraReady = true;
-      isFrontCamera = camera.lensDirection == CameraLensDirection.front;
-    });
+      setState(() {
+        isCameraReady = true;
+        isFrontCamera = camera.lensDirection == CameraLensDirection.front;
+      });
+    } catch (e) {
+      debugPrint("Kamera initialize xatosi: $e");
+      setState(() {
+        _errorMessage = "Kamera ishga tushmadi: $e";
+      });
+    }
   }
 
   Future<void> toggleCamera() async {
     if (!isCameraReady || cameras.length < 2 || recordedVideo != null) return;
 
-    // Agar video yozilayotgan bo'lsa, avval to'xtatish kerak
     if (isRecording) {
       await stopRecord();
       return;
@@ -113,7 +169,6 @@ class _VideoRecorderDialogState extends State<VideoRecorderDialog> {
 
     await _cameraController?.dispose();
 
-    // Kamera o'zgartirish
     final camera = cameras.firstWhere(
       (c) =>
           c.lensDirection ==
@@ -123,24 +178,11 @@ class _VideoRecorderDialogState extends State<VideoRecorderDialog> {
       orElse: () => cameras.first,
     );
 
-    _cameraController = CameraController(
-      camera,
-      ResolutionPreset.medium,
-      enableAudio: true,
-    );
-
-    await _cameraController!.initialize();
-
-    if (!mounted) return;
-
-    setState(() {
-      isCameraReady = true;
-      isFrontCamera = !isFrontCamera;
-    });
+    await _setupCamera(camera);
   }
 
   Future<void> startRecord() async {
-    if (!isCameraReady || isRecording) return;
+    if (!isCameraReady || isRecording || _cameraController == null) return;
 
     try {
       await _cameraController!.startVideoRecording();
@@ -165,7 +207,7 @@ class _VideoRecorderDialogState extends State<VideoRecorderDialog> {
         }
       });
     } catch (e) {
-      debugPrint("Video yozishni boshlashda xatolik: $e");
+      debugPrint("Video yozish xatosi: $e");
       if (mounted) {
         ScaffoldMessenger.of(
           context,
@@ -180,7 +222,6 @@ class _VideoRecorderDialogState extends State<VideoRecorderDialog> {
     _timer?.cancel();
 
     try {
-      // Video yozilayotganligini tekshirish
       if (!_cameraController!.value.isRecordingVideo) {
         setState(() => isRecording = false);
         return;
@@ -201,12 +242,12 @@ class _VideoRecorderDialogState extends State<VideoRecorderDialog> {
         setState(() => isRecording = false);
       }
     } catch (e) {
-      debugPrint("Video to'xtatishda xatolik: $e");
+      debugPrint("Video to'xtatish xatosi: $e");
       if (mounted) {
         setState(() => isRecording = false);
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text("Video to'xtatishda xatolik: $e")),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text("Xatolik: $e")));
       }
     }
   }
@@ -235,6 +276,7 @@ class _VideoRecorderDialogState extends State<VideoRecorderDialog> {
   @override
   void dispose() {
     _timer?.cancel();
+    _recordAnimationController?.dispose();
     _cameraController?.dispose();
     _videoController?.dispose();
     super.dispose();
@@ -242,10 +284,45 @@ class _VideoRecorderDialogState extends State<VideoRecorderDialog> {
 
   @override
   Widget build(BuildContext context) {
+    if (_errorMessage != null) {
+      return Dialog(
+        backgroundColor: Colors.black,
+        child: Container(
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(Icons.error_outline, color: Colors.red, size: 60),
+              const SizedBox(height: 20),
+              Text(
+                _errorMessage!,
+                textAlign: TextAlign.center,
+                style: const TextStyle(color: Colors.white, fontSize: 16),
+              ),
+              const SizedBox(height: 20),
+              ElevatedButton(onPressed: _cancel, child: const Text('Yopish')),
+            ],
+          ),
+        ),
+      );
+    }
+
     if (!isCameraReady) {
       return const Dialog(
         backgroundColor: Colors.black,
-        child: Center(child: CircularProgressIndicator()),
+        child: Center(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              CircularProgressIndicator(color: Colors.white),
+              SizedBox(height: 20),
+              Text(
+                'Kamera tayyorlanmoqda...',
+                style: TextStyle(color: Colors.white),
+              ),
+            ],
+          ),
+        ),
       );
     }
 
@@ -258,52 +335,86 @@ class _VideoRecorderDialogState extends State<VideoRecorderDialog> {
         color: Colors.black,
         child: Stack(
           children: [
-            // Kamera yoki video preview
-            Center(
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(20),
-                child: SizedBox(
-                  width: 400,
-                  height: 400,
-                  child: _videoController != null && recordedVideo != null
-                      ? VideoPlayer(_videoController!)
-                      : CameraPreview(_cameraController!),
-                ),
-              ),
+            // Telegram uslubida aylanma kamera preview
+            Center(child: _buildCircularPreview()),
+
+            // Top bar
+            _buildTopBar(),
+
+            // Bottom controls
+            _buildBottomControls(),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildCircularPreview() {
+    return Container(
+      width: 300,
+      height: 300,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        border: Border.all(
+          color: isRecording ? Colors.red : Colors.white,
+          width: 4,
+        ),
+      ),
+      child: ClipOval(
+        child: _videoController != null && recordedVideo != null
+            ? VideoPlayer(_videoController!)
+            : CameraPreview(_cameraController!),
+      ),
+    );
+  }
+
+  Widget _buildTopBar() {
+    return Positioned(
+      top: 50,
+      left: 0,
+      right: 0,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 20),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            // Close button
+            IconButton(
+              onPressed: _cancel,
+              icon: const Icon(Icons.close, color: Colors.white, size: 30),
             ),
 
-            // Top controls
-            Positioned(
-              top: 50,
-              left: 0,
-              right: 0,
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 20),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    // Close button
-                    IconButton(
-                      onPressed: _cancel,
-                      icon: const Icon(
-                        Icons.close,
-                        color: Colors.white,
-                        size: 30,
-                      ),
+            // Timer with animation
+            if (isRecording || _secondsElapsed > 0)
+              AnimatedBuilder(
+                animation: _recordAnimationController!,
+                builder: (context, child) {
+                  return Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 8,
                     ),
-
-                    // Timer
-                    if (isRecording || _secondsElapsed > 0)
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 16,
-                          vertical: 8,
-                        ),
-                        decoration: BoxDecoration(
-                          color: Colors.red,
-                          borderRadius: BorderRadius.circular(20),
-                        ),
-                        child: Text(
+                    decoration: BoxDecoration(
+                      color: isRecording
+                          ? Colors.red.withOpacity(
+                              0.7 + (_recordAnimationController!.value * 0.3),
+                            )
+                          : Colors.red,
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: Row(
+                      children: [
+                        if (isRecording)
+                          Container(
+                            width: 8,
+                            height: 8,
+                            margin: const EdgeInsets.only(right: 8),
+                            decoration: const BoxDecoration(
+                              color: Colors.white,
+                              shape: BoxShape.circle,
+                            ),
+                          ),
+                        Text(
                           _formatTime(_secondsElapsed),
                           style: const TextStyle(
                             color: Colors.white,
@@ -311,160 +422,174 @@ class _VideoRecorderDialogState extends State<VideoRecorderDialog> {
                             fontWeight: FontWeight.bold,
                           ),
                         ),
-                      )
-                    else
-                      const SizedBox.shrink(),
+                      ],
+                    ),
+                  );
+                },
+              )
+            else
+              const SizedBox.shrink(),
 
-                    // Camera switch button
-                    if (recordedVideo == null)
-                      IconButton(
-                        onPressed: toggleCamera,
-                        icon: const Icon(
-                          Icons.flip_camera_ios,
-                          color: Colors.white,
-                          size: 30,
-                        ),
-                      )
-                    else
-                      const SizedBox(width: 48),
-                  ],
+            // Camera flip button
+            if (recordedVideo == null && cameras.length > 1)
+              IconButton(
+                onPressed: toggleCamera,
+                icon: const Icon(
+                  Icons.flip_camera_ios,
+                  color: Colors.white,
+                  size: 30,
+                ),
+              )
+            else
+              const SizedBox(width: 48),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildBottomControls() {
+    return Positioned(
+      bottom: 50,
+      left: 0,
+      right: 0,
+      child: Column(
+        children: [
+          // Progress indicator
+          if (isRecording)
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 40),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(10),
+                child: LinearProgressIndicator(
+                  value: _secondsElapsed / widget.maxDuration,
+                  backgroundColor: Colors.white24,
+                  valueColor: const AlwaysStoppedAnimation<Color>(Colors.red),
+                  minHeight: 6,
                 ),
               ),
             ),
 
-            // Bottom controls
-            Positioned(
-              bottom: 50,
-              left: 0,
-              right: 0,
-              child: Column(
-                children: [
-                  // Progress indicator
-                  if (isRecording)
-                    Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 40),
-                      child: LinearProgressIndicator(
-                        value: _secondsElapsed / widget.maxDuration,
-                        backgroundColor: Colors.white24,
-                        valueColor: const AlwaysStoppedAnimation<Color>(
-                          Colors.red,
+          const SizedBox(height: 40),
+
+          // Action buttons
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              // Retake button
+              if (recordedVideo != null)
+                _buildActionButton(
+                  onTap: () {
+                    setState(() {
+                      _videoController?.dispose();
+                      _videoController = null;
+                      recordedVideo = null;
+                      _secondsElapsed = 0;
+                    });
+                  },
+                  icon: Icons.refresh,
+                  color: Colors.white24,
+                  size: 60,
+                ),
+
+              if (recordedVideo != null) const SizedBox(width: 40),
+
+              // Record/Stop button (Telegram style)
+              if (recordedVideo == null)
+                GestureDetector(
+                  onTap: () async {
+                    if (!isRecording) {
+                      await startRecord();
+                    } else {
+                      await stopRecord();
+                    }
+                  },
+                  child: Container(
+                    width: 80,
+                    height: 80,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: Colors.white,
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withOpacity(0.3),
+                          blurRadius: 10,
+                          spreadRadius: 2,
                         ),
-                        minHeight: 4,
+                      ],
+                    ),
+                    child: Center(
+                      child: Container(
+                        width: isRecording ? 30 : 60,
+                        height: isRecording ? 30 : 60,
+                        decoration: BoxDecoration(
+                          color: Colors.red,
+                          borderRadius: BorderRadius.circular(
+                            isRecording ? 6 : 30,
+                          ),
+                        ),
                       ),
                     ),
-
-                  const SizedBox(height: 30),
-
-                  // Main action buttons
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      // Cancel/Retake button
-                      if (recordedVideo != null)
-                        GestureDetector(
-                          onTap: () {
-                            setState(() {
-                              _videoController?.dispose();
-                              _videoController = null;
-                              recordedVideo = null;
-                              _secondsElapsed = 0;
-                            });
-                          },
-                          child: Container(
-                            width: 60,
-                            height: 60,
-                            decoration: BoxDecoration(
-                              shape: BoxShape.circle,
-                              color: Colors.white24,
-                            ),
-                            child: const Icon(
-                              Icons.refresh,
-                              color: Colors.white,
-                              size: 30,
-                            ),
-                          ),
-                        ),
-
-                      const SizedBox(width: 40),
-
-                      // Record/Stop button
-                      if (recordedVideo == null)
-                        GestureDetector(
-                          onTap: () async {
-                            if (!isRecording) {
-                              await startRecord();
-                            } else {
-                              await stopRecord();
-                            }
-                          },
-                          child: Container(
-                            width: 90,
-                            height: 90,
-                            decoration: BoxDecoration(
-                              shape: BoxShape.circle,
-                              color: isRecording ? Colors.red : Colors.blue,
-                              border: Border.all(color: Colors.white, width: 4),
-                            ),
-                            child: Icon(
-                              isRecording ? Icons.stop : Icons.videocam,
-                              color: Colors.white,
-                              size: 40,
-                            ),
-                          ),
-                        )
-                      else
-                        // Placeholder when video is recorded
-                        const SizedBox(width: 90, height: 90),
-
-                      const SizedBox(width: 40),
-
-                      // Send button
-                      if (recordedVideo != null)
-                        GestureDetector(
-                          onTap: _sendVideo,
-                          child: Container(
-                            width: 60,
-                            height: 60,
-                            decoration: const BoxDecoration(
-                              shape: BoxShape.circle,
-                              color: Colors.green,
-                            ),
-                            child: const Icon(
-                              Icons.send,
-                              color: Colors.white,
-                              size: 30,
-                            ),
-                          ),
-                        ),
-                    ],
                   ),
+                ),
 
-                  const SizedBox(height: 20),
+              if (recordedVideo != null) const SizedBox(width: 40),
 
-                  // Instruction text
-                  if (recordedVideo != null)
-                    const Text(
-                      "Qayta yozish yoki yuborish",
-                      textAlign: TextAlign.center,
-                      style: TextStyle(color: Colors.white, fontSize: 14),
-                    )
-                  else if (isRecording)
-                    const Text(
-                      "To'xtatish uchun bosing",
-                      textAlign: TextAlign.center,
-                      style: TextStyle(color: Colors.white, fontSize: 14),
-                    )
-                  else
-                    const Text(
-                      "Boshlash uchun bosing",
-                      textAlign: TextAlign.center,
-                      style: TextStyle(color: Colors.white, fontSize: 14),
-                    ),
-                ],
-              ),
+              // Send button
+              if (recordedVideo != null)
+                _buildActionButton(
+                  onTap: _sendVideo,
+                  icon: Icons.check,
+                  color: Colors.green,
+                  size: 60,
+                ),
+            ],
+          ),
+
+          const SizedBox(height: 20),
+
+          // Instruction text
+          Text(
+            recordedVideo != null
+                ? "Qayta yozish yoki yuborish"
+                : isRecording
+                ? "To'xtatish uchun bosing"
+                : "Boshlash uchun bosing",
+            textAlign: TextAlign.center,
+            style: const TextStyle(
+              color: Colors.white70,
+              fontSize: 14,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildActionButton({
+    required VoidCallback onTap,
+    required IconData icon,
+    required Color color,
+    required double size,
+  }) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        width: size,
+        height: size,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          color: color,
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.2),
+              blurRadius: 8,
+              spreadRadius: 1,
             ),
           ],
         ),
+        child: Icon(icon, color: Colors.white, size: size * 0.5),
       ),
     );
   }

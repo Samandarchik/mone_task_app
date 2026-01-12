@@ -3,6 +3,8 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:mone_task_app/checker/ui/checker_home_ui.dart';
 import 'package:mone_task_app/admin/ui/admin_ui.dart';
+import 'package:mone_task_app/core/data/local/token_storage.dart';
+import 'package:mone_task_app/core/di/di.dart';
 import 'package:mone_task_app/worker/ui/task_worker_ui.dart';
 import 'package:mone_task_app/core/context_extension.dart';
 import 'package:mone_task_app/home/model/login_model.dart';
@@ -141,9 +143,10 @@ class _LoginPageState extends State<LoginPage> {
 
     await _saveAccount(_phoneController.text, _passwordController.text);
 
-    SharedPreferences prefs = await SharedPreferences.getInstance();
     if (result["success"] == true) {
-      await prefs.setString('access_token', result['token']);
+      TokenStorage tokenStorage = sl<TokenStorage>();
+      SharedPreferences prefs = await SharedPreferences.getInstance();
+      await tokenStorage.putToken(result['token']);
       await prefs.setString('role', result['user']["role"]);
       await prefs.setString('full_name', result['user']["username"]);
       context.push(TaskWorkerUi());
