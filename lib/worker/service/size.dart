@@ -1,28 +1,16 @@
 import 'dart:io';
-import 'package:light_compressor/light_compressor.dart';
+import 'package:video_compress/video_compress.dart';
 
 Future<File> compressVideo(File file) async {
-  final LightCompressor _compressor = LightCompressor();
+  await VideoCompress.setLogLevel(0);
+  await VideoCompress.deleteAllCache();
 
-  final String videoName =
-      'compressed-${DateTime.now().millisecondsSinceEpoch}.mp4';
-
-  final Result result = await _compressor.compressVideo(
-    path: file.path,
-    videoQuality: VideoQuality.low, // 🔥 500x500 ga eng yaqin
-    isMinBitrateCheckEnabled: false,
-    video: Video(videoName: videoName),
-    android: AndroidConfig(isSharedStorage: false, saveAt: SaveAt.Downloads),
-    ios: IOSConfig(saveInGallery: false),
+  final info = await VideoCompress.compressVideo(
+    file.path,
+    quality: VideoQuality.Res640x480Quality, // 👈 400 ga eng yaqin
+    deleteOrigin: false,
+    includeAudio: true,
   );
 
-  if (result is OnSuccess) {
-    return File(result.destinationPath);
-  } else if (result is OnFailure) {
-    throw Exception("Compression failed: ${result.message}");
-  } else if (result is OnCancelled) {
-    throw Exception("Compression cancelled");
-  }
-
-  throw Exception("Unknown compression error");
+  return info!.file!;
 }
