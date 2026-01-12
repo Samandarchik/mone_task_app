@@ -1,27 +1,28 @@
 import 'dart:io';
-import 'package:ffmpeg_kit_flutter_full_gpl/ffmpeg_kit.dart';
-import 'package:path_provider/path_provider.dart';
-import 'package:path/path.dart' as p;
+import 'package:light_compressor/light_compressor.dart';
 
-Future<File> compressVideoTo500(File inputFile) async {
-  final tempDir = await getTemporaryDirectory();
-  final outputPath = p.join(
-    tempDir.path,
-    "video_500x500_${DateTime.now().millisecondsSinceEpoch}.mp4",
+Future<File> compressVideo(File file) async {
+  final LightCompressor _compressor = LightCompressor();
+
+  final String videoName =
+      'compressed-${DateTime.now().millisecondsSinceEpoch}.mp4';
+
+  final Result result = await _compressor.compressVideo(
+    path: file.path,
+    videoQuality: VideoQuality.low, // 🔥 500x500 ga eng yaqin
+    isMinBitrateCheckEnabled: false,
+    video: Video(videoName: videoName),
+    android: AndroidConfig(isSharedStorage: false, saveAt: SaveAt.Downloads),
+    ios: IOSConfig(saveInGallery: false),
   );
 
-  // FFmpeg command: resize to EXACT 500x500
-  final cmd = '''
-  -i "${inputFile.path}"
-  -vf scale=500:500
-  -vcodec libx264
-  -crf 24
-  -preset medium
-  -acodec aac
-  "$outputPath"
-  ''';
+  if (result is OnSuccess) {
+    return File(result.destinationPath);
+  } else if (result is OnFailure) {
+    throw Exception("Compression failed: ${result.message}");
+  } else if (result is OnCancelled) {
+    throw Exception("Compression cancelled");
+  }
 
-  await FFmpegKit.execute(cmd);
-
-  return File(outputPath);
+  throw Exception("Unknown compression error");
 }
