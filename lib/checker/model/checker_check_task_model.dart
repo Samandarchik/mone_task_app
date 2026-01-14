@@ -25,4 +25,21 @@ class CheckerCheckTaskModel {
       videoUrl: json["videoUrl"],
     );
   }
+
+  // copy with
+  CheckerCheckTaskModel copyWith({
+    int? taskId,
+    String? task,
+    int? type,
+    int? filialId,
+    int? status,
+    String? videoUrl,
+  }) => CheckerCheckTaskModel(
+    taskId: taskId ?? this.taskId,
+    task: task ?? this.task,
+    type: type ?? this.type,
+    filialId: filialId ?? this.filialId,
+    status: status ?? this.status,
+    videoUrl: videoUrl ?? this.videoUrl,
+  );
 }

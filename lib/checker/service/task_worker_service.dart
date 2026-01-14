@@ -8,9 +8,11 @@ import 'package:mone_task_app/worker/model/response_task_model.dart';
 class AdminTaskService {
   final Dio _dio = sl<Dio>();
 
-  Future<List<CheckerCheckTaskModel>> fetchTasks() async {
+  Future<List<CheckerCheckTaskModel>> fetchTasks(DateTime selectedDate) async {
     try {
-      final response = await _dio.get(AppUrls.tasks);
+      final response = await _dio.get(
+        "${AppUrls.tasks}?date=${selectedDate.year}-${selectedDate.month.toString().padLeft(2, '0')}-${selectedDate.day.toString().padLeft(2, '0')}",
+      );
 
       if (response.data == null) {
         throw Exception("Task ma'lumotlari mavjud emas");
@@ -98,6 +100,7 @@ class AdminTaskService {
         "${AppUrls.tasks}/$taskId/check",
         data: {"status": status},
       );
+
       return response.statusCode == 200;
     } catch (e) {
       return false;

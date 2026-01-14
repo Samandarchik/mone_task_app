@@ -1,3 +1,4 @@
+import 'dart:ui'; // Muhim!
 import 'dart:io';
 import 'dart:async';
 import 'package:flutter/material.dart';
@@ -241,15 +242,7 @@ class _TelegramVideoRecorderState extends State<TelegramVideoRecorder>
       if (mounted) {
         setState(() => isRecording = false);
       }
-    } catch (e) {
-      debugPrint("Video to'xtatish xatosi: $e");
-      if (mounted) {
-        setState(() => isRecording = false);
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text("Xatolik: $e")));
-      }
-    }
+    } catch (e) {}
   }
 
   void _cancel() {
@@ -329,30 +322,50 @@ class _TelegramVideoRecorderState extends State<TelegramVideoRecorder>
     return Dialog(
       backgroundColor: Colors.transparent,
       insetPadding: EdgeInsets.zero,
-      child: Container(
-        width: double.infinity,
-        height: double.infinity,
-        color: Colors.black,
-        child: Stack(
-          children: [
-            // Telegram uslubida aylanma kamera preview
-            Center(child: _buildCircularPreview()),
+      child: Stack(
+        children: [
+          // 🔥 BLUR BACKGROUND
+          Positioned.fill(
+            child: BackdropFilter(
+              filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
+              child: Container(
+                color: Colors.black.withOpacity(0.3), // Yengil qoraytirish
+              ),
+            ),
+          ),
 
-            // Top bar
-            _buildTopBar(),
+          // 🔵 Asosiy UI
+          Container(
+            width: double.infinity,
+            height: double.infinity,
+            child: Stack(
+              children: [
+                Center(child: _buildCircularPreview()),
 
-            // Bottom controls
-            _buildBottomControls(),
-          ],
-        ),
+                _buildTopBar(),
+
+                _buildBottomControls(),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }
 
   Widget _buildCircularPreview() {
+    // Ekran o'lchamlarini olish
+    final screenWidth = MediaQuery.of(context).size.width;
+    final screenHeight = MediaQuery.of(context).size.height;
+
+    // Aylana o'lchami - ekranning kichik tomoniga moslashadi
+    final circleSize = screenWidth < screenHeight
+        ? screenWidth * 0.8
+        : screenHeight * 0.5;
+
     return Container(
-      width: 300,
-      height: 300,
+      width: circleSize,
+      height: circleSize,
       decoration: BoxDecoration(
         shape: BoxShape.circle,
         border: Border.all(
@@ -361,9 +374,19 @@ class _TelegramVideoRecorderState extends State<TelegramVideoRecorder>
         ),
       ),
       child: ClipOval(
-        child: _videoController != null && recordedVideo != null
-            ? VideoPlayer(_videoController!)
-            : CameraPreview(_cameraController!),
+        child: OverflowBox(
+          alignment: Alignment.center,
+          child: FittedBox(
+            fit: BoxFit.cover,
+            child: SizedBox(
+              width: circleSize,
+              height: circleSize / _cameraController!.value.aspectRatio,
+              child: _videoController != null && recordedVideo != null
+                  ? VideoPlayer(_videoController!)
+                  : CameraPreview(_cameraController!),
+            ),
+          ),
+        ),
       ),
     );
   }
