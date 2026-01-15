@@ -74,20 +74,6 @@ class _CircleVideoPlayerState extends State<CircleVideoPlayer>
     }
   }
 
-  void _togglePlayPause() {
-    if (!_isInitialized) return;
-
-    setState(() {
-      if (_controller.value.isPlaying) {
-        _controller.pause();
-        _isPlaying = false;
-      } else {
-        _controller.play();
-        _isPlaying = true;
-      }
-    });
-  }
-
   @override
   void dispose() {
     _controller.dispose();
@@ -250,9 +236,7 @@ class _CircleVideoPlayerState extends State<CircleVideoPlayer>
 
                           if (!_isInitialized && !_hasError)
                             const Center(
-                              child: CircularProgressIndicator(
-                                color: Colors.white,
-                              ),
+                              child: CircularProgressIndicator.adaptive(),
                             ),
 
                           if (_hasError)

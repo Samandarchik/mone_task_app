@@ -224,7 +224,7 @@ class _CheckerHomeUiState extends State<CheckerHomeUi> {
           future: tasksFuture,
           builder: (context, snapshot) {
             if (snapshot.connectionState == ConnectionState.waiting) {
-              return const Center(child: CircularProgressIndicator());
+              return const Center(child: CircularProgressIndicator.adaptive());
             }
 
             if (snapshot.hasError) {
@@ -421,12 +421,7 @@ class _CheckerHomeUiState extends State<CheckerHomeUi> {
                                   const SizedBox(
                                     width: 14,
                                     height: 14,
-                                    child: CircularProgressIndicator(
-                                      strokeWidth: 2,
-                                      valueColor: AlwaysStoppedAnimation<Color>(
-                                        Colors.white,
-                                      ),
-                                    ),
+                                    child: CircularProgressIndicator.adaptive(),
                                   )
                                 else
                                   Icon(

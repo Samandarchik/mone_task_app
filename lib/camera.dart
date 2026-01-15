@@ -307,7 +307,7 @@ class _TelegramVideoRecorderState extends State<TelegramVideoRecorder>
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              CircularProgressIndicator(color: Colors.white),
+              CircularProgressIndicator.adaptive(),
               SizedBox(height: 20),
               Text(
                 'Kamera tayyorlanmoqda...',

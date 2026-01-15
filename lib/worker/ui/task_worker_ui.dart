@@ -75,6 +75,7 @@ class _TaskWorkerUiState extends State<TaskWorkerUi> {
           ),
         );
       } else {
+        _refresh();
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text("❌ Yuborishda xatolik!"),
@@ -84,9 +85,7 @@ class _TaskWorkerUiState extends State<TaskWorkerUi> {
       }
     } catch (e) {
       Navigator.pop(context); // Loading yopish
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text("❌ Xatolik: $e"), backgroundColor: Colors.red),
-      );
+      _refresh();
     }
   }
 

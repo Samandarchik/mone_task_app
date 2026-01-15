@@ -5,7 +5,6 @@ import 'package:mone_task_app/core/constants/urls.dart';
 import 'package:mone_task_app/core/di/di.dart';
 import 'package:mone_task_app/worker/model/response_task_model.dart';
 import 'package:mone_task_app/worker/model/task_worker_model.dart';
-import 'package:mone_task_app/worker/service/size.dart';
 
 class TaskWorkerService {
   final Dio _dio = sl<Dio>();
@@ -32,7 +31,7 @@ class TaskWorkerService {
 
   Future<bool> completeTask(RequestTaskModel request) async {
     try {
-      final compressedVideo = await compressVideo(File(request.file!.path));
+      final compressedVideo = File(request.file!.path);
 
       final formData = FormData.fromMap({
         "video": await MultipartFile.fromFile(
@@ -45,7 +44,7 @@ class TaskWorkerService {
         "${AppUrls.tasks}/${request.id}/submit",
         data: formData,
       );
-
+      print(response.statusCode);
       return response.statusCode == 200;
     } catch (e) {
       rethrow;
