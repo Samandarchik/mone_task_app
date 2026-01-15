@@ -361,7 +361,7 @@ class _TelegramVideoRecorderState extends State<TelegramVideoRecorder>
     // Aylana o'lchami - ekranning kichik tomoniga moslashadi
     final circleSize = screenWidth < screenHeight
         ? screenWidth * 0.8
-        : screenHeight * 0.5;
+        : screenHeight * 0.8;
 
     return Container(
       width: circleSize,
@@ -379,7 +379,6 @@ class _TelegramVideoRecorderState extends State<TelegramVideoRecorder>
           child: FittedBox(
             fit: BoxFit.cover,
             child: SizedBox(
-              width: circleSize,
               height: circleSize / _cameraController!.value.aspectRatio,
               child: _videoController != null && recordedVideo != null
                   ? VideoPlayer(_videoController!)
