@@ -15,20 +15,24 @@ class EditTaskUi extends StatefulWidget {
 class _EditTaskUiState extends State<EditTaskUi> {
   AdminTaskService taskService = AdminTaskService();
   late TextEditingController controller;
-  int role = 1;
-  int sellectedType = 2;
+  int? sellectedType;
   List<int> selectedFilials = []; // tanlangan filiallar listi
   List<int> selectedWeekDays = [];
-  List<int> selectedDays = []; // role 3 uchun tanlangan kunlar
+  List<int> selectedDays = []; // sellectedType 3 uchun tanlangan kunlar
 
   @override
   void initState() {
     super.initState();
     controller = TextEditingController();
     controller.text = widget.task.task;
-    role = widget.task.type;
+    sellectedType = widget.task.type;
+    selectedWeekDays = widget.task.days ?? [];
     selectedDays = widget.task.days ?? [];
     selectedFilials = [widget.task.filialId];
+    print(
+      "task ${widget.task.task}, sellectedType ${widget.task.type}, filials ${widget.task.filialId}, days ${widget.task.days}",
+    );
+    setState(() {});
   }
 
   @override
@@ -58,7 +62,7 @@ class _EditTaskUiState extends State<EditTaskUi> {
               Padding(
                 padding: const EdgeInsets.all(8.0),
                 child: DropdownButton<int>(
-                  value: role,
+                  value: sellectedType,
                   isExpanded: true,
                   items: types
                       .map(
@@ -71,13 +75,13 @@ class _EditTaskUiState extends State<EditTaskUi> {
                   onChanged: (value) {
                     if (value != null) {
                       setState(() {
-                        role = value;
+                        sellectedType = value;
                       });
                     }
                   },
                 ),
               ),
-              if (role == 2)
+              if (sellectedType == 2)
                 Column(
                   children: [
                     const SizedBox(height: 10),
@@ -101,7 +105,7 @@ class _EditTaskUiState extends State<EditTaskUi> {
                     ),
                   ],
                 ),
-              if (role == 3)
+              if (sellectedType == 3)
                 Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
@@ -146,12 +150,12 @@ class _EditTaskUiState extends State<EditTaskUi> {
                         selectedFilials.isNotEmpty) {
                       EditTaskUiModel model = EditTaskUiModel(
                         taskId: widget.task.taskId,
-                        taskType: 1,
-                        role: role,
+                        taskType: sellectedType ?? 1,
                         filialsId: selectedFilials, // list yuboriladi
                         task: controller.text,
-                        // role 3 bo'lsa kunlar ham saqlansin
-                        days: role == 3 ? selectedDays : null,
+                        days: sellectedType == 2
+                            ? selectedWeekDays
+                            : selectedDays,
                       );
                       taskService.updateTaskStatus(model);
                       Navigator.pop(context);

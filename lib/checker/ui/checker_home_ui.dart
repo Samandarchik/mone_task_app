@@ -1,3 +1,4 @@
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:mone_task_app/checker/model/checker_check_task_model.dart';
 import 'package:mone_task_app/checker/service/task_worker_service.dart';
@@ -6,6 +7,7 @@ import 'package:mone_task_app/core/constants/urls.dart';
 import 'package:mone_task_app/core/context_extension.dart';
 import 'package:mone_task_app/home/service/login_service.dart';
 import 'package:mone_task_app/utils/get_color.dart';
+import 'package:share_plus/share_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:dio/dio.dart';
 import 'package:path_provider/path_provider.dart';
@@ -50,16 +52,6 @@ class _CheckerHomeUiState extends State<CheckerHomeUi> {
     if (!await videosDir.exists()) {
       await videosDir.create(recursive: true);
       return;
-    }
-
-    final files = videosDir.listSync();
-    for (var file in files) {
-      if (file is File) {
-        // Fayl nomidan URL ni tiklash
-        final fileName = file.path.split('/').last;
-        // Bu yerda URL mapping kerak bo'ladi
-        // Hozircha faqat local path'ni saqlaymiz
-      }
     }
   }
 
@@ -367,84 +359,110 @@ class _CheckerHomeUiState extends State<CheckerHomeUi> {
               },
               child: Padding(
                 padding: const EdgeInsets.all(12),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+                child: Row(
                   children: [
-                    Text(
-                      filtered[i].task,
-                      style: const TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 8,
-                            vertical: 4,
-                          ),
-                          decoration: BoxDecoration(
-                            color: getStatusColor(filtered[i].status),
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          child: Text(
-                            getTypeName(filtered[i].status),
-                            style: const TextStyle(
-                              fontSize: 12,
-                              color: Colors.black,
-                              fontWeight: FontWeight.bold,
-                            ),
+                        Text(
+                          filtered[i].task,
+                          style: const TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
                           ),
                         ),
-                        if (filtered[i].videoUrl != null &&
-                            filtered[i].videoUrl!.isNotEmpty)
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 8,
-                              vertical: 4,
-                            ),
-                            decoration: BoxDecoration(
-                              color: isVideoCached
-                                  ? Colors.green
-                                  : (isDownloading
-                                        ? Colors.orange
-                                        : Colors.blue),
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                if (isDownloading)
-                                  const SizedBox(
-                                    width: 14,
-                                    height: 14,
-                                    child: CircularProgressIndicator.adaptive(),
-                                  )
-                                else
-                                  Icon(
-                                    isVideoCached
-                                        ? Icons.check_circle
-                                        : Icons.cloud_download,
-                                    size: 16,
-                                    color: Colors.white,
-                                  ),
-                                const SizedBox(width: 4),
-                                Text(
-                                  isDownloading
-                                      ? "Yuklanmoqda..."
-                                      : (isVideoCached ? "Yuklangan" : "Video"),
-                                  style: const TextStyle(
-                                    fontSize: 12,
-                                    color: Colors.white,
-                                    fontWeight: FontWeight.bold,
-                                  ),
+                        const SizedBox(height: 8),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 8,
+                                vertical: 4,
+                              ),
+                              decoration: BoxDecoration(
+                                color: getStatusColor(filtered[i].status),
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              child: Text(
+                                " ${getTypeName(filtered[i].type)}: ${filtered[i].type == 2 ? getWeekdayRu() : filtered[i].days ?? ""}",
+
+                                style: const TextStyle(
+                                  fontSize: 12,
+                                  color: Colors.black,
                                 ),
-                              ],
+                              ),
                             ),
-                          ),
+                            if (filtered[i].videoUrl != null &&
+                                filtered[i].videoUrl!.isNotEmpty)
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 8,
+                                  vertical: 4,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: isVideoCached
+                                      ? Colors.green
+                                      : (isDownloading
+                                            ? Colors.orange
+                                            : Colors.blue),
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    if (isDownloading)
+                                      const SizedBox(
+                                        width: 14,
+                                        height: 14,
+                                        child:
+                                            CircularProgressIndicator.adaptive(),
+                                      )
+                                    else
+                                      Icon(
+                                        isVideoCached
+                                            ? Icons.check_circle
+                                            : Icons.cloud_download,
+                                        size: 16,
+                                        color: Colors.white,
+                                      ),
+                                    const SizedBox(width: 4),
+                                    Text(
+                                      isDownloading
+                                          ? "Yuklanmoqda..."
+                                          : (isVideoCached
+                                                ? "Yuklangan"
+                                                : "Video"),
+                                      style: const TextStyle(
+                                        fontSize: 12,
+                                        color: Colors.white,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            IconButton(
+                              onPressed: () {
+                                if (filtered[i].videoUrl != null &&
+                                    filtered[i].videoUrl!.isNotEmpty) {
+                                  _shareVideo(filtered[i]);
+                                } else {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    const SnackBar(
+                                      content: Text('Video mavjud emas'),
+                                    ),
+                                  );
+                                }
+                              },
+                              icon:
+                                  filtered[i].videoUrl != null &&
+                                      filtered[i].videoUrl!.isNotEmpty
+                                  ? Icon(CupertinoIcons.share)
+                                  : SizedBox(),
+                            ),
+                          ],
+                        ),
                       ],
                     ),
                   ],
@@ -455,5 +473,76 @@ class _CheckerHomeUiState extends State<CheckerHomeUi> {
         },
       ),
     );
+  }
+
+  // Video ulashish funksiyasi
+  Future<void> _shareVideo(CheckerCheckTaskModel task) async {
+    try {
+      // Video URL'ni to'liq shakliga keltirish
+      String? videoUrl = task.videoUrl;
+      if (videoUrl == null || videoUrl.isEmpty) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('Video topilmadi')));
+        return;
+      }
+
+      if (!videoUrl.startsWith('http')) {
+        videoUrl = '${AppUrls.baseUrl}/$videoUrl';
+      }
+
+      // Loading ko'rsatish
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (context) =>
+            const Center(child: CircularProgressIndicator.adaptive()),
+      );
+
+      String? localPath;
+
+      // Agar video cache'da bo'lsa, uni ishlatamiz
+      if (cachedVideos.containsKey(videoUrl)) {
+        localPath = cachedVideos[videoUrl];
+      } else {
+        // Aks holda yuklab olamiz
+        localPath = await _getLocalFilePath(videoUrl);
+        final file = File(localPath);
+
+        // Agar fayl mavjud bo'lmasa, yuklab olamiz
+        if (!await file.exists() || await file.length() == 0) {
+          final dio = Dio();
+          await dio.download(videoUrl, localPath);
+        }
+
+        // Cache'ga qo'shamiz
+        setState(() {
+          cachedVideos[videoUrl!] = localPath!;
+        });
+      }
+
+      // Loading yopish
+      Navigator.of(context).pop();
+
+      // Video faylini ulashish
+      final file = File(localPath!);
+      if (await file.exists() && await file.length() > 0) {
+        await Share.shareXFiles(
+          [XFile(file.path)],
+          text: 'Topshiriq: ${task.task}',
+          subject: 'Task Video',
+        );
+      } else {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('Video fayl topilmadi')));
+      }
+    } catch (e) {
+      // Loading yopish (agar xatolik bo'lsa)
+      if (Navigator.of(context).canPop()) {
+        Navigator.of(context).pop();
+      }
+      print('Share xatolik: $e');
+    }
   }
 }

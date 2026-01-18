@@ -50,7 +50,7 @@ class AdminTaskService {
 
   Future<bool> deleteTask(int taskId) async {
     try {
-      final response = await _dio.delete("${AppUrls.deleteTask}$taskId");
+      final response = await _dio.delete("${AppUrls.deleteTask}/$taskId");
       return response.statusCode == 200;
     } catch (e) {
       rethrow; // UI ushlashi uchun

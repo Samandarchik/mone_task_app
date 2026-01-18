@@ -2,12 +2,13 @@ import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:mone_task_app/camera.dart';
 import 'package:mone_task_app/core/context_extension.dart';
+import 'package:mone_task_app/core/data/local/token_storage.dart';
+import 'package:mone_task_app/core/di/di.dart';
 import 'package:mone_task_app/home/service/login_service.dart';
 import 'package:mone_task_app/utils/get_color.dart';
 import 'package:mone_task_app/worker/model/task_worker_model.dart';
 import 'package:mone_task_app/worker/model/response_task_model.dart';
 import 'package:mone_task_app/worker/service/task_worker_service.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:async';
 
 class TaskWorkerUi extends StatefulWidget {
@@ -50,21 +51,11 @@ class _TaskWorkerUiState extends State<TaskWorkerUi> {
   /// Videoni serverga yuborish
   Future<void> _uploadVideo(TaskWorkerModel task, XFile video) async {
     try {
-      // Loading ko'rsatish
-      showDialog(
-        context: context,
-        barrierDismissible: false,
-        builder: (ctx) =>
-            const Center(child: CircularProgressIndicator.adaptive()),
-      );
-
       // RequestTaskModel yaratish
       final requestData = RequestTaskModel(id: task.id, file: video);
 
       // Backend ga yuborish
       bool success = await TaskWorkerService().completeTask(requestData);
-
-      Navigator.pop(context); // Loading yopish
 
       if (success) {
         _refresh();
@@ -97,9 +88,10 @@ class _TaskWorkerUiState extends State<TaskWorkerUi> {
         actions: [
           IconButton(
             onPressed: () async {
-              SharedPreferences prefs = await SharedPreferences.getInstance();
-              prefs.remove("access_token");
-              prefs.remove("role");
+              TokenStorage tokenStorage = sl<TokenStorage>();
+
+              tokenStorage.removeToken();
+
               context.pushAndRemove(LoginPage());
             },
             icon: Icon(Icons.logout),
@@ -146,7 +138,7 @@ class _TaskWorkerUiState extends State<TaskWorkerUi> {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
-                              "${i + 1}. ${tasks[i].description}",
+                              "${tasks[i].id}. ${tasks[i].description}",
                               style: const TextStyle(
                                 fontWeight: FontWeight.bold,
                                 fontSize: 16,
@@ -154,7 +146,7 @@ class _TaskWorkerUiState extends State<TaskWorkerUi> {
                             ),
                             const SizedBox(height: 4),
                             Text(
-                              " ${getTypeName(tasks[i].taskType)}: ${tasks[i].taskType == 2 ? getWeekdayRu() : tasks[i].days}",
+                              " ${getTypeName(tasks[i].taskType)}: ${tasks[i].taskType == 2 ? getWeekdayRu() : tasks[i].days ?? ""}",
 
                               style: TextStyle(
                                 fontSize: 12,

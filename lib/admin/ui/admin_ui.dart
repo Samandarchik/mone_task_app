@@ -1,6 +1,7 @@
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:mone_task_app/admin/ui/add_admin_task.dart';
+import 'package:mone_task_app/admin/ui/all_task_ui.dart';
 import 'package:mone_task_app/admin/ui/dialog.dart';
 import 'package:mone_task_app/admin/ui/edit_task_ui.dart';
 import 'package:mone_task_app/checker/model/checker_check_task_model.dart';
@@ -205,10 +206,6 @@ class _AdminTaskUiState extends State<AdminTaskUi> {
       if (Navigator.of(context).canPop()) {
         Navigator.of(context).pop();
       }
-
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Xatolik: $e')));
       print('Share xatolik: $e');
     }
   }
@@ -248,10 +245,17 @@ class _AdminTaskUiState extends State<AdminTaskUi> {
           actions: [
             IconButton(
               onPressed: () {
+                context.push(TemplateTaskAdminUi());
+              },
+              icon: Icon(Icons.menu),
+            ),
+            IconButton(
+              onPressed: () {
                 context.push(AddAdminTask());
               },
               icon: Icon(Icons.add),
             ),
+
             GestureDetector(
               child: Text(
                 selectedDate.day == DateTime.now().day
@@ -456,7 +460,7 @@ class _AdminTaskUiState extends State<AdminTaskUi> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            "${i + 1}. ${filtered[i].task}",
+                            "${filtered[i].taskId}. ${filtered[i].task}",
                             style: const TextStyle(
                               fontSize: 16,
                               fontWeight: FontWeight.bold,
@@ -476,7 +480,7 @@ class _AdminTaskUiState extends State<AdminTaskUi> {
                                   borderRadius: BorderRadius.circular(12),
                                 ),
                                 child: Text(
-                                  " ${getTypeName(filtered[i].type)}: ${filtered[i].type == 2 ? getWeekdayRu() : filtered[i].days}",
+                                  " ${getTypeName(filtered[i].type)}: ${filtered[i].type == 2 ? getWeekdayRu() : filtered[i].days ?? ""}",
                                   style: const TextStyle(
                                     fontSize: 12,
                                     color: Colors.black,

@@ -329,7 +329,7 @@ class _TelegramVideoRecorderState extends State<TelegramVideoRecorder>
             child: BackdropFilter(
               filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
               child: Container(
-                color: Colors.black.withOpacity(0.3), // Yengil qoraytirish
+                color: Colors.white.withOpacity(0.4), // Yengil qoraytirish
               ),
             ),
           ),

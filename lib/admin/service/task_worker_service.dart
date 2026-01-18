@@ -1,6 +1,7 @@
 import 'package:dio/dio.dart';
 import 'package:mone_task_app/admin/model/add_admin_task.dart';
 import 'package:mone_task_app/admin/model/admin_task_model.dart';
+import 'package:mone_task_app/admin/model/all_task_model.dart';
 import 'package:mone_task_app/admin/model/edit_task_ui_model.dart';
 import 'package:mone_task_app/core/constants/urls.dart';
 import 'package:mone_task_app/core/di/di.dart';
@@ -53,7 +54,7 @@ class AdminTaskService {
   // Edit task
   Future<bool> updateTaskStatus(EditTaskUiModel task) async {
     try {
-      final response = await _dio.post(
+      final response = await _dio.put(
         "${AppUrls.tasks}/${task.taskId}",
         data: task.toJson(),
       );
@@ -61,6 +62,26 @@ class AdminTaskService {
       return response.statusCode == 200;
     } catch (e) {
       return false;
+    }
+  }
+
+  Future<List<TemplateTaskModel>> fetchTemplates() async {
+    try {
+      final response = await _dio.get(AppUrls.tasksAll);
+
+      if (response.data == null) {
+        throw Exception("Task ma'lumotlari mavjud emas");
+      }
+
+      final data = response.data["data"];
+
+      if (data is! List) {
+        throw Exception("Server noto‘g‘ri format qaytardi");
+      }
+
+      return data.map((e) => TemplateTaskModel.fromJson(e)).toList();
+    } catch (e) {
+      rethrow; // UI ushlashi uchun
     }
   }
 }
