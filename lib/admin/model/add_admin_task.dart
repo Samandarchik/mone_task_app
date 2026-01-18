@@ -15,9 +15,9 @@ class AddAdminTaskModel {
   //to json
   Map<String, dynamic> toJson() => {
     "task": task,
-    "task_type": taskType,
+    "type": taskType,
     "role": role,
-    "filials_id": filialsId,
+    "filialIds": filialsId,
     "days": days,
   };
 }

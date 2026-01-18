@@ -13,6 +13,7 @@ import 'package:mone_task_app/utils/get_color.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:dio/dio.dart';
 import 'package:path_provider/path_provider.dart';
+import 'package:share_plus/share_plus.dart';
 import 'dart:io';
 
 class AdminTaskUi extends StatefulWidget {
@@ -134,6 +135,81 @@ class _AdminTaskUiState extends State<AdminTaskUi> {
       setState(() {
         downloadingVideos.remove(videoUrl);
       });
+    }
+  }
+
+  // Video ulashish funksiyasi
+  Future<void> _shareVideo(CheckerCheckTaskModel task) async {
+    try {
+      // Video URL'ni to'liq shakliga keltirish
+      String? videoUrl = task.videoUrl;
+      if (videoUrl == null || videoUrl.isEmpty) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('Video topilmadi')));
+        return;
+      }
+
+      if (!videoUrl.startsWith('http')) {
+        videoUrl = '${AppUrls.baseUrl}/$videoUrl';
+      }
+
+      // Loading ko'rsatish
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (context) =>
+            const Center(child: CircularProgressIndicator.adaptive()),
+      );
+
+      String? localPath;
+
+      // Agar video cache'da bo'lsa, uni ishlatamiz
+      if (cachedVideos.containsKey(videoUrl)) {
+        localPath = cachedVideos[videoUrl];
+      } else {
+        // Aks holda yuklab olamiz
+        localPath = await _getLocalFilePath(videoUrl);
+        final file = File(localPath);
+
+        // Agar fayl mavjud bo'lmasa, yuklab olamiz
+        if (!await file.exists() || await file.length() == 0) {
+          final dio = Dio();
+          await dio.download(videoUrl, localPath);
+        }
+
+        // Cache'ga qo'shamiz
+        setState(() {
+          cachedVideos[videoUrl!] = localPath!;
+        });
+      }
+
+      // Loading yopish
+      Navigator.of(context).pop();
+
+      // Video faylini ulashish
+      final file = File(localPath!);
+      if (await file.exists() && await file.length() > 0) {
+        await Share.shareXFiles(
+          [XFile(file.path)],
+          text: 'Topshiriq: ${task.task}',
+          subject: 'Task Video',
+        );
+      } else {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('Video fayl topilmadi')));
+      }
+    } catch (e) {
+      // Loading yopish (agar xatolik bo'lsa)
+      if (Navigator.of(context).canPop()) {
+        Navigator.of(context).pop();
+      }
+
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Xatolik: $e')));
+      print('Share xatolik: $e');
     }
   }
 
@@ -375,93 +451,108 @@ class _AdminTaskUiState extends State<AdminTaskUi> {
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          "${i + 1}. ${filtered[i].task}",
-                          style: const TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                        const SizedBox(height: 3),
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 8,
-                                vertical: 4,
-                              ),
-                              decoration: BoxDecoration(
-                                color: getStatusColor(filtered[i].status),
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                              child: Text(
-                                " ${getTypeName(filtered[i].type)}: ${filtered[i].type == 2 ? getWeekdayRu() : filtered[i].days}",
-                                style: const TextStyle(
-                                  fontSize: 12,
-                                  color: Colors.black,
-                                ),
-                              ),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            "${i + 1}. ${filtered[i].task}",
+                            style: const TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
                             ),
-                            if (filtered[i].videoUrl != null &&
-                                filtered[i].videoUrl!.isNotEmpty)
+                          ),
+                          const SizedBox(height: 3),
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
                               Container(
                                 padding: const EdgeInsets.symmetric(
                                   horizontal: 8,
                                   vertical: 4,
                                 ),
                                 decoration: BoxDecoration(
-                                  color: isVideoCached
-                                      ? Colors.green
-                                      : (isDownloading
-                                            ? Colors.orange
-                                            : Colors.blue),
+                                  color: getStatusColor(filtered[i].status),
                                   borderRadius: BorderRadius.circular(12),
                                 ),
-                                child: Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    if (isDownloading)
-                                      const SizedBox(
-                                        width: 14,
-                                        height: 14,
-                                        child:
-                                            CircularProgressIndicator.adaptive(),
-                                      )
-                                    else
-                                      Icon(
-                                        isVideoCached
-                                            ? Icons.check_circle
-                                            : Icons.cloud_download,
-                                        size: 16,
-                                        color: Colors.white,
-                                      ),
-                                    const SizedBox(width: 4),
-                                    Text(
-                                      isDownloading
-                                          ? "Yuklanmoqda..."
-                                          : (isVideoCached
-                                                ? "Yuklangan"
-                                                : "Video"),
-                                      style: const TextStyle(
-                                        fontSize: 12,
-                                        color: Colors.white,
-                                        fontWeight: FontWeight.bold,
-                                      ),
-                                    ),
-                                  ],
+                                child: Text(
+                                  " ${getTypeName(filtered[i].type)}: ${filtered[i].type == 2 ? getWeekdayRu() : filtered[i].days}",
+                                  style: const TextStyle(
+                                    fontSize: 12,
+                                    color: Colors.black,
+                                  ),
                                 ),
                               ),
-                          ],
-                        ),
-                      ],
+                              if (filtered[i].videoUrl != null &&
+                                  filtered[i].videoUrl!.isNotEmpty)
+                                Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 8,
+                                    vertical: 4,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: isVideoCached
+                                        ? Colors.green
+                                        : (isDownloading
+                                              ? Colors.orange
+                                              : Colors.blue),
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      if (isDownloading)
+                                        const SizedBox(
+                                          width: 14,
+                                          height: 14,
+                                          child:
+                                              CircularProgressIndicator.adaptive(),
+                                        )
+                                      else
+                                        Icon(
+                                          isVideoCached
+                                              ? Icons.check_circle
+                                              : Icons.cloud_download,
+                                          size: 16,
+                                          color: Colors.white,
+                                        ),
+                                      const SizedBox(width: 4),
+                                      Text(
+                                        isDownloading
+                                            ? "Yuklanmoqda..."
+                                            : (isVideoCached
+                                                  ? "Yuklangan"
+                                                  : "Video"),
+                                        style: const TextStyle(
+                                          fontSize: 12,
+                                          color: Colors.white,
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                            ],
+                          ),
+                        ],
+                      ),
                     ),
                     IconButton(
-                      onPressed: () {},
-                      icon: Icon(CupertinoIcons.share),
+                      onPressed: () {
+                        if (filtered[i].videoUrl != null &&
+                            filtered[i].videoUrl!.isNotEmpty) {
+                          _shareVideo(filtered[i]);
+                        } else {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(content: Text('Video mavjud emas')),
+                          );
+                        }
+                      },
+                      icon:
+                          filtered[i].videoUrl != null &&
+                              filtered[i].videoUrl!.isNotEmpty
+                          ? Icon(CupertinoIcons.share)
+                          : SizedBox(),
                     ),
                   ],
                 ),

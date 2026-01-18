@@ -35,7 +35,7 @@ class _AddAdminTaskState extends State<AddAdminTask> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text("Задачи редактирования")),
+      appBar: AppBar(title: const Text("Добавить задачу")),
       body: SingleChildScrollView(
         child: Padding(
           padding: const EdgeInsets.all(8.0),
@@ -177,7 +177,7 @@ class _AddAdminTaskState extends State<AddAdminTask> {
                       );
                     }
                   },
-                  child: const Text("Задачи редактирования"),
+                  child: const Text("Добавить задачу"),
                 ),
               ),
             ],

@@ -41,12 +41,7 @@ class AdminTaskService {
     try {
       final response = await _dio.post(
         AppUrls.tasks, // 🔥 shu yerga sizning POST URL’ingiz tushadi
-        data: {
-          "task": task.task,
-          "task_type": task.taskType,
-          "role": task.role,
-          "filials_id": task.filialsId,
-        },
+        data: task.toJson(),
       );
 
       return response.statusCode == 200 || response.statusCode == 201;
