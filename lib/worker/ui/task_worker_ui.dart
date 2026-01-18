@@ -146,7 +146,7 @@ class _TaskWorkerUiState extends State<TaskWorkerUi> {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
-                              tasks[i].description,
+                              "${i + 1}. ${tasks[i].description}",
                               style: const TextStyle(
                                 fontWeight: FontWeight.bold,
                                 fontSize: 16,
@@ -154,7 +154,8 @@ class _TaskWorkerUiState extends State<TaskWorkerUi> {
                             ),
                             const SizedBox(height: 4),
                             Text(
-                              getTypeName(tasks[i].taskType),
+                              " ${getTypeName(tasks[i].taskType)}: ${tasks[i].taskType == 2 ? getWeekdayRu() : tasks[i].days}",
+
                               style: TextStyle(
                                 fontSize: 12,
                                 color: Colors.grey.shade600,

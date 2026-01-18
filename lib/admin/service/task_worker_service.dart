@@ -1,6 +1,7 @@
 import 'package:dio/dio.dart';
 import 'package:mone_task_app/admin/model/add_admin_task.dart';
 import 'package:mone_task_app/admin/model/admin_task_model.dart';
+import 'package:mone_task_app/admin/model/edit_task_ui_model.dart';
 import 'package:mone_task_app/core/constants/urls.dart';
 import 'package:mone_task_app/core/di/di.dart';
 
@@ -36,12 +37,12 @@ class AdminTaskService {
     }
   }
 
-  Future<bool> createTask(AddAdminTaskModel task) async {
+  Future<bool> addTask(AddAdminTaskModel task) async {
     try {
       final response = await _dio.post(
         AppUrls.tasks, // 🔥 shu yerga sizning POST URL’ingiz tushadi
         data: {
-          "description": task.description,
+          "task": task.task,
           "task_type": task.taskType,
           "role": task.role,
           "filials_id": task.filialsId,
@@ -50,23 +51,19 @@ class AdminTaskService {
 
       return response.statusCode == 200 || response.statusCode == 201;
     } catch (e) {
-      rethrow;
+      return false;
     }
   }
 
-  Future<bool> addTask(AddAdminTaskModel task) async {
+  // Edit task
+  Future<bool> updateTaskStatus(EditTaskUiModel task) async {
     try {
       final response = await _dio.post(
-        AppUrls.tasks, // 🔥 shu yerga sizning POST URL’ingiz tushadi
-        data: {
-          "description": task.description,
-          "task_type": task.taskType,
-          "role": task.role,
-          "filials_id": task.filialsId,
-        },
+        "${AppUrls.tasks}/${task.taskId}",
+        data: task.toJson(),
       );
 
-      return response.statusCode == 200 || response.statusCode == 201;
+      return response.statusCode == 200;
     } catch (e) {
       return false;
     }

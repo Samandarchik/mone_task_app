@@ -4,6 +4,7 @@ class TaskWorkerModel {
   int taskType;
   int taskStatus;
   String? videoUrl;
+  List<int>? days;
 
   TaskWorkerModel({
     required this.id,
@@ -11,6 +12,7 @@ class TaskWorkerModel {
     required this.taskType,
     required this.taskStatus,
     this.videoUrl,
+    this.days,
   });
 
   factory TaskWorkerModel.fromJson(Map<String, dynamic> json) {
@@ -20,6 +22,7 @@ class TaskWorkerModel {
       taskType: json['type'],
       taskStatus: json['status'],
       videoUrl: json["videoUrl"],
+      days: json['days'] != null ? List<int>.from(json['days']) : null,
     );
   }
 }

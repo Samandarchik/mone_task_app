@@ -5,6 +5,7 @@ class AdminTaskModel {
   int type;
   int status;
   String? videoUrl;
+  List<int?>? days;
 
   AdminTaskModel({
     required this.taskId,
@@ -13,6 +14,7 @@ class AdminTaskModel {
     required this.filialId,
     required this.status,
     this.videoUrl,
+    this.days,
   });
 
   factory AdminTaskModel.fromJson(Map<String, dynamic> json) {
@@ -23,6 +25,7 @@ class AdminTaskModel {
       filialId: json['filialId'],
       status: json['status'],
       videoUrl: json["videoUrl"],
+      days: json["days"] != null ? List<int>.from(json["days"]) : null,
     );
   }
 }

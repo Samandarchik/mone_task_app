@@ -1,29 +1,34 @@
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
-import 'package:mone_task_app/admin/model/add_admin_task.dart';
+import 'package:mone_task_app/admin/model/edit_task_ui_model.dart';
 import 'package:mone_task_app/admin/service/task_worker_service.dart';
+import 'package:mone_task_app/checker/model/checker_check_task_model.dart';
 
-class AddAdminTask extends StatefulWidget {
-  const AddAdminTask({super.key});
+class EditTaskUi extends StatefulWidget {
+  final CheckerCheckTaskModel task;
+  const EditTaskUi({super.key, required this.task});
 
   @override
-  State<AddAdminTask> createState() => _AddAdminTaskState();
+  State<EditTaskUi> createState() => _EditTaskUiState();
 }
 
-class _AddAdminTaskState extends State<AddAdminTask> {
+class _EditTaskUiState extends State<EditTaskUi> {
   AdminTaskService taskService = AdminTaskService();
   late TextEditingController controller;
   int role = 1;
   int sellectedType = 2;
   List<int> selectedFilials = []; // tanlangan filiallar listi
   List<int> selectedWeekDays = [];
-  List<int> selectedFilial = [];
   List<int> selectedDays = []; // role 3 uchun tanlangan kunlar
 
   @override
   void initState() {
     super.initState();
     controller = TextEditingController();
+    controller.text = widget.task.task;
+    role = widget.task.type;
+    selectedDays = widget.task.days ?? [];
+    selectedFilials = [widget.task.filialId];
   }
 
   @override
@@ -102,7 +107,7 @@ class _AddAdminTaskState extends State<AddAdminTask> {
                   children: [
                     const SizedBox(height: 10),
                     const Text(
-                      "Выберите дни:",
+                      "Kunlarni tanlash:",
                       style: TextStyle(fontWeight: FontWeight.bold),
                     ),
                     const SizedBox(height: 10),
@@ -134,30 +139,13 @@ class _AddAdminTaskState extends State<AddAdminTask> {
                 ),
 
               const SizedBox(height: 20),
-              Center(child: const Text("Филиалы:")),
-              Column(
-                children: filials.map((f) {
-                  return CheckboxListTile(
-                    title: Text(f['name']),
-                    value: selectedFilials.contains(f['id']),
-                    onChanged: (bool? value) {
-                      setState(() {
-                        if (value == true) {
-                          selectedFilials.add(f['id']);
-                        } else {
-                          selectedFilials.remove(f['id']);
-                        }
-                      });
-                    },
-                  );
-                }).toList(),
-              ),
               Center(
                 child: CupertinoButton.filled(
                   onPressed: () {
                     if (controller.text.isNotEmpty &&
                         selectedFilials.isNotEmpty) {
-                      AddAdminTaskModel model = AddAdminTaskModel(
+                      EditTaskUiModel model = EditTaskUiModel(
+                        taskId: widget.task.taskId,
                         taskType: 1,
                         role: role,
                         filialsId: selectedFilials, // list yuboriladi
@@ -165,7 +153,7 @@ class _AddAdminTaskState extends State<AddAdminTask> {
                         // role 3 bo'lsa kunlar ham saqlansin
                         days: role == 3 ? selectedDays : null,
                       );
-                      taskService.addTask(model);
+                      taskService.updateTaskStatus(model);
                       Navigator.pop(context);
                     } else {
                       ScaffoldMessenger.of(context).showSnackBar(

@@ -5,6 +5,7 @@ class CheckerCheckTaskModel {
   int filialId;
   int status;
   String? videoUrl;
+  List<int>? days;
 
   CheckerCheckTaskModel({
     required this.taskId,
@@ -13,6 +14,7 @@ class CheckerCheckTaskModel {
     required this.filialId,
     required this.status,
     this.videoUrl,
+    this.days,
   });
 
   factory CheckerCheckTaskModel.fromJson(Map<String, dynamic> json) {
@@ -23,6 +25,7 @@ class CheckerCheckTaskModel {
       filialId: json['filialId'],
       status: json['status'],
       videoUrl: json["videoUrl"],
+      days: json["days"] != null ? List<int>.from(json["days"]) : null,
     );
   }
 

@@ -1,11 +1,13 @@
-class AddAdminTaskModel {
+class EditTaskUiModel {
+  int taskId;
   String task;
   int taskType;
   int role;
   List<int> filialsId;
   List<int>? days;
 
-  AddAdminTaskModel({
+  EditTaskUiModel({
+    required this.taskId,
     required this.task,
     required this.taskType,
     required this.role,
@@ -14,7 +16,7 @@ class AddAdminTaskModel {
   });
   //to json
   Map<String, dynamic> toJson() => {
-    "task": task,
+    "description": task,
     "task_type": taskType,
     "role": role,
     "filials_id": filialsId,

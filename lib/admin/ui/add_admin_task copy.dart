@@ -35,7 +35,7 @@ class _AddAdminTaskState extends State<AddAdminTask> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text("Задачи редактирования")),
+      appBar: AppBar(title: const Text("Добавить задачу")),
       body: SingleChildScrollView(
         child: Padding(
           padding: const EdgeInsets.all(8.0),
@@ -129,28 +129,25 @@ class _AddAdminTaskState extends State<AddAdminTask> {
                       }),
                     ),
                     const SizedBox(height: 10),
-                    Text("Tanlangan kunlar: ${selectedDays.join(', ')}"),
+                    Text("Выбранные дни: ${selectedDays.join(', ')}"),
                   ],
                 ),
 
               const SizedBox(height: 20),
-              Center(child: const Text("Филиалы:")),
               Column(
-                children: filials.map((f) {
-                  return CheckboxListTile(
-                    title: Text(f['name']),
-                    value: selectedFilials.contains(f['id']),
-                    onChanged: (bool? value) {
-                      setState(() {
-                        if (value == true) {
-                          selectedFilials.add(f['id']);
-                        } else {
-                          selectedFilials.remove(f['id']);
-                        }
-                      });
-                    },
-                  );
-                }).toList(),
+                children: [
+                  const SizedBox(height: 10),
+                  const Text("Магазин:"),
+                  Column(
+                    children: filials.map((f) {
+                      return CheckboxListTile(
+                        title: Text(f['name']),
+                        value: selectedWeekDays.contains(f['id']),
+                        onChanged: (bool? value) {},
+                      );
+                    }).toList(),
+                  ),
+                ],
               ),
               Center(
                 child: CupertinoButton.filled(

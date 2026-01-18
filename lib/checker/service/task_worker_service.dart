@@ -1,6 +1,5 @@
 import 'package:dio/dio.dart';
 import 'package:mone_task_app/checker/model/checker_check_task_model.dart';
-import 'package:mone_task_app/admin/model/add_admin_task.dart';
 import 'package:mone_task_app/core/constants/urls.dart';
 import 'package:mone_task_app/core/di/di.dart';
 import 'package:mone_task_app/worker/model/response_task_model.dart';
@@ -55,42 +54,6 @@ class AdminTaskService {
       return response.statusCode == 200;
     } catch (e) {
       rethrow; // UI ushlashi uchun
-    }
-  }
-
-  Future<bool> createTask(AddAdminTaskModel task) async {
-    try {
-      final response = await _dio.post(
-        AppUrls.tasks, // 🔥 shu yerga sizning POST URL’ingiz tushadi
-        data: {
-          "description": task.description,
-          "task_type": task.taskType,
-          "role": task.role,
-          "filials_id": task.filialsId,
-        },
-      );
-
-      return response.statusCode == 200 || response.statusCode == 201;
-    } catch (e) {
-      rethrow;
-    }
-  }
-
-  Future<bool> addTask(AddAdminTaskModel task) async {
-    try {
-      final response = await _dio.post(
-        AppUrls.tasks, // 🔥 shu yerga sizning POST URL’ingiz tushadi
-        data: {
-          "description": task.description,
-          "task_type": task.taskType,
-          "role": task.role,
-          "filials_id": task.filialsId,
-        },
-      );
-
-      return response.statusCode == 200 || response.statusCode == 201;
-    } catch (e) {
-      rethrow;
     }
   }
 

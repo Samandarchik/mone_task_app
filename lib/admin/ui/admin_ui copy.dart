@@ -1,8 +1,5 @@
-import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
-import 'package:mone_task_app/admin/ui/add_admin_task.dart';
 import 'package:mone_task_app/admin/ui/dialog.dart';
-import 'package:mone_task_app/admin/ui/edit_task_ui.dart';
 import 'package:mone_task_app/checker/model/checker_check_task_model.dart';
 import 'package:mone_task_app/checker/service/task_worker_service.dart';
 import 'package:mone_task_app/checker/ui/player.dart';
@@ -54,6 +51,16 @@ class _AdminTaskUiState extends State<AdminTaskUi> {
     if (!await videosDir.exists()) {
       await videosDir.create(recursive: true);
       return;
+    }
+
+    final files = videosDir.listSync();
+    for (var file in files) {
+      if (file is File) {
+        // Fayl nomidan URL ni tiklash
+        final fileName = file.path.split('/').last;
+        // Bu yerda URL mapping kerak bo'ladi
+        // Hozircha faqat local path'ni saqlaymiz
+      }
     }
   }
 
@@ -170,12 +177,6 @@ class _AdminTaskUiState extends State<AdminTaskUi> {
       child: Scaffold(
         appBar: AppBar(
           actions: [
-            IconButton(
-              onPressed: () {
-                context.push(AddAdminTask());
-              },
-              icon: Icon(Icons.add),
-            ),
             GestureDetector(
               child: Text(
                 selectedDate.day == DateTime.now().day
@@ -351,8 +352,15 @@ class _AdminTaskUiState extends State<AdminTaskUi> {
                 }
               },
               onDoubleTap: () async {
-                // edit task
-                context.push(EditTaskUi(task: filtered[i]));
+                final bool isDelete = await AdminTaskService().updateTaskStatus(
+                  filtered[i].taskId,
+                  1,
+                );
+                if (isDelete) {
+                  setState(() {
+                    tasksFuture = AdminTaskService().fetchTasks(selectedDate);
+                  });
+                }
               },
 
               onTap: () async {
@@ -371,97 +379,85 @@ class _AdminTaskUiState extends State<AdminTaskUi> {
                 }
               },
               child: Padding(
-                padding: const EdgeInsets.all(8),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                padding: const EdgeInsets.all(12),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
+                    Text(
+                      "${i + 1}. ${filtered[i].task}",
+                      style: const TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const SizedBox(height: 3),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        Text(
-                          "${i + 1}. ${filtered[i].task}",
-                          style: const TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.bold,
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 4,
+                          ),
+                          decoration: BoxDecoration(
+                            color: getStatusColor(filtered[i].status),
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: Text(
+                            " ${getTypeName(filtered[i].type)}: ${filtered[i].type == 2 ? getWeekdayRu() : filtered[i].days}",
+                            style: const TextStyle(
+                              fontSize: 12,
+                              color: Colors.black,
+                            ),
                           ),
                         ),
-                        const SizedBox(height: 3),
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 8,
-                                vertical: 4,
-                              ),
-                              decoration: BoxDecoration(
-                                color: getStatusColor(filtered[i].status),
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                              child: Text(
-                                " ${getTypeName(filtered[i].type)}: ${filtered[i].type == 2 ? getWeekdayRu() : filtered[i].days}",
-                                style: const TextStyle(
-                                  fontSize: 12,
-                                  color: Colors.black,
-                                ),
-                              ),
+                        if (filtered[i].videoUrl != null &&
+                            filtered[i].videoUrl!.isNotEmpty)
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 8,
+                              vertical: 4,
                             ),
-                            if (filtered[i].videoUrl != null &&
-                                filtered[i].videoUrl!.isNotEmpty)
-                              Container(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 8,
-                                  vertical: 4,
+                            decoration: BoxDecoration(
+                              color: isVideoCached
+                                  ? Colors.green
+                                  : (isDownloading
+                                        ? Colors.orange
+                                        : Colors.blue),
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                if (isDownloading)
+                                  const SizedBox(
+                                    width: 14,
+                                    height: 14,
+                                    child: CircularProgressIndicator.adaptive(),
+                                  )
+                                else
+                                  Icon(
+                                    isVideoCached
+                                        ? Icons.check_circle
+                                        : Icons.cloud_download,
+                                    size: 16,
+                                    color: Colors.white,
+                                  ),
+                                const SizedBox(width: 4),
+                                Text(
+                                  isDownloading
+                                      ? "Yuklanmoqda..."
+                                      : (isVideoCached ? "Yuklangan" : "Video"),
+                                  style: const TextStyle(
+                                    fontSize: 12,
+                                    color: Colors.white,
+                                    fontWeight: FontWeight.bold,
+                                  ),
                                 ),
-                                decoration: BoxDecoration(
-                                  color: isVideoCached
-                                      ? Colors.green
-                                      : (isDownloading
-                                            ? Colors.orange
-                                            : Colors.blue),
-                                  borderRadius: BorderRadius.circular(12),
-                                ),
-                                child: Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    if (isDownloading)
-                                      const SizedBox(
-                                        width: 14,
-                                        height: 14,
-                                        child:
-                                            CircularProgressIndicator.adaptive(),
-                                      )
-                                    else
-                                      Icon(
-                                        isVideoCached
-                                            ? Icons.check_circle
-                                            : Icons.cloud_download,
-                                        size: 16,
-                                        color: Colors.white,
-                                      ),
-                                    const SizedBox(width: 4),
-                                    Text(
-                                      isDownloading
-                                          ? "Yuklanmoqda..."
-                                          : (isVideoCached
-                                                ? "Yuklangan"
-                                                : "Video"),
-                                      style: const TextStyle(
-                                        fontSize: 12,
-                                        color: Colors.white,
-                                        fontWeight: FontWeight.bold,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                          ],
-                        ),
+                              ],
+                            ),
+                          ),
                       ],
-                    ),
-                    IconButton(
-                      onPressed: () {},
-                      icon: Icon(CupertinoIcons.share),
                     ),
                   ],
                 ),
