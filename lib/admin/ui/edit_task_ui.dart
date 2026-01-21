@@ -29,9 +29,6 @@ class _EditTaskUiState extends State<EditTaskUi> {
     selectedWeekDays = widget.task.days ?? [];
     selectedDays = widget.task.days ?? [];
     selectedFilials = [widget.task.filialId];
-    print(
-      "task ${widget.task.task}, sellectedType ${widget.task.type}, filials ${widget.task.filialId}, days ${widget.task.days}",
-    );
     setState(() {});
   }
 

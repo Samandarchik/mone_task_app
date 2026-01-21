@@ -144,15 +144,6 @@ class _TaskWorkerUiState extends State<TaskWorkerUi> {
                                 fontSize: 16,
                               ),
                             ),
-                            const SizedBox(height: 4),
-                            Text(
-                              " ${getTypeName(tasks[i].taskType)}: ${tasks[i].taskType == 2 ? getWeekdayRu() : tasks[i].days ?? ""}",
-
-                              style: TextStyle(
-                                fontSize: 12,
-                                color: Colors.grey.shade600,
-                              ),
-                            ),
                           ],
                         ),
                       ),

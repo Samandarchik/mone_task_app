@@ -17,53 +17,34 @@ String getTypeName(int type) {
   switch (type) {
     case 1:
       return "Ежедневно";
-    case 2:
-      return "Еженедельно";
-    case 3:
-      return "Ежемесячно";
     default:
       return "Unknown";
-  }
-}
-
-String getWeekdayRu() {
-  switch (DateTime.now().weekday) {
-    case 1:
-      return "Понедельник";
-    case 2:
-      return "Вторник";
-    case 3:
-      return "Среда";
-    case 4:
-      return "Четверг";
-    case 5:
-      return "Пятница";
-    case 6:
-      return "Суббота";
-    case 7:
-      return "Воскресенье";
-    default:
-      return "Неизвестно";
   }
 }
 
 String getWeekday(int date) {
   switch (date) {
     case 1:
-      return "Понедельник";
+      return "Пн";
     case 2:
-      return "Вторник";
+      return "Вт";
     case 3:
-      return "Среда";
+      return "Ср";
     case 4:
-      return "Четверг";
+      return "Чт";
     case 5:
-      return "Пятница";
+      return "Пт";
     case 6:
-      return "Суббота";
+      return "Сб";
     case 7:
-      return "Воскресенье";
+      return "Вс";
     default:
-      return "Неизвестно";
+      return "--";
   }
+}
+
+String getWeekdaysString(List<int>? days) {
+  if (days == null || days.isEmpty) return "";
+  // Har bir kunni 2 harf bilan qisqartirish
+  return days.map((d) => getWeekday(d)).join(", ");
 }

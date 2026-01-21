@@ -360,6 +360,7 @@ class _CheckerHomeUiState extends State<CheckerHomeUi> {
               child: Padding(
                 padding: const EdgeInsets.all(12),
                 child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
                     Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -373,7 +374,6 @@ class _CheckerHomeUiState extends State<CheckerHomeUi> {
                         ),
                         const SizedBox(height: 8),
                         Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
                             Container(
                               padding: const EdgeInsets.symmetric(
@@ -385,7 +385,11 @@ class _CheckerHomeUiState extends State<CheckerHomeUi> {
                                 borderRadius: BorderRadius.circular(12),
                               ),
                               child: Text(
-                                " ${getTypeName(filtered[i].type)}: ${filtered[i].type == 2 ? getWeekdayRu() : filtered[i].days ?? ""}",
+                                "${filtered[i].type == 1
+                                    ? "Ежедневно"
+                                    : filtered[i].type == 2
+                                    ? getWeekdaysString(filtered[i].days!)
+                                    : filtered[i].days ?? ""}",
 
                                 style: const TextStyle(
                                   fontSize: 12,
@@ -393,75 +397,65 @@ class _CheckerHomeUiState extends State<CheckerHomeUi> {
                                 ),
                               ),
                             ),
-                            if (filtered[i].videoUrl != null &&
-                                filtered[i].videoUrl!.isNotEmpty)
-                              Container(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 8,
-                                  vertical: 4,
-                                ),
-                                decoration: BoxDecoration(
-                                  color: isVideoCached
-                                      ? Colors.green
-                                      : (isDownloading
-                                            ? Colors.orange
-                                            : Colors.blue),
-                                  borderRadius: BorderRadius.circular(12),
-                                ),
-                                child: Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    if (isDownloading)
-                                      const SizedBox(
-                                        width: 14,
-                                        height: 14,
-                                        child:
-                                            CircularProgressIndicator.adaptive(),
-                                      )
-                                    else
-                                      Icon(
-                                        isVideoCached
-                                            ? Icons.check_circle
-                                            : Icons.cloud_download,
-                                        size: 16,
-                                        color: Colors.white,
-                                      ),
-                                    const SizedBox(width: 4),
-                                    Text(
-                                      isDownloading
-                                          ? "Yuklanmoqda..."
-                                          : (isVideoCached
-                                                ? "Yuklangan"
-                                                : "Video"),
-                                      style: const TextStyle(
-                                        fontSize: 12,
-                                        color: Colors.white,
-                                        fontWeight: FontWeight.bold,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            IconButton(
-                              onPressed: () {
-                                if (filtered[i].videoUrl != null &&
-                                    filtered[i].videoUrl!.isNotEmpty) {
-                                  _shareVideo(filtered[i]);
-                                } else {
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                    const SnackBar(
-                                      content: Text('Video mavjud emas'),
-                                    ),
-                                  );
-                                }
-                              },
-                              icon:
-                                  filtered[i].videoUrl != null &&
-                                      filtered[i].videoUrl!.isNotEmpty
-                                  ? Icon(CupertinoIcons.share)
-                                  : SizedBox(),
-                            ),
                           ],
+                        ),
+                      ],
+                    ),
+
+                    Row(
+                      children: [
+                        if (filtered[i].videoUrl != null &&
+                            filtered[i].videoUrl!.isNotEmpty)
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 8,
+                              vertical: 4,
+                            ),
+                            decoration: BoxDecoration(
+                              color: isVideoCached
+                                  ? Colors.green
+                                  : (isDownloading
+                                        ? Colors.orange
+                                        : Colors.blue),
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: Row(
+                              children: [
+                                if (isDownloading)
+                                  const SizedBox(
+                                    width: 14,
+                                    height: 14,
+                                    child: CircularProgressIndicator.adaptive(),
+                                  )
+                                else
+                                  Icon(
+                                    isVideoCached
+                                        ? Icons.check_circle
+                                        : Icons.cloud_download,
+                                    size: 16,
+                                    color: Colors.white,
+                                  ),
+                              ],
+                            ),
+                          ),
+                        IconButton(
+                          onPressed: () {
+                            if (filtered[i].videoUrl != null &&
+                                filtered[i].videoUrl!.isNotEmpty) {
+                              _shareVideo(filtered[i]);
+                            } else {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(
+                                  content: Text('Video mavjud emas'),
+                                ),
+                              );
+                            }
+                          },
+                          icon:
+                              filtered[i].videoUrl != null &&
+                                  filtered[i].videoUrl!.isNotEmpty
+                              ? Icon(CupertinoIcons.share)
+                              : SizedBox(),
                         ),
                       ],
                     ),

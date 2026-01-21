@@ -13,12 +13,12 @@ class AddAdminTask extends StatefulWidget {
 class _AddAdminTaskState extends State<AddAdminTask> {
   AdminTaskService taskService = AdminTaskService();
   late TextEditingController controller;
-  int role = 1;
+  int type = 1;
   int sellectedType = 2;
   List<int> selectedFilials = []; // tanlangan filiallar listi
   List<int> selectedWeekDays = [];
   List<int> selectedFilial = [];
-  List<int> selectedDays = []; // role 3 uchun tanlangan kunlar
+  List<int> selectedDays = []; // type 3 uchun tanlangan kunlar
 
   @override
   void initState() {
@@ -53,7 +53,7 @@ class _AddAdminTaskState extends State<AddAdminTask> {
               Padding(
                 padding: const EdgeInsets.all(8.0),
                 child: DropdownButton<int>(
-                  value: role,
+                  value: type,
                   isExpanded: true,
                   items: types
                       .map(
@@ -66,37 +66,53 @@ class _AddAdminTaskState extends State<AddAdminTask> {
                   onChanged: (value) {
                     if (value != null) {
                       setState(() {
-                        role = value;
+                        type = value;
                       });
                     }
                   },
                 ),
               ),
-              if (role == 2)
+              if (type == 2)
                 Column(
                   children: [
                     const SizedBox(height: 10),
                     const Text("Будни:"),
                     Column(
                       children: week.map((f) {
-                        return CheckboxListTile(
-                          title: Text(f['name']),
-                          value: selectedWeekDays.contains(f['id']),
-                          onChanged: (bool? value) {
-                            setState(() {
-                              if (value == true) {
-                                selectedWeekDays.add(f['id']);
-                              } else {
-                                selectedWeekDays.remove(f['id']);
-                              }
-                            });
-                          },
+                        final bool isSelected = selectedWeekDays.contains(
+                          f['id'],
+                        );
+
+                        return Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 6),
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Text(
+                                f['name'],
+                                style: const TextStyle(fontSize: 16),
+                              ),
+                              CupertinoSwitch(
+                                value: isSelected,
+                                onChanged: (bool value) {
+                                  setState(() {
+                                    if (value) {
+                                      selectedWeekDays.add(f['id']);
+                                    } else {
+                                      selectedWeekDays.remove(f['id']);
+                                    }
+                                  });
+                                },
+                              ),
+                            ],
+                          ),
                         );
                       }).toList(),
                     ),
                   ],
                 ),
-              if (role == 3)
+
+              if (type == 3)
                 Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
@@ -129,7 +145,7 @@ class _AddAdminTaskState extends State<AddAdminTask> {
                       }),
                     ),
                     const SizedBox(height: 10),
-                    Text("Tanlangan kunlar: ${selectedDays.join(', ')}"),
+                    Text("Выбранные дни: ${selectedDays.join(', ')}"),
                   ],
                 ),
 
@@ -137,33 +153,47 @@ class _AddAdminTaskState extends State<AddAdminTask> {
               Center(child: const Text("Филиалы:")),
               Column(
                 children: filials.map((f) {
-                  return CheckboxListTile(
-                    title: Text(f['name']),
-                    value: selectedFilials.contains(f['id']),
-                    onChanged: (bool? value) {
-                      setState(() {
-                        if (value == true) {
-                          selectedFilials.add(f['id']);
-                        } else {
-                          selectedFilials.remove(f['id']);
-                        }
-                      });
-                    },
+                  final bool isSelected = selectedFilials.contains(f['id']);
+
+                  return Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 6),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(f['name'], style: const TextStyle(fontSize: 16)),
+                        CupertinoSwitch(
+                          value: isSelected,
+                          onChanged: (bool value) {
+                            setState(() {
+                              if (value) {
+                                selectedFilials.add(f['id']);
+                              } else {
+                                selectedFilials.remove(f['id']);
+                              }
+                            });
+                          },
+                        ),
+                      ],
+                    ),
                   );
                 }).toList(),
               ),
+
               Center(
                 child: CupertinoButton.filled(
+                  color: Colors.green,
                   onPressed: () {
                     if (controller.text.isNotEmpty &&
                         selectedFilials.isNotEmpty) {
                       AddAdminTaskModel model = AddAdminTaskModel(
-                        taskType: 1,
-                        role: role,
+                        taskType: type,
                         filialsId: selectedFilials, // list yuboriladi
                         task: controller.text,
-                        // role 3 bo'lsa kunlar ham saqlansin
-                        days: role == 3 ? selectedDays : null,
+                        days: type == 1
+                            ? null
+                            : type == 2
+                            ? selectedWeekDays
+                            : selectedDays,
                       );
                       taskService.addTask(model);
                       Navigator.pop(context);

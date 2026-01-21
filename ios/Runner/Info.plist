@@ -3,11 +3,9 @@
 <plist version="1.0">
 <dict>
 	<key>NSCameraUsageDescription</key>
-	<string>Video yozish uchun kamera kerak</string>
+	<string>Камера необходима для записи видео с выполнением заданий, которое отправляется проверяющему</string>
 	<key>NSMicrophoneUsageDescription</key>
-	<string>Ovozli video yozish uchun mikrofon kerak</string>
-	<key>NSPhotoLibraryUsageDescription</key>
-	<string>Videoni saqlash uchun</string>
+	<string>Микрофон необходим для записи звукового видео с выполнением заданий, которое отправляется проверяющему</string>
 	<key>CADisableMinimumFrameDurationOnPhone</key>
 	<true/>
 	<key>CFBundleDevelopmentRegion</key>

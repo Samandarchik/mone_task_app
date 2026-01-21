@@ -212,9 +212,7 @@ class _AdminTaskUiState extends State<AdminTaskUi> {
 
   void _showCircleVideoPlayer(String videoPath) async {
     // 1) To'liq URL yasaymiz
-    String realUrl = videoPath.startsWith('http')
-        ? videoPath
-        : '${AppUrls.baseUrl}/$videoPath';
+    String realUrl = '${AppUrls.baseUrl}/$videoPath';
 
     // 2) Localdan yuklangan bo'lsa → local path qaytadi
     String finalUrl = await _getCachedOrDownloadVideo(realUrl);
@@ -225,7 +223,7 @@ class _AdminTaskUiState extends State<AdminTaskUi> {
 
     showDialog(
       context: context,
-      barrierColor: Colors.black87,
+      barrierColor: Colors.white,
       builder: (context) => CircleVideoPlayer(
         videoUrl: isLocalExists ? file.path : realUrl,
         isLocal: isLocalExists,
@@ -480,7 +478,7 @@ class _AdminTaskUiState extends State<AdminTaskUi> {
                                   borderRadius: BorderRadius.circular(12),
                                 ),
                                 child: Text(
-                                  " ${getTypeName(filtered[i].type)}: ${filtered[i].type == 2 ? getWeekdayRu() : filtered[i].days ?? ""}",
+                                  " ${getTypeName(filtered[i].type)}: ${filtered[i].type == 2 ? getWeekdaysString(filtered[i].days) : filtered[i].days ?? ""}",
                                   style: const TextStyle(
                                     fontSize: 12,
                                     color: Colors.black,
