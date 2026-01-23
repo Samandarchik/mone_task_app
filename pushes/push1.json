@@ -1,0 +1,10 @@
+{
+  "aps": {
+    "alert": {
+      "title": "Salom 👋",
+      "body": "Bu lokal simulator push"
+    },
+    "sound": "default",
+    "badge": 2
+  }
+}
