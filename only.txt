@@ -1,0 +1,3 @@
+<RK7Query>
+<RK7CMD CMD="GetRefData" RefName="MENUITEMS" onlyActive="1"/>
+</RK7Query>
