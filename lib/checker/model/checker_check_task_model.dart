@@ -1,9 +1,13 @@
 class CheckerCheckTaskModel {
   int taskId;
   String task;
+  String? submittedBy;
+  DateTime? submittedAt;
+  String? date;
   int type;
   int filialId;
   int status;
+  String? notificationTime;
   String? videoUrl;
   List<int>? days;
 
@@ -15,6 +19,9 @@ class CheckerCheckTaskModel {
     required this.status,
     this.videoUrl,
     this.days,
+    this.submittedBy,
+    this.submittedAt,
+    this.date,
   });
 
   factory CheckerCheckTaskModel.fromJson(Map<String, dynamic> json) {
@@ -26,6 +33,11 @@ class CheckerCheckTaskModel {
       status: json['status'],
       videoUrl: json["videoUrl"],
       days: json["days"] != null ? List<int>.from(json["days"]) : null,
+      submittedBy: json["submittedBy"],
+      submittedAt: json["submittedAt"] != null
+          ? DateTime.parse(json["submittedAt"])
+          : null,
+      date: json["date"],
     );
   }
 

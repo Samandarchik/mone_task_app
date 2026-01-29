@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
-import 'package:mone_task_app/camera.dart';
 import 'package:mone_task_app/core/context_extension.dart';
 import 'package:mone_task_app/core/data/local/token_storage.dart';
 import 'package:mone_task_app/core/di/di.dart';
@@ -8,8 +7,12 @@ import 'package:mone_task_app/home/service/login_service.dart';
 import 'package:mone_task_app/utils/get_color.dart';
 import 'package:mone_task_app/worker/model/task_worker_model.dart';
 import 'package:mone_task_app/worker/model/response_task_model.dart';
+import 'package:mone_task_app/worker/model/user_model.dart';
+import 'package:mone_task_app/worker/service/log_out.dart';
 import 'package:mone_task_app/worker/service/task_worker_service.dart';
 import 'dart:async';
+
+import 'package:mone_task_app/worker/ui/telegram_style_video_recorder.dart';
 
 class TaskWorkerUi extends StatefulWidget {
   const TaskWorkerUi({super.key});
@@ -20,11 +23,21 @@ class TaskWorkerUi extends StatefulWidget {
 
 class _TaskWorkerUiState extends State<TaskWorkerUi> {
   late Future<List<TaskWorkerModel>> tasksFuture;
-
+  bool _isRecording = false;
+  TokenStorage tokenStorage = sl<TokenStorage>();
+  Timer? _recordingTimer;
+  UserModel? user;
   @override
   void initState() {
     super.initState();
     tasksFuture = TaskWorkerService().fetchTasks();
+    user = tokenStorage.getUserData();
+  }
+
+  @override
+  void dispose() {
+    _recordingTimer?.cancel();
+    super.dispose();
   }
 
   void _refresh() {
@@ -35,48 +48,130 @@ class _TaskWorkerUiState extends State<TaskWorkerUi> {
 
   /// Video olish dialogini ochish
   Future<void> _showVideoRecorder(TaskWorkerModel task) async {
-    final XFile? video = await TelegramVideoRecorder.show(
-      context,
-      taskId: task.id,
-      maxDuration: 40,
+    setState(() => _isRecording = true);
+
+    final result = await showGeneralDialog(
+      context: context,
+      barrierDismissible: false, // Yozish paytida dismiss qilmaslik
+      barrierLabel: '',
+      barrierColor: Colors.black.withOpacity(0.8),
+      transitionDuration: const Duration(milliseconds: 300),
+      pageBuilder: (context, animation, secondaryAnimation) {
+        return TelegramStyleVideoRecorder(taskId: task.id, maxDuration: 40);
+      },
+      transitionBuilder: (context, animation, secondaryAnimation, child) {
+        return FadeTransition(
+          opacity: animation,
+          child: ScaleTransition(
+            scale: Tween<double>(begin: 0.8, end: 1.0).animate(
+              CurvedAnimation(parent: animation, curve: Curves.easeOutBack),
+            ),
+            child: child,
+          ),
+        );
+      },
     );
+
+    setState(() => _isRecording = false);
 
     if (!context.mounted) return;
 
-    if (video != null) {
-      await _uploadVideo(task, video);
+    if (result != null) {
+      // Agar List<XFile> bo'lsa
+      if (result is List<XFile>) {
+        await _uploadVideoSegments(task, result);
+      }
+      // Agar bitta XFile bo'lsa
+      else if (result is XFile) {
+        await _uploadVideo(task, result);
+      }
+    }
+  }
+
+  /// Video yozuvni to'xtatish
+  void _stopRecording() {
+    if (_isRecording) {
+      Navigator.of(context).pop(); // Dialogni yopish
+      setState(() => _isRecording = false);
+    }
+  }
+
+  /// Barcha video segmentlarni yuborish
+  Future<void> _uploadVideoSegments(
+    TaskWorkerModel task,
+    List<XFile> segments,
+  ) async {
+    try {
+      bool success = await TaskWorkerService().completeTaskWithSegments(
+        taskId: task.id,
+        segments: segments,
+      );
+
+      if (success) {
+        _refresh();
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text("✅ Muvaffaqiyatli yuborildi!"),
+              backgroundColor: Colors.green,
+            ),
+          );
+        }
+      } else {
+        _refresh();
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text("❌ Yuborishda xatolik!"),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      _refresh();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text("❌ Xatolik: $e"), backgroundColor: Colors.red),
+        );
+      }
     }
   }
 
   /// Videoni serverga yuborish
   Future<void> _uploadVideo(TaskWorkerModel task, XFile video) async {
     try {
-      // RequestTaskModel yaratish
       final requestData = RequestTaskModel(id: task.id, file: video);
-
-      // Backend ga yuborish
       bool success = await TaskWorkerService().completeTask(requestData);
 
       if (success) {
         _refresh();
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text("✅ Muvaffaqiyatli yuborildi!"),
-            backgroundColor: Colors.green,
-          ),
-        );
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text("✅ Muvaffaqiyatli yuborildi!"),
+              backgroundColor: Colors.green,
+            ),
+          );
+        }
       } else {
         _refresh();
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text("❌ Yuborishda xatolik!"),
-            backgroundColor: Colors.red,
-          ),
-        );
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text("❌ Yuborishda xatolik!"),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
       }
     } catch (e) {
-      Navigator.pop(context); // Loading yopish
       _refresh();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text("❌ Xatolik: $e"), backgroundColor: Colors.red),
+        );
+      }
     }
   }
 
@@ -84,17 +179,26 @@ class _TaskWorkerUiState extends State<TaskWorkerUi> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text("Задачи"),
+        title: Text(user?.username ?? ""),
         actions: [
+          // Yozish paytida stop tugmasi
+          if (_isRecording)
+            IconButton(
+              onPressed: _stopRecording,
+              icon: const Icon(Icons.stop_circle, color: Colors.red),
+              tooltip: "To'xtatish",
+            ),
           IconButton(
             onPressed: () async {
-              TokenStorage tokenStorage = sl<TokenStorage>();
+              final bool result = await LogOutService().logOut();
 
-              tokenStorage.removeToken();
-
-              context.pushAndRemove(LoginPage());
+              if (result) {
+                TokenStorage tokenStorage = sl<TokenStorage>();
+                tokenStorage.removeToken();
+                context.pushAndRemove(LoginPage());
+              }
             },
-            icon: Icon(Icons.logout),
+            icon: const Icon(Icons.logout),
           ),
         ],
       ),
@@ -116,7 +220,7 @@ class _TaskWorkerUiState extends State<TaskWorkerUi> {
             child: ListView.builder(
               itemCount: tasks.length,
               itemBuilder: (_, i) => InkWell(
-                onTap: () => _showVideoRecorder(tasks[i]),
+                onTap: _isRecording ? null : () => _showVideoRecorder(tasks[i]),
                 child: Container(
                   padding: const EdgeInsets.symmetric(
                     vertical: 12,
@@ -147,7 +251,12 @@ class _TaskWorkerUiState extends State<TaskWorkerUi> {
                           ],
                         ),
                       ),
-                      Icon(Icons.videocam, color: Colors.grey.shade600),
+                      Icon(
+                        _isRecording
+                            ? Icons.fiber_manual_record
+                            : Icons.videocam,
+                        color: _isRecording ? Colors.red : Colors.grey.shade600,
+                      ),
                     ],
                   ),
                 ),

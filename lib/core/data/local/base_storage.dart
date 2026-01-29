@@ -5,5 +5,5 @@ abstract class BaseStorage {
   Future<void> clear();
   Future<void> putBool({required String key, required bool value});
   bool getBool({required String key});
-  Future<void>putUserData({required String key, required String value});
+  Future<void> putUserData({required String key, required Map value});
 }

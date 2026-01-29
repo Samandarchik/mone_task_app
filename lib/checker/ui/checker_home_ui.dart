@@ -5,8 +5,11 @@ import 'package:mone_task_app/checker/service/task_worker_service.dart';
 import 'package:mone_task_app/checker/ui/player.dart';
 import 'package:mone_task_app/core/constants/urls.dart';
 import 'package:mone_task_app/core/context_extension.dart';
+import 'package:mone_task_app/core/data/local/token_storage.dart';
+import 'package:mone_task_app/core/di/di.dart';
 import 'package:mone_task_app/home/service/login_service.dart';
 import 'package:mone_task_app/utils/get_color.dart';
+import 'package:mone_task_app/worker/model/user_model.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:dio/dio.dart';
@@ -22,6 +25,8 @@ class CheckerHomeUi extends StatefulWidget {
 
 class _CheckerHomeUiState extends State<CheckerHomeUi> {
   late Future<List<CheckerCheckTaskModel>> tasksFuture;
+  UserModel? user;
+  TokenStorage tokenStorage = sl<TokenStorage>();
 
   // Video cache uchun
   Map<String, String> cachedVideos = {}; // videoUrl: local file path
@@ -30,18 +35,9 @@ class _CheckerHomeUiState extends State<CheckerHomeUi> {
   @override
   void initState() {
     super.initState();
+    user = tokenStorage.getUserData();
     tasksFuture = AdminTaskService().fetchTasks(selectedDate);
-    getUserFullName();
     _loadCachedVideos();
-  }
-
-  String fullName = "";
-
-  void getUserFullName() async {
-    SharedPreferences prefs = await SharedPreferences.getInstance();
-    setState(() {
-      fullName = prefs.getString('full_name') ?? '';
-    });
   }
 
   // Mavjud cache'langan videolarni yuklash
@@ -191,7 +187,7 @@ class _CheckerHomeUiState extends State<CheckerHomeUi> {
               },
             ),
           ],
-          title: Text(fullName),
+          title: Text(user?.username ?? "Checker"),
           leading: IconButton(
             icon: const Icon(Icons.logout),
             onPressed: () async {
@@ -362,44 +358,62 @@ class _CheckerHomeUiState extends State<CheckerHomeUi> {
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          filtered[i].task,
-                          style: const TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.bold,
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            filtered[i].task,
+                            style: const TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
+                            ),
                           ),
-                        ),
-                        const SizedBox(height: 8),
-                        Row(
-                          children: [
-                            Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 8,
-                                vertical: 4,
-                              ),
-                              decoration: BoxDecoration(
-                                color: getStatusColor(filtered[i].status),
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                              child: Text(
-                                "${filtered[i].type == 1
-                                    ? "Ежедневно"
-                                    : filtered[i].type == 2
-                                    ? getWeekdaysString(filtered[i].days!)
-                                    : filtered[i].days ?? ""}",
+                          if (filtered[i].submittedBy != null)
+                            Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                SizedBox(height: 10),
+                                Text(
+                                  filtered[i].submittedBy!,
+                                  style: const TextStyle(fontSize: 13),
+                                ),
+                                Text(
+                                  "${filtered[i].submittedAt!.hour}:${filtered[i].submittedAt!.minute}",
+                                  style: const TextStyle(fontSize: 13),
+                                ),
+                              ],
+                            ),
 
-                                style: const TextStyle(
-                                  fontSize: 12,
-                                  color: Colors.black,
+                          const SizedBox(height: 8),
+                          Row(
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 8,
+                                  vertical: 4,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: getStatusColor(filtered[i].status),
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                                child: Text(
+                                  "${filtered[i].type == 1
+                                      ? "Ежедневно"
+                                      : filtered[i].type == 2
+                                      ? getWeekdaysString(filtered[i].days!)
+                                      : filtered[i].days ?? ""}",
+
+                                  style: const TextStyle(
+                                    fontSize: 12,
+                                    color: Colors.black,
+                                  ),
                                 ),
                               ),
-                            ),
-                          ],
-                        ),
-                      ],
+                            ],
+                          ),
+                        ],
+                      ),
                     ),
 
                     Row(
@@ -521,11 +535,9 @@ class _CheckerHomeUiState extends State<CheckerHomeUi> {
       // Video faylini ulashish
       final file = File(localPath!);
       if (await file.exists() && await file.length() > 0) {
-        await Share.shareXFiles(
-          [XFile(file.path)],
-          text: 'Topshiriq: ${task.task}',
-          subject: 'Task Video',
-        );
+        await Share.shareXFiles([
+          XFile(file.path),
+        ], text: 'Задача: ${task.task}');
       } else {
         ScaffoldMessenger.of(
           context,

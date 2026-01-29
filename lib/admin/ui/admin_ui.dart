@@ -193,7 +193,7 @@ class _AdminTaskUiState extends State<AdminTaskUi> {
       if (await file.exists() && await file.length() > 0) {
         await Share.shareXFiles(
           [XFile(file.path)],
-          text: 'Topshiriq: ${task.task}',
+          text: 'Задача: ${task.task}',
           subject: 'Task Video',
         );
       } else {

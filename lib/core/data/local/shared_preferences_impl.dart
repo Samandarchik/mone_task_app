@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:mone_task_app/core/data/local/base_storage.dart';
 
@@ -37,7 +39,7 @@ final class SharedPreferencesImpl implements BaseStorage {
   }
 
   @override
-  Future<void> putUserData({required String key, required String value}) async {
-    await _pref.setString(key, value);
+  Future<void> putUserData({required String key, required Map value}) async {
+    await _pref.setString(key, jsonEncode(value));
   }
 }

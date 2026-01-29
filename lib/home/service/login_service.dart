@@ -20,8 +20,10 @@ class LoginPage extends StatefulWidget {
 
 class _LoginPageState extends State<LoginPage> {
   final _formKey = GlobalKey<FormState>();
-  final _phoneController = TextEditingController();
-  final _passwordController = TextEditingController();
+  late final TextEditingController _phoneController;
+  late final TextEditingController _passwordController;
+  TokenStorage tokenStorage = sl<TokenStorage>();
+
   bool _isLoading = false;
   bool _obscurePassword = true;
   List<Map<String, String>> _savedAccounts = [];
@@ -29,6 +31,8 @@ class _LoginPageState extends State<LoginPage> {
   @override
   void initState() {
     super.initState();
+    _phoneController = TextEditingController();
+    _passwordController = TextEditingController();
     _loadSavedAccounts();
   }
 
@@ -98,31 +102,37 @@ class _LoginPageState extends State<LoginPage> {
       );
 
       setState(() => _isLoading = false);
-      // ✅ FAQAT SUCCESS BO'LSA
-      if (result["token"] != null) {
-        final prefs = await SharedPreferences.getInstance();
-        await prefs.setString('access_token', result['token']);
-        await prefs.setString('role', result['user']["role"]);
-        await prefs.setString('full_name', result['user']["username"]);
-        // ✅ MUVAFFAQIYATLI LOGIN BO'LGANDA AKKAUNTNI SAQLASH
+      if (result["success"] == false) {
+        _showError(result["message"] ?? "Login yoki parol noto'g'ri");
+        return;
+      }
+      // 🔍 SUCCESSNI TEKSHIRISH
+      if (result["success"] == true && result["token"] != null) {
+        await tokenStorage.putToken(result["token"]);
+        await tokenStorage.putUserData(result['user']);
+
+        // Login ma'lumotlarini saqlash
         await _saveAccount(
           _phoneController.text.trim(),
           _passwordController.text.trim(),
         );
-        // navigation
-        if (result["user"]["role"] == "super_admin") {
+
+        // 🔄 Role bo‘yicha navigatsiya
+        final role = result["user"]["role"];
+
+        if (role == "super_admin") {
           context.pushAndRemove(AdminTaskUi());
-        } else if (result["user"]["role"] == "checker") {
+        } else if (role == "checker") {
           context.pushAndRemove(CheckerHomeUi());
         } else {
           context.pushAndRemove(TaskWorkerUi());
         }
       } else {
-        _showError("Login yoki parol noto'g'ri");
+        _showError(result["error"] ?? "Login yoki parol noto'g'ri");
       }
     } catch (e) {
       setState(() => _isLoading = false);
-      _showError("Login yoki parol noto'g'ri");
+      _showError("Xatolik: $e");
     }
   }
 
