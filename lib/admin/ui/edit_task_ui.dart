@@ -2,6 +2,7 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:mone_task_app/admin/model/edit_task_ui_model.dart';
 import 'package:mone_task_app/admin/service/task_worker_service.dart';
+import 'package:mone_task_app/admin/ui/add_admin_task.dart';
 import 'package:mone_task_app/checker/model/checker_check_task_model.dart';
 
 class EditTaskUi extends StatefulWidget {
@@ -176,26 +177,3 @@ class _EditTaskUiState extends State<EditTaskUi> {
     );
   }
 }
-
-List<Map<String, dynamic>> filials = [
-  {"id": 1, "name": "Гелион"},
-  {"id": 2, "name": "Мархабо"},
-  {"id": 3, "name": "Фреско"},
-  {"id": 4, "name": "Сибирский"},
-];
-
-List<Map<String, dynamic>> types = [
-  {"id": 1, "name": "Ежедневная"},
-  {"id": 2, "name": "Еженедельная"},
-  {"id": 3, "name": "Ежемесячная"},
-];
-
-List<Map<String, dynamic>> week = [
-  {"id": 1, "name": "Понедельник"},
-  {"id": 2, "name": "Вторник"},
-  {"id": 3, "name": "Среда"},
-  {"id": 4, "name": "Четверг"},
-  {"id": 5, "name": "Пятница"},
-  {"id": 6, "name": "Суббота"},
-  {"id": 7, "name": "Воскресенье"},
-];

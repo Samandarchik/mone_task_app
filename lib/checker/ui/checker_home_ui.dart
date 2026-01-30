@@ -1,20 +1,15 @@
-import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:mone_task_app/checker/model/checker_check_task_model.dart';
 import 'package:mone_task_app/checker/service/task_worker_service.dart';
 import 'package:mone_task_app/checker/ui/player.dart';
+import 'package:mone_task_app/checker/widgets/task_title.dart';
 import 'package:mone_task_app/core/constants/urls.dart';
 import 'package:mone_task_app/core/context_extension.dart';
 import 'package:mone_task_app/core/data/local/token_storage.dart';
 import 'package:mone_task_app/core/di/di.dart';
 import 'package:mone_task_app/home/service/login_service.dart';
-import 'package:mone_task_app/utils/get_color.dart';
 import 'package:mone_task_app/worker/model/user_model.dart';
-import 'package:share_plus/share_plus.dart';
-import 'package:shared_preferences/shared_preferences.dart';
-import 'package:dio/dio.dart';
-import 'package:path_provider/path_provider.dart';
-import 'dart:io';
+import 'package:mone_task_app/worker/service/log_out.dart';
 
 class CheckerHomeUi extends StatefulWidget {
   const CheckerHomeUi({super.key});
@@ -25,530 +20,199 @@ class CheckerHomeUi extends StatefulWidget {
 
 class _CheckerHomeUiState extends State<CheckerHomeUi> {
   late Future<List<CheckerCheckTaskModel>> tasksFuture;
+  late Future<List<CategoryModel>> categoriesFuture;
   UserModel? user;
   TokenStorage tokenStorage = sl<TokenStorage>();
-
-  // Video cache uchun
-  Map<String, String> cachedVideos = {}; // videoUrl: local file path
-  Set<String> downloadingVideos = {}; // hozir yuklanayotgan videolar
+  DateTime selectedDate = DateTime.now();
 
   @override
   void initState() {
     super.initState();
     user = tokenStorage.getUserData();
     tasksFuture = AdminTaskService().fetchTasks(selectedDate);
-    _loadCachedVideos();
-  }
-
-  // Mavjud cache'langan videolarni yuklash
-  Future<void> _loadCachedVideos() async {
-    final directory = await getApplicationDocumentsDirectory();
-    final videosDir = Directory('${directory.path}/videos');
-
-    if (!await videosDir.exists()) {
-      await videosDir.create(recursive: true);
-      return;
-    }
-  }
-
-  // Video URL'dan local file path olish
-  Future<String> _getLocalFilePath(String videoUrl) async {
-    final directory = await getApplicationDocumentsDirectory();
-    final videosDir = Directory('${directory.path}/videos');
-
-    if (!await videosDir.exists()) {
-      await videosDir.create(recursive: true);
-    }
-
-    final fileName = videoUrl
-        .split('/')
-        .last
-        .replaceAll(RegExp(r'[^\w\s\-\.]'), '_');
-
-    return '${videosDir.path}/$fileName';
-  }
-
-  // Videoni cache'dan olish yoki yuklab olish
-  Future<String> _getCachedOrDownloadVideo(String videoUrl) async {
-    // Agar cache'da bo'lsa, local path qaytarish
-    if (cachedVideos.containsKey(videoUrl)) {
-      final localPath = cachedVideos[videoUrl]!;
-      final file = File(localPath);
-      if (await file.exists() && await file.length() > 0) {
-        return localPath;
-      }
-    }
-
-    // Agar hozir yuklanayotgan bo'lsa, network URL qaytarish
-    if (downloadingVideos.contains(videoUrl)) {
-      return videoUrl;
-    }
-
-    // Yuklab olishni boshlash (background'da)
-    _downloadVideoInBackground(videoUrl);
-
-    // Hozircha network URL qaytarish
-    return videoUrl;
-  }
-
-  // Video'ni background'da yuklab olish
-  Future<void> _downloadVideoInBackground(String videoUrl) async {
-    if (downloadingVideos.contains(videoUrl)) {
-      return; // Allaqachon yuklanayapti
-    }
-
-    setState(() {
-      downloadingVideos.add(videoUrl);
-    });
-
-    try {
-      final localPath = await _getLocalFilePath(videoUrl);
-      final file = File(localPath);
-
-      // Agar allaqachon mavjud bo'lsa
-      if (await file.exists() && await file.length() > 0) {
-        setState(() {
-          cachedVideos[videoUrl] = localPath;
-          downloadingVideos.remove(videoUrl);
-        });
-        return;
-      }
-
-      final dio = Dio();
-      await dio.download(videoUrl, localPath);
-
-      if (await file.exists() && await file.length() > 0) {
-        setState(() {
-          cachedVideos[videoUrl] = localPath;
-          downloadingVideos.remove(videoUrl);
-        });
-      }
-    } catch (e) {
-      print('Video yuklashda xatolik: $videoUrl - $e');
-      setState(() {
-        downloadingVideos.remove(videoUrl);
-      });
-    }
+    categoriesFuture = AdminTaskService().fetchCategories();
   }
 
   void _showCircleVideoPlayer(String videoPath) async {
-    // 1) To'liq URL yasaymiz
     String realUrl = videoPath.startsWith('http')
         ? videoPath
         : '${AppUrls.baseUrl}/$videoPath';
 
-    // 2) Localdan yuklangan bo'lsa → local path qaytadi
-    String finalUrl = await _getCachedOrDownloadVideo(realUrl);
-
-    // 3) Video mavjudligini tekshiramiz
-    final file = File(finalUrl);
-    bool isLocalExists = await file.exists() && await file.length() > 0;
-
     showDialog(
       context: context,
       barrierColor: Colors.black87,
-      builder: (context) => CircleVideoPlayer(
-        videoUrl: isLocalExists ? file.path : realUrl,
-        isLocal: isLocalExists,
-      ),
+      builder: (context) =>
+          CircleVideoPlayer(videoUrl: realUrl, isLocal: false),
     );
   }
 
-  DateTime selectedDate = DateTime.now();
+  void _refreshTasks() {
+    setState(() {
+      tasksFuture = AdminTaskService().fetchTasks(selectedDate);
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
-    return DefaultTabController(
-      length: 4,
-      initialIndex: 0,
-      child: Scaffold(
-        appBar: AppBar(
-          actions: [
-            GestureDetector(
-              child: Text(
-                selectedDate.day == DateTime.now().day
-                    ? "Сегодня "
-                    : "${selectedDate.day}/${selectedDate.month}/${selectedDate.year} ",
-              ),
-              onTap: () async {
-                final DateTime? picked = await showDatePicker(
-                  context: context,
-                  firstDate: DateTime.now().subtract(const Duration(days: 5)),
-                  initialDate: selectedDate,
-                  lastDate: DateTime.now(),
-                );
+    return FutureBuilder<List<CategoryModel>>(
+      future: categoriesFuture,
+      builder: (context, categorySnapshot) {
+        // Kategoriyalar yuklanayotganida
+        if (categorySnapshot.connectionState == ConnectionState.waiting) {
+          return Scaffold(
+            appBar: AppBar(title: Text(user?.username ?? "Checker")),
+            body: const Center(child: CircularProgressIndicator.adaptive()),
+          );
+        }
 
-                if (picked != null) {
-                  setState(() {
-                    selectedDate = picked;
-                    tasksFuture = AdminTaskService().fetchTasks(selectedDate);
-                  });
-                }
-              },
-            ),
-          ],
-          title: Text(user?.username ?? "Checker"),
-          leading: IconButton(
-            icon: const Icon(Icons.logout),
-            onPressed: () async {
-              SharedPreferences prefs = await SharedPreferences.getInstance();
-              prefs.remove("access_token");
-              prefs.remove("role");
-              context.pushAndRemove(LoginPage());
-            },
-          ),
-          bottom: const TabBar(
-            padding: EdgeInsets.zero,
-            isScrollable: true,
-            tabs: [
-              Tab(text: "Гелион"),
-              Tab(text: "Мархабо"),
-              Tab(text: "Фреско"),
-              Tab(text: "Сибирский"),
-            ],
-          ),
-        ),
-        body: FutureBuilder<List<CheckerCheckTaskModel>>(
-          future: tasksFuture,
-          builder: (context, snapshot) {
-            if (snapshot.connectionState == ConnectionState.waiting) {
-              return const Center(child: CircularProgressIndicator.adaptive());
-            }
-
-            if (snapshot.hasError) {
-              return Center(
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    const Icon(
-                      Icons.error_outline,
-                      color: Colors.red,
-                      size: 48,
-                    ),
-                    const SizedBox(height: 16),
-                    Text('Xatolik: ${snapshot.error}'),
-                    const SizedBox(height: 16),
-                    ElevatedButton(
-                      onPressed: () {
-                        setState(() {
-                          tasksFuture = AdminTaskService().fetchTasks(
-                            selectedDate,
-                          );
-                        });
-                      },
-                      child: const Text('Qayta urinish'),
-                    ),
-                  ],
-                ),
-              );
-            }
-
-            if (!snapshot.hasData ||
-                snapshot.data == null ||
-                snapshot.data!.isEmpty) {
-              return const Center(child: Text("Hech qanday task topilmadi"));
-            }
-
-            final allTasks = snapshot.data!;
-
-            // Barcha videolarni background'da yuklab olishni boshlash
-            WidgetsBinding.instance.addPostFrameCallback((_) {
-              _preloadVideos(allTasks);
-            });
-
-            return TabBarView(
-              children: [
-                buildFilialTasks(allTasks, 1),
-                buildFilialTasks(allTasks, 2),
-                buildFilialTasks(allTasks, 3),
-                buildFilialTasks(allTasks, 4),
-              ],
-            );
-          },
-        ),
-      ),
-    );
-  }
-
-  // Videolarni oldindan yuklash (background)
-  void _preloadVideos(List<CheckerCheckTaskModel> tasks) {
-    final videoUrls = tasks
-        .where((task) => task.videoUrl != null && task.videoUrl!.isNotEmpty)
-        .map((task) {
-          String url = task.videoUrl!;
-          if (!url.startsWith('http')) {
-            url = '${AppUrls.baseUrl}/$url';
-          }
-          return url;
-        })
-        .toSet()
-        .toList();
-
-    for (String url in videoUrls) {
-      _downloadVideoInBackground(url);
-    }
-  }
-
-  Widget buildFilialTasks(List<CheckerCheckTaskModel> tasks, int filialId) {
-    List<CheckerCheckTaskModel> filtered = tasks
-        .where((task) => task.filialId == filialId)
-        .toList();
-
-    if (filtered.isEmpty) {
-      return const Center(child: Text("Ushbu filial uchun task yo'q"));
-    }
-
-    return RefreshIndicator(
-      onRefresh: () async {
-        final newTasks = AdminTaskService().fetchTasks(selectedDate);
-        setState(() {
-          tasksFuture = newTasks;
-        });
-        await newTasks;
-      },
-      child: ListView.builder(
-        padding: const EdgeInsets.all(8),
-        itemCount: filtered.length,
-        itemBuilder: (_, i) {
-          String? videoUrl = filtered[i].videoUrl;
-          if (videoUrl != null &&
-              videoUrl.isNotEmpty &&
-              !videoUrl.startsWith('http')) {
-            videoUrl = '${AppUrls.baseUrl}/$videoUrl';
-          }
-
-          bool isVideoCached =
-              videoUrl != null && cachedVideos.containsKey(videoUrl);
-          bool isDownloading =
-              videoUrl != null && downloadingVideos.contains(videoUrl);
-
-          return Card(
-            margin: const EdgeInsets.only(bottom: 12),
-            elevation: 2,
-            color: getStatusColor(filtered[i].status),
-            child: InkWell(
-              onLongPress: () async {
-                final bool isDelete = await AdminTaskService().updateTaskStatus(
-                  filtered[i].taskId,
-                  1,
-                );
-                if (isDelete) {
-                  setState(() {
-                    tasksFuture = AdminTaskService().fetchTasks(selectedDate);
-                  });
-                }
-              },
-              onTap: () async {
-                if (filtered[i].videoUrl != null &&
-                    filtered[i].videoUrl!.isNotEmpty) {
-                  if (selectedDate.day == DateTime.now().day) {
-                    final bool isSucsess = await AdminTaskService()
-                        .updateTaskStatus(filtered[i].taskId, 3);
-                    if (isSucsess) {
+        // Kategoriyalarda xatolik bo'lsa
+        if (categorySnapshot.hasError) {
+          return Scaffold(
+            appBar: AppBar(title: Text(user?.username ?? "Checker")),
+            body: Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  const Icon(Icons.error_outline, color: Colors.red, size: 48),
+                  const SizedBox(height: 16),
+                  Text(
+                    'Kategoriyalarni yuklashda xatolik: ${categorySnapshot.error}',
+                  ),
+                  const SizedBox(height: 16),
+                  ElevatedButton(
+                    onPressed: () {
                       setState(() {
-                        filtered[i].status = 3;
+                        categoriesFuture = AdminTaskService().fetchCategories();
                       });
-                    }
-                  }
-                  _showCircleVideoPlayer(filtered[i].videoUrl!);
-                }
-              },
-              child: Padding(
-                padding: const EdgeInsets.all(12),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            filtered[i].task,
-                            style: const TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                          if (filtered[i].submittedBy != null)
-                            Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                SizedBox(height: 10),
-                                Text(
-                                  filtered[i].submittedBy!,
-                                  style: const TextStyle(fontSize: 13),
-                                ),
-                                Text(
-                                  "${filtered[i].submittedAt!.hour}:${filtered[i].submittedAt!.minute}",
-                                  style: const TextStyle(fontSize: 13),
-                                ),
-                              ],
-                            ),
-
-                          const SizedBox(height: 8),
-                          Row(
-                            children: [
-                              Container(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 8,
-                                  vertical: 4,
-                                ),
-                                decoration: BoxDecoration(
-                                  color: getStatusColor(filtered[i].status),
-                                  borderRadius: BorderRadius.circular(12),
-                                ),
-                                child: Text(
-                                  "${filtered[i].type == 1
-                                      ? "Ежедневно"
-                                      : filtered[i].type == 2
-                                      ? getWeekdaysString(filtered[i].days!)
-                                      : filtered[i].days ?? ""}",
-
-                                  style: const TextStyle(
-                                    fontSize: 12,
-                                    color: Colors.black,
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ],
-                      ),
-                    ),
-
-                    Row(
-                      children: [
-                        if (filtered[i].videoUrl != null &&
-                            filtered[i].videoUrl!.isNotEmpty)
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 8,
-                              vertical: 4,
-                            ),
-                            decoration: BoxDecoration(
-                              color: isVideoCached
-                                  ? Colors.green
-                                  : (isDownloading
-                                        ? Colors.orange
-                                        : Colors.blue),
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                            child: Row(
-                              children: [
-                                if (isDownloading)
-                                  const SizedBox(
-                                    width: 14,
-                                    height: 14,
-                                    child: CircularProgressIndicator.adaptive(),
-                                  )
-                                else
-                                  Icon(
-                                    isVideoCached
-                                        ? Icons.check_circle
-                                        : Icons.cloud_download,
-                                    size: 16,
-                                    color: Colors.white,
-                                  ),
-                              ],
-                            ),
-                          ),
-                        IconButton(
-                          onPressed: () {
-                            if (filtered[i].videoUrl != null &&
-                                filtered[i].videoUrl!.isNotEmpty) {
-                              _shareVideo(filtered[i]);
-                            } else {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(
-                                  content: Text('Video mavjud emas'),
-                                ),
-                              );
-                            }
-                          },
-                          icon:
-                              filtered[i].videoUrl != null &&
-                                  filtered[i].videoUrl!.isNotEmpty
-                              ? Icon(CupertinoIcons.share)
-                              : SizedBox(),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
+                    },
+                    child: const Text('Qayta urinish'),
+                  ),
+                ],
               ),
             ),
           );
-        },
-      ),
-    );
-  }
-
-  // Video ulashish funksiyasi
-  Future<void> _shareVideo(CheckerCheckTaskModel task) async {
-    try {
-      // Video URL'ni to'liq shakliga keltirish
-      String? videoUrl = task.videoUrl;
-      if (videoUrl == null || videoUrl.isEmpty) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(const SnackBar(content: Text('Video topilmadi')));
-        return;
-      }
-
-      if (!videoUrl.startsWith('http')) {
-        videoUrl = '${AppUrls.baseUrl}/$videoUrl';
-      }
-
-      // Loading ko'rsatish
-      showDialog(
-        context: context,
-        barrierDismissible: false,
-        builder: (context) =>
-            const Center(child: CircularProgressIndicator.adaptive()),
-      );
-
-      String? localPath;
-
-      // Agar video cache'da bo'lsa, uni ishlatamiz
-      if (cachedVideos.containsKey(videoUrl)) {
-        localPath = cachedVideos[videoUrl];
-      } else {
-        // Aks holda yuklab olamiz
-        localPath = await _getLocalFilePath(videoUrl);
-        final file = File(localPath);
-
-        // Agar fayl mavjud bo'lmasa, yuklab olamiz
-        if (!await file.exists() || await file.length() == 0) {
-          final dio = Dio();
-          await dio.download(videoUrl, localPath);
         }
 
-        // Cache'ga qo'shamiz
-        setState(() {
-          cachedVideos[videoUrl!] = localPath!;
-        });
-      }
+        // Kategoriyalar bo'sh bo'lsa
+        if (!categorySnapshot.hasData ||
+            categorySnapshot.data == null ||
+            categorySnapshot.data!.isEmpty) {
+          return Scaffold(
+            appBar: AppBar(title: Text(user?.username ?? "Checker")),
+            body: const Center(child: Text("Hech qanday filial topilmadi")),
+          );
+        }
 
-      // Loading yopish
-      Navigator.of(context).pop();
+        final categories = categorySnapshot.data!;
 
-      // Video faylini ulashish
-      final file = File(localPath!);
-      if (await file.exists() && await file.length() > 0) {
-        await Share.shareXFiles([
-          XFile(file.path),
-        ], text: 'Задача: ${task.task}');
-      } else {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(const SnackBar(content: Text('Video fayl topilmadi')));
-      }
-    } catch (e) {
-      // Loading yopish (agar xatolik bo'lsa)
-      if (Navigator.of(context).canPop()) {
-        Navigator.of(context).pop();
-      }
-      print('Share xatolik: $e');
-    }
+        return DefaultTabController(
+          length: categories.length,
+          initialIndex: 0,
+          child: Scaffold(
+            appBar: AppBar(
+              actions: [
+                GestureDetector(
+                  child: Text(
+                    selectedDate.day == DateTime.now().day
+                        ? "Сегодня "
+                        : "${selectedDate.day}/${selectedDate.month}/${selectedDate.year} ",
+                  ),
+                  onTap: () async {
+                    final DateTime? picked = await showDatePicker(
+                      context: context,
+                      firstDate: DateTime.now().subtract(
+                        const Duration(days: 5),
+                      ),
+                      initialDate: selectedDate,
+                      lastDate: DateTime.now(),
+                    );
+
+                    if (picked != null) {
+                      setState(() {
+                        selectedDate = picked;
+                        tasksFuture = AdminTaskService().fetchTasks(
+                          selectedDate,
+                        );
+                      });
+                    }
+                  },
+                ),
+              ],
+              title: Text(user?.username ?? "Checker"),
+              leading: IconButton(
+                icon: const Icon(Icons.logout),
+                onPressed: () async {
+                  await LogOutService().logOut();
+                  tokenStorage.removeToken();
+                  tokenStorage.putUserData({});
+                  context.pushAndRemove(LoginPage());
+                },
+              ),
+              bottom: TabBar(
+                padding: EdgeInsets.zero,
+                isScrollable: true,
+                tabs: categories
+                    .map((category) => Tab(text: category.name))
+                    .toList(),
+              ),
+            ),
+            body: FutureBuilder<List<CheckerCheckTaskModel>>(
+              future: tasksFuture,
+              builder: (context, taskSnapshot) {
+                if (taskSnapshot.connectionState == ConnectionState.waiting) {
+                  return const Center(
+                    child: CircularProgressIndicator.adaptive(),
+                  );
+                }
+
+                if (taskSnapshot.hasError) {
+                  return Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        const Icon(
+                          Icons.error_outline,
+                          color: Colors.red,
+                          size: 48,
+                        ),
+                        const SizedBox(height: 16),
+                        Text('Xatolik: ${taskSnapshot.error}'),
+                        const SizedBox(height: 16),
+                        ElevatedButton(
+                          onPressed: _refreshTasks,
+                          child: const Text('Qayta urinish'),
+                        ),
+                      ],
+                    ),
+                  );
+                }
+
+                if (!taskSnapshot.hasData ||
+                    taskSnapshot.data == null ||
+                    taskSnapshot.data!.isEmpty) {
+                  return const Center(
+                    child: Text("Hech qanday task topilmadi"),
+                  );
+                }
+
+                final allTasks = taskSnapshot.data!;
+
+                return TabBarView(
+                  children: categories.map((category) {
+                    return TaskListWidget(
+                      tasks: allTasks,
+                      filialId: category.filialId,
+                      selectedDate: selectedDate,
+                      onRefresh: _refreshTasks,
+                      onShowVideoPlayer: _showCircleVideoPlayer,
+                    );
+                  }).toList(),
+                );
+              },
+            ),
+          ),
+        );
+      },
+    );
   }
 }

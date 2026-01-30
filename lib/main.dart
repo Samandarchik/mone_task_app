@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:mone_task_app/admin/ui/admin_ui.dart';
 import 'package:mone_task_app/core/di/di.dart';
-import 'package:mone_task_app/home/service/login_service.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -19,7 +19,7 @@ class MyApp extends StatelessWidget {
       title: 'Camera Switch Video',
       debugShowCheckedModeBanner: false,
       theme: ThemeData(primarySwatch: Colors.blue, useMaterial3: true),
-      home: LoginPage(),
+      home: AdminTaskUi(),
     );
   }
 }

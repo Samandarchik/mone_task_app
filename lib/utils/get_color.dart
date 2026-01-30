@@ -17,6 +17,10 @@ String getTypeName(int type) {
   switch (type) {
     case 1:
       return "Ежедневно";
+    case 2:
+      return "Еженедельно: ";
+    case 3:
+      return "Ежемесячно: ";
     default:
       return "Unknown";
   }
