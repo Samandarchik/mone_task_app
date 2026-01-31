@@ -1,11 +1,10 @@
 import 'package:flutter/material.dart';
-import 'package:mone_task_app/admin/ui/add_admin_task.dart';
+import 'package:mone_task_app/admin/model/filial_model.dart';
 import 'package:mone_task_app/admin/ui/admin_s.dart';
 import 'package:mone_task_app/admin/ui/all_task_ui.dart';
 import 'package:mone_task_app/admin/ui/user_list_page.dart';
 import 'package:mone_task_app/checker/model/checker_check_task_model.dart';
 import 'package:mone_task_app/checker/service/task_worker_service.dart';
-import 'package:mone_task_app/admin/ui/add_fidial_page.dart';
 import 'package:mone_task_app/checker/ui/player.dart';
 
 import 'package:mone_task_app/core/constants/urls.dart';
@@ -27,7 +26,7 @@ class _AdminTaskUiState extends State<AdminTaskUi> {
   TokenStorage tokenStorage = sl<TokenStorage>();
   late Future<List<CheckerCheckTaskModel>> tasksFuture;
 
-  late Future<List<CategoryModel>> categoriesFuture;
+  late Future<List<FilialModel>> filialModel;
   DateTime selectedDate = DateTime.now();
   UserModel? user;
 
@@ -36,7 +35,7 @@ class _AdminTaskUiState extends State<AdminTaskUi> {
     super.initState();
     user = tokenStorage.getUserData();
     tasksFuture = AdminTaskService().fetchTasks(selectedDate);
-    categoriesFuture = AdminTaskService().fetchCategories();
+    filialModel = AdminTaskService().fetchCategories();
   }
 
   void _showCircleVideoPlayer(String videoPath) async {
@@ -54,7 +53,7 @@ class _AdminTaskUiState extends State<AdminTaskUi> {
 
   void _refreshCategories() {
     setState(() {
-      categoriesFuture = AdminTaskService().fetchCategories();
+      filialModel = AdminTaskService().fetchCategories();
     });
   }
 
@@ -67,7 +66,7 @@ class _AdminTaskUiState extends State<AdminTaskUi> {
   Future<void> _handleDateSelection() async {
     final DateTime? picked = await showDatePicker(
       context: context,
-      firstDate: DateTime.now().subtract(const Duration(days: 5)),
+      firstDate: DateTime.now().subtract(const Duration(days: 6)),
       initialDate: selectedDate,
       lastDate: DateTime.now(),
     );
@@ -89,8 +88,8 @@ class _AdminTaskUiState extends State<AdminTaskUi> {
 
   @override
   Widget build(BuildContext context) {
-    return FutureBuilder<List<CategoryModel>>(
-      future: categoriesFuture,
+    return FutureBuilder<List<FilialModel>>(
+      future: filialModel,
       builder: (context, categorySnapshot) {
         // Kategoriyalar yuklanayotganida
         if (categorySnapshot.connectionState == ConnectionState.waiting) {
@@ -137,30 +136,28 @@ class _AdminTaskUiState extends State<AdminTaskUi> {
         final categories = categorySnapshot.data!;
 
         return DefaultTabController(
-          length: categories.length + 1,
+          length: categories.length,
           initialIndex: 0,
           child: Scaffold(
             appBar: AppBar(
               actions: [
                 GestureDetector(
                   onTap: () {
-                    context.push(UsersPage(categoryModel: categories));
+                    context.push(UsersPage(filialModel: categories));
                   },
                   child: Icon(Icons.person),
                 ),
                 SizedBox(width: 5),
                 GestureDetector(
                   onTap: () {
-                    context.push(TemplateTaskAdminUi());
+                    context.push(
+                      TemplateTaskAdminUi(
+                        name: user?.username ?? "",
+                        category: categories,
+                      ),
+                    );
                   },
                   child: const Icon(Icons.menu),
-                ),
-                SizedBox(width: 5),
-                GestureDetector(
-                  onTap: () {
-                    context.push(AddAdminTask());
-                  },
-                  child: const Icon(Icons.add),
                 ),
                 SizedBox(width: 5),
                 GestureDetector(
@@ -181,26 +178,10 @@ class _AdminTaskUiState extends State<AdminTaskUi> {
                 padding: EdgeInsets.zero,
                 isScrollable: true,
                 tabAlignment: TabAlignment.start,
-                tabs: [
-                  ...categories.map((category) => Tab(text: category.name)),
-                  Tab(
-                    child: GestureDetector(
-                      onTap: () {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (context) => const AddFilialPage(),
-                          ),
-                        ).then((result) {
-                          if (result == true) {
-                            _refreshCategories();
-                          }
-                        });
-                      },
-                      child: const Icon(Icons.add_circle_outline),
-                    ),
-                  ),
-                ],
+                tabs: List.generate(
+                  categories.length,
+                  (index) => Tab(text: categories[index].name),
+                ),
               ),
             ),
             body: FutureBuilder<List<CheckerCheckTaskModel>>(
@@ -245,18 +226,15 @@ class _AdminTaskUiState extends State<AdminTaskUi> {
                 final allTasks = taskSnapshot.data!;
 
                 return TabBarView(
-                  children: [
-                    ...categories.map((category) {
-                      return AdminTaskListWidget(
-                        tasks: allTasks,
-                        filialId: category.filialId,
-                        selectedDate: selectedDate,
-                        onRefresh: _refreshTasks,
-                        onShowVideoPlayer: _showCircleVideoPlayer,
-                      );
-                    }),
-                    const SizedBox.shrink(),
-                  ],
+                  children: categories.map((category) {
+                    return AdminTaskListWidget(
+                      tasks: allTasks,
+                      filialId: category.filialId,
+                      selectedDate: selectedDate,
+                      onRefresh: _refreshTasks,
+                      onShowVideoPlayer: _showCircleVideoPlayer,
+                    );
+                  }).toList(),
                 );
               },
             ),

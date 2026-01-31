@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:mone_task_app/admin/model/filial_model.dart';
 import 'package:mone_task_app/checker/model/checker_check_task_model.dart';
 import 'package:mone_task_app/checker/service/task_worker_service.dart';
 import 'package:mone_task_app/checker/ui/player.dart';
@@ -20,7 +21,7 @@ class CheckerHomeUi extends StatefulWidget {
 
 class _CheckerHomeUiState extends State<CheckerHomeUi> {
   late Future<List<CheckerCheckTaskModel>> tasksFuture;
-  late Future<List<CategoryModel>> categoriesFuture;
+  late Future<List<FilialModel>> categoriesFuture;
   UserModel? user;
   TokenStorage tokenStorage = sl<TokenStorage>();
   DateTime selectedDate = DateTime.now();
@@ -54,7 +55,7 @@ class _CheckerHomeUiState extends State<CheckerHomeUi> {
 
   @override
   Widget build(BuildContext context) {
-    return FutureBuilder<List<CategoryModel>>(
+    return FutureBuilder<List<FilialModel>>(
       future: categoriesFuture,
       builder: (context, categorySnapshot) {
         // Kategoriyalar yuklanayotganida

@@ -51,18 +51,9 @@ class _ReorderExampleState extends State<ReorderExample> {
               newIndex -= 1;
             }
 
-            /// O'zgargan elementni oldindan olish
-            final movedItem = items[oldIndex];
-
             /// joyini almashtiramiz
             final item = items.removeAt(oldIndex);
             items.insert(newIndex, item);
-
-            /// 🔥 PRINT QILAMIZ (siz so‘ragan formatda)
-            int oldPos = oldIndex + 1; // 1-based
-            int newPos = newIndex + 1; // 1-based
-
-            print("$oldPos → $newPos ga ko‘chdi ( ${movedItem} )");
           });
         },
       ),

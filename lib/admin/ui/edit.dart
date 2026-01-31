@@ -1,12 +1,13 @@
 // lib/admin/ui/edit_user_page.dart
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
+import 'package:mone_task_app/admin/model/filial_model.dart';
 import 'package:mone_task_app/admin/ui/user_servise.dart';
 import 'package:mone_task_app/checker/service/task_worker_service.dart';
 import 'package:mone_task_app/worker/model/user_model.dart';
 
 class EditUserPage extends StatefulWidget {
-  final List<CategoryModel> category;
+  final List<FilialModel> category;
   final UserModel user;
 
   const EditUserPage({super.key, required this.user, required this.category});
@@ -22,7 +23,7 @@ class _EditUserPageState extends State<EditUserPage> {
   late List<String> _selectedCategories;
 
   final UserService _userService = UserService();
-  late Future<List<CategoryModel>> _categoriesFuture;
+  late Future<List<FilialModel>> _categoriesFuture;
 
   bool _isLoading = false;
 
@@ -110,7 +111,7 @@ class _EditUserPageState extends State<EditUserPage> {
             IconButton(onPressed: _saveUser, icon: const Icon(Icons.check)),
         ],
       ),
-      body: FutureBuilder<List<CategoryModel>>(
+      body: FutureBuilder<List<FilialModel>>(
         future: _categoriesFuture,
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {

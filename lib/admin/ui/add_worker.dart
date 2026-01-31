@@ -1,6 +1,7 @@
 // lib/admin/ui/add_worker_page.dart
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
+import 'package:mone_task_app/admin/model/filial_model.dart';
 import 'package:mone_task_app/admin/ui/user_servise.dart';
 import 'package:mone_task_app/checker/service/task_worker_service.dart';
 
@@ -25,7 +26,7 @@ class _AddWorkerPageState extends State<AddWorkerPage> {
   bool _obscurePassword = true;
 
   final UserService _userService = UserService();
-  late Future<List<CategoryModel>> _categoriesFuture;
+  late Future<List<FilialModel>> _categoriesFuture;
 
   @override
   void initState() {
@@ -119,7 +120,7 @@ class _AddWorkerPageState extends State<AddWorkerPage> {
             IconButton(onPressed: _saveUser, icon: const Icon(Icons.check)),
         ],
       ),
-      body: FutureBuilder<List<CategoryModel>>(
+      body: FutureBuilder<List<FilialModel>>(
         future: _categoriesFuture,
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {

@@ -1,4 +1,5 @@
 import 'package:dio/dio.dart';
+import 'package:mone_task_app/admin/model/filial_model.dart';
 import 'package:mone_task_app/checker/model/checker_check_task_model.dart';
 import 'package:mone_task_app/core/constants/urls.dart';
 import 'package:mone_task_app/core/di/di.dart';
@@ -70,34 +71,14 @@ class AdminTaskService {
     }
   }
 
-  Future<List<CategoryModel>> fetchCategories() async {
+  Future<List<FilialModel>> fetchCategories() async {
     try {
       final response = await _dio.get(AppUrls.category);
       return (response.data['data'] as List)
-          .map((e) => CategoryModel.fromJson(e))
+          .map((e) => FilialModel.fromJson(e))
           .toList();
     } catch (e) {
       rethrow; // UI ushlashi uchun
     }
-  }
-}
-
-class CategoryModel {
-  final int filialId;
-  final String name;
-  final List<String> categories;
-
-  CategoryModel({
-    required this.filialId,
-    required this.name,
-    required this.categories,
-  });
-
-  factory CategoryModel.fromJson(Map<String, dynamic> json) {
-    return CategoryModel(
-      filialId: json['filialId'],
-      name: json['name'],
-      categories: List<String>.from(json['categories']),
-    );
   }
 }

@@ -1,15 +1,22 @@
 import 'package:flutter/material.dart';
 import 'package:mone_task_app/admin/model/all_task_model.dart';
+import 'package:mone_task_app/admin/model/filial_model.dart';
 import 'package:mone_task_app/admin/service/task_worker_service.dart';
 import 'package:mone_task_app/admin/ui/add_admin_task.dart';
+import 'package:mone_task_app/admin/ui/add_fidial_page.dart';
 import 'package:mone_task_app/admin/ui/edit_task_ui.dart';
 import 'package:mone_task_app/checker/model/checker_check_task_model.dart';
 import 'package:mone_task_app/utils/get_color.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 
 // ==================== UI ====================
 class TemplateTaskAdminUi extends StatefulWidget {
-  const TemplateTaskAdminUi({super.key});
+  final List<FilialModel>? category;
+  final String name;
+  const TemplateTaskAdminUi({
+    super.key,
+    required this.name,
+    required this.category,
+  });
 
   @override
   State<TemplateTaskAdminUi> createState() => _TemplateTaskAdminUiState();
@@ -17,21 +24,12 @@ class TemplateTaskAdminUi extends StatefulWidget {
 
 class _TemplateTaskAdminUiState extends State<TemplateTaskAdminUi> {
   late Future<List<TemplateTaskModel>> templatesFuture;
-  String fullName = "";
   int selectedFilter = -1; // -1: hammasi, 1-3: type bo'yicha
 
   @override
   void initState() {
     super.initState();
     templatesFuture = AdminTaskService().fetchTemplates();
-    getUserFullName();
-  }
-
-  void getUserFullName() async {
-    SharedPreferences prefs = await SharedPreferences.getInstance();
-    setState(() {
-      fullName = prefs.getString('full_name') ?? 'Admin';
-    });
   }
 
   Color getTypeColor(int type) {
@@ -51,7 +49,9 @@ class _TemplateTaskAdminUiState extends State<TemplateTaskAdminUi> {
 
   String getFilialNames(List<int> filialIds) {
     if (filialIds.isEmpty) return "Barcha filiallar";
-    final names = {1: "Гелион", 2: "Мархабо", 3: "Фреско", 4: "Сибирский"};
+    final names = {
+      for (var filial in widget.category ?? []) filial.filialId: filial.name,
+    };
     return filialIds.map((id) => names[id] ?? "?").join(", ");
   }
 
@@ -71,11 +71,11 @@ class _TemplateTaskAdminUiState extends State<TemplateTaskAdminUi> {
   @override
   Widget build(BuildContext context) {
     return DefaultTabController(
-      length: 4,
+      length: (widget.category?.length ?? 0) + 1,
       initialIndex: 0,
       child: Scaffold(
         appBar: AppBar(
-          title: Text(fullName),
+          title: Text(widget.name),
           actions: [
             IconButton(
               onPressed: () {
@@ -86,77 +86,126 @@ class _TemplateTaskAdminUiState extends State<TemplateTaskAdminUi> {
               },
               icon: const Icon(Icons.add),
             ),
-            PopupMenuButton<int>(
-              icon: const Icon(Icons.filter_list),
-              onSelected: (value) {
-                setState(() {
-                  selectedFilter = value;
-                });
-              },
-              itemBuilder: (context) => [
-                const PopupMenuItem(value: -1, child: Text("Hammasi")),
-                const PopupMenuItem(value: 1, child: Text("Kunlik")),
-                const PopupMenuItem(value: 2, child: Text("Haftalik")),
-                const PopupMenuItem(value: 3, child: Text("Oyning kunlari")),
-              ],
-            ),
           ],
-          bottom: const TabBar(
+          bottom: TabBar(
             padding: EdgeInsets.zero,
             isScrollable: true,
             tabs: [
-              Tab(text: "Гелион"),
-              Tab(text: "Мархабо"),
-              Tab(text: "Фреско"),
-              Tab(text: "Сибирский"),
+              ...List.generate(
+                widget.category?.length ?? 0,
+                (index) => GestureDetector(
+                  onLongPress: () {
+                    print("ontap");
+                  },
+                  child: Tab(text: widget.category?[index].name ?? ""),
+                ),
+              ),
+              Tab(
+                child: GestureDetector(
+                  onTap: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => AddFilialPage(
+                          isAdd: true,
+                          category: widget.category ?? [],
+                        ),
+                      ),
+                    ).then((result) {
+                      if (result == true) {
+                        setState(() {
+                          templatesFuture = AdminTaskService().fetchTemplates();
+                        });
+                      }
+                    });
+                  },
+                  child: const Icon(Icons.add_circle_outline),
+                ),
+              ),
             ],
           ),
         ),
         body: FutureBuilder<List<TemplateTaskModel>>(
           future: templatesFuture,
           builder: (context, snapshot) {
+            // Loading yoki error holatida ham TabBarView kerak
+            final categoryCount = widget.category?.length ?? 0;
+
             if (snapshot.connectionState == ConnectionState.waiting) {
-              return const Center(child: CircularProgressIndicator.adaptive());
+              return TabBarView(
+                children: [
+                  ...List.generate(
+                    categoryCount,
+                    (_) => const Center(
+                      child: CircularProgressIndicator.adaptive(),
+                    ),
+                  ),
+                  const SizedBox.shrink(),
+                ],
+              );
             }
 
             if (snapshot.hasError) {
-              return Center(
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    const Icon(
-                      Icons.error_outline,
-                      color: Colors.red,
-                      size: 48,
+              return TabBarView(
+                children: [
+                  ...List.generate(
+                    categoryCount,
+                    (_) => Center(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          const Icon(
+                            Icons.error_outline,
+                            color: Colors.red,
+                            size: 48,
+                          ),
+                          const SizedBox(height: 16),
+                          Text('Xatolik: ${snapshot.error}'),
+                          const SizedBox(height: 16),
+                          ElevatedButton(
+                            onPressed: () {
+                              setState(() {
+                                templatesFuture = AdminTaskService()
+                                    .fetchTemplates();
+                              });
+                            },
+                            child: const Text('Qayta urinish'),
+                          ),
+                        ],
+                      ),
                     ),
-                    const SizedBox(height: 16),
-                    Text('Xatolik: ${snapshot.error}'),
-                    const SizedBox(height: 16),
-                    ElevatedButton(
-                      onPressed: () {
-                        setState(() {
-                          templatesFuture = AdminTaskService().fetchTemplates();
-                        });
-                      },
-                      child: const Text('Qayta urinish'),
-                    ),
-                  ],
-                ),
+                  ),
+                  const SizedBox.shrink(),
+                ],
               );
             }
 
             if (!snapshot.hasData || snapshot.data!.isEmpty) {
-              return const Center(child: Text("Hech qanday shablon topilmadi"));
+              return TabBarView(
+                children: [
+                  ...List.generate(
+                    categoryCount,
+                    (_) => const Center(
+                      child: Text("Hech qanday shablon topilmadi"),
+                    ),
+                  ),
+                  const SizedBox.shrink(),
+                ],
+              );
             }
 
             final allTemplates = snapshot.data!;
 
             return TabBarView(
               children: [
-                buildFilialTemplates(allTemplates, 1),
-                buildFilialTemplates(allTemplates, 2),
-                buildFilialTemplates(allTemplates, 3),
-                buildFilialTemplates(allTemplates, 4),
+                ...List.generate(
+                  categoryCount,
+                  (index) => buildFilialTemplates(
+                    allTemplates,
+                    widget.category![index].filialId,
+                  ),
+                ),
+                const SizedBox.shrink(),
               ],
             );
           },
@@ -191,11 +240,53 @@ class _TemplateTaskAdminUiState extends State<TemplateTaskAdminUi> {
         });
         await newTemplates;
       },
-      child: ListView.builder(
+      child: ReorderableListView.builder(
         padding: const EdgeInsets.all(12),
         itemCount: filtered.length,
         itemBuilder: (context, index) {
-          return _buildTemplateCard(filtered[index], index, filialId);
+          final template = filtered[index];
+          return Container(
+            key: Key('template_${template.templateId}'),
+            child: _buildTemplateCard(template, index, filialId),
+          );
+        },
+        onReorder: (oldIndex, newIndex) async {
+          // MUHIM: oldIndex va newIndex bu list indekslari (0-dan boshlanadi)
+          // Lekin backend orderIndex kutadi (1-dan boshlanadi)
+
+          // Eski va yangi pozitsiyalarni olish
+          final oldOrderIndex = filtered[oldIndex].orderIndex;
+          final newOrderIndex = newIndex >= filtered.length
+              ? filtered.last.orderIndex
+              : filtered[newIndex].orderIndex;
+
+          print('🔄 Drag: List index $oldIndex → $newIndex');
+          print('📍 Order index $oldOrderIndex → $newOrderIndex');
+
+          // Backend ga yuborish
+          final success = await AdminTaskService().updateTaskReorder(
+            oldOrderIndex,
+            newOrderIndex,
+          );
+
+          if (success) {
+            print('✅ Reorder muvaffaqiyatli');
+            // Qayta yuklash
+            setState(() {
+              templatesFuture = AdminTaskService().fetchTemplates();
+            });
+          } else {
+            print('❌ Reorder muvaffaqiyatsiz');
+            // Xatolik haqida xabar
+            if (mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text('Tartibni o\'zgartirishda xatolik'),
+                  backgroundColor: Colors.red,
+                ),
+              );
+            }
+          }
         },
       ),
     );
@@ -213,42 +304,6 @@ class _TemplateTaskAdminUiState extends State<TemplateTaskAdminUi> {
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       child: InkWell(
         borderRadius: BorderRadius.circular(12),
-        onLongPress: () async {
-          final shouldDelete = await showDialog<bool>(
-            context: context,
-            builder: (context) => AlertDialog(
-              title: const Text('O\'chirish'),
-              content: Text(
-                'Ushbu shablonni o\'chirmoqchimisiz?\n"${template.task}"',
-              ),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.pop(context, false),
-                  child: const Text('Bekor qilish'),
-                ),
-                TextButton(
-                  onPressed: () => Navigator.pop(context, true),
-                  style: TextButton.styleFrom(foregroundColor: Colors.red),
-                  child: const Text('O\'chirish'),
-                ),
-              ],
-            ),
-          );
-
-          if (shouldDelete == true) {
-            final success = await AdminTaskService().deleteTask(
-              template.templateId,
-            );
-            if (success && mounted) {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Shablon o\'chirildi')),
-              );
-              setState(() {
-                templatesFuture = AdminTaskService().fetchTemplates();
-              });
-            }
-          }
-        },
         onTap: () {
           Navigator.push(
             context,
@@ -260,6 +315,7 @@ class _TemplateTaskAdminUiState extends State<TemplateTaskAdminUi> {
                   type: template.type,
                   filialId: currentFilialId,
                   days: template.days,
+                  notificationTime: template.notificationTime,
                   status: 1,
                 ),
               ),
@@ -283,7 +339,7 @@ class _TemplateTaskAdminUiState extends State<TemplateTaskAdminUi> {
                       borderRadius: BorderRadius.circular(8),
                     ),
                     child: Text(
-                      '#${template.templateId}',
+                      '#${template.templateId} [${template.orderIndex}]',
                       style: const TextStyle(
                         fontSize: 12,
                         fontWeight: FontWeight.bold,

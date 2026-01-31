@@ -11,7 +11,7 @@ abstract final class AppUrls {
   static const String roles = '$baseUrl/admin/roles/';
   static const String category = '$baseUrl/api/filials';
   static const String users = '$baseUrl/api/users';
+  static const String reorder = '$baseUrl/api/tasks/reorder';
 }
-
 
 //vidio alish shavad navasha mondan

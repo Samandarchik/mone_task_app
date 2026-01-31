@@ -1,16 +1,16 @@
 // lib/admin/ui/users_page.dart
 import 'package:flutter/material.dart';
+import 'package:mone_task_app/admin/model/filial_model.dart';
 import 'package:mone_task_app/admin/ui/add_worker.dart';
 import 'package:mone_task_app/admin/ui/dialog.dart';
 import 'package:mone_task_app/admin/ui/edit.dart';
 import 'package:mone_task_app/admin/ui/user_servise.dart';
-import 'package:mone_task_app/checker/service/task_worker_service.dart';
 import 'package:mone_task_app/core/context_extension.dart';
 import 'package:mone_task_app/worker/model/user_model.dart';
 
 class UsersPage extends StatefulWidget {
-  final List<CategoryModel> categoryModel;
-  const UsersPage({super.key, required this.categoryModel});
+  final List<FilialModel> filialModel;
+  const UsersPage({super.key, required this.filialModel});
 
   @override
   State<UsersPage> createState() => _UsersPageState();
@@ -129,7 +129,7 @@ class _UsersPageState extends State<UsersPage> {
                   },
                   onEdit: () {
                     context.push(
-                      EditUserPage(user: user, category: widget.categoryModel),
+                      EditUserPage(user: user, category: widget.filialModel),
                     );
                     _refreshUsers();
                   },

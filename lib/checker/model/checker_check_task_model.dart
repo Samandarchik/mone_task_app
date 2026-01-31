@@ -17,6 +17,7 @@ class CheckerCheckTaskModel {
     required this.type,
     required this.filialId,
     required this.status,
+    this.notificationTime,
     this.videoUrl,
     this.days,
     this.submittedBy,
@@ -32,6 +33,7 @@ class CheckerCheckTaskModel {
       filialId: json['filialId'],
       status: json['status'],
       videoUrl: json["videoUrl"],
+      notificationTime: json["notificationTime"] ?? "12:00",
       days: json["days"] != null ? List<int>.from(json["days"]) : null,
       submittedBy: json["submittedBy"],
       submittedAt: json["submittedAt"] != null
