@@ -27,6 +27,7 @@ final class TokenStorage {
 
   UserModel? getUserData() {
     final data = _baseStorage.getString(key: _user);
+    if (data.isEmpty) return null;
     return UserModel.fromJson(jsonDecode(data));
   }
 

@@ -58,10 +58,10 @@ class AdminTaskService {
     }
   }
 
-  Future<bool> updateTaskStatus(int taskId, int status) async {
+  Future<bool> updateTaskStatus(int taskId, int status, DateTime date) async {
     try {
       final response = await _dio.post(
-        "${AppUrls.tasks}/$taskId/check",
+        "${AppUrls.tasks}/$taskId/check/${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}",
         data: {"status": status},
       );
 
@@ -73,7 +73,7 @@ class AdminTaskService {
 
   Future<List<FilialModel>> fetchCategories() async {
     try {
-      final response = await _dio.get(AppUrls.category);
+      final response = await _dio.get(AppUrls.filial);
       return (response.data['data'] as List)
           .map((e) => FilialModel.fromJson(e))
           .toList();

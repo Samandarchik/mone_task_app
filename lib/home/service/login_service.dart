@@ -395,7 +395,7 @@ class _LoginPageState extends State<LoginPage> {
                           SizedBox(height: 20),
                         ],
                         Text(
-                          "app version: 0.0.7",
+                          "app version: 0.0.8",
                           style: TextStyle(fontSize: 12),
                         ),
                         SizedBox(height: 20),

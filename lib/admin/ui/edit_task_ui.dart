@@ -2,6 +2,7 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:mone_task_app/admin/model/edit_task_ui_model.dart';
 import 'package:mone_task_app/admin/service/task_worker_service.dart';
+import 'package:mone_task_app/admin/ui/add_admin_task.dart';
 import 'package:mone_task_app/checker/model/checker_check_task_model.dart';
 
 class EditTaskUi extends StatefulWidget {
@@ -21,10 +22,17 @@ class _EditTaskUiState extends State<EditTaskUi> {
   List<int> selectedWeekDays = [];
   List<int> selectedDays = [];
 
-  // Vaqt uchun (null bo'lishi mumkin)
+  // Vaqt uchun
   int? selectedHour;
   int? selectedMinute;
   bool showTimePicker = false;
+
+  // --- Category state ---
+  List<CategoryModel> categories = [];
+  int? selectedCategoryId;
+  bool categoriesLoading = true;
+  String? categoriesError;
+
   @override
   void initState() {
     super.initState();
@@ -35,13 +43,22 @@ class _EditTaskUiState extends State<EditTaskUi> {
     selectedDays = widget.task.days ?? [];
     selectedWeekDays = widget.task.days ?? [];
 
-    // notificationTime parse qilish
+    // notificationTime parse
     final time = widget.task.notificationTime;
     if (time != null && time != "null:null" && time.contains(':')) {
       final parts = time.split(':');
       selectedHour = int.tryParse(parts[0]);
       selectedMinute = int.tryParse(parts[1]);
     }
+    getCategories();
+  }
+
+  void getCategories() async {
+    final categoriesFuture = await AdminTaskService().loadCategories();
+    setState(() {
+      categories = categoriesFuture;
+      categoriesLoading = false;
+    });
   }
 
   @override
@@ -50,6 +67,112 @@ class _EditTaskUiState extends State<EditTaskUi> {
     super.dispose();
   }
 
+  Future<void> _addCategory(String name) async {
+    final success = await taskService.addCategory(name);
+    if (success) {
+      await AdminTaskService().loadCategories();
+      categoriesLoading = false;
+    }
+  }
+
+  Future<void> _deleteCategory(int id) async {
+    final success = await taskService.deleteCategory(id);
+    if (success) {
+      setState(() {
+        if (selectedCategoryId == id) {
+          selectedCategoryId = null;
+        }
+      });
+      await AdminTaskService().loadCategories();
+      categoriesLoading = false;
+    } else {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              "Category o'chirishda xatolik. Unga biriktirilgan userlar bo'lishi mumkin.",
+            ),
+          ),
+        );
+      }
+    }
+  }
+
+  // --- Dialog: Yangi category ---
+  Future<void> _showAddCategoryDialog() async {
+    final TextEditingController nameController = TextEditingController();
+
+    await showDialog<void>(
+      context: context,
+      builder: (ctx) {
+        return AlertDialog(
+          title: const Text("Yangi Category"),
+          content: TextField(
+            controller: nameController,
+            autofocus: true,
+            decoration: const InputDecoration(
+              labelText: "Category nomi",
+              border: OutlineInputBorder(),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text("Bekor"),
+            ),
+            TextButton(
+              onPressed: () async {
+                final name = nameController.text.trim();
+                if (name.isEmpty) {
+                  ScaffoldMessenger.of(ctx).showSnackBar(
+                    const SnackBar(content: Text("Iltimos, ism kiriting")),
+                  );
+                  return;
+                }
+                Navigator.pop(ctx);
+                await _addCategory(name);
+              },
+              child: const Text("Qo'shish"),
+            ),
+          ],
+        );
+      },
+    );
+
+    nameController.dispose();
+  }
+
+  // --- Confirm delete ---
+  Future<void> _confirmDeleteCategory(CategoryModel category) async {
+    final bool? confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) {
+        return AlertDialog(
+          title: const Text("O'chirish"),
+          content: Text(
+            "\"${category.name}\" categoryni o'chirishni istaysizmi?",
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text("Bekor"),
+            ),
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              style: TextButton.styleFrom(foregroundColor: Colors.red),
+              child: const Text("O'chirish"),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (confirmed == true) {
+      await _deleteCategory(category.id);
+    }
+  }
+
+  // --- Submit ---
   void _submitTask() {
     if (controller.text.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -71,13 +194,17 @@ class _EditTaskUiState extends State<EditTaskUi> {
       );
       return;
     }
-
+    if (selectedCategoryId == null || categories.isEmpty) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text("Kategoriyani tanlang")));
+      return;
+    }
     EditTaskUiModel model = EditTaskUiModel(
       taskId: widget.task.taskId,
       taskType: selectedType ?? 1,
       filialsId: selectedFilials,
       task: controller.text,
-
       days: selectedType == 1
           ? null
           : selectedType == 2
@@ -85,6 +212,9 @@ class _EditTaskUiState extends State<EditTaskUi> {
           : selectedDays,
       hour: selectedHour,
       minute: selectedMinute,
+      category: categories[selectedCategoryId ?? 0].name,
+      // categoryId model'ga qo'shilgan bo'lishi kerak
+      // categoryId: selectedCategoryId,
     );
 
     taskService.updateTaskStatus(model);
@@ -111,6 +241,48 @@ class _EditTaskUiState extends State<EditTaskUi> {
                 maxLines: 3,
               ),
               const SizedBox(height: 20),
+
+              // ==================== CATEGORY ====================
+              const Text(
+                "Категория:",
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 8),
+
+              if (categoriesLoading)
+                const Center(child: CircularProgressIndicator.adaptive())
+              else if (categoriesError != null)
+                Row(
+                  children: [
+                    Text(
+                      "Xatolik: $categoriesError",
+                      style: const TextStyle(color: Colors.red),
+                    ),
+                    const SizedBox(width: 8),
+                    TextButton(
+                      onPressed: () async {
+                        await AdminTaskService().loadCategories();
+                        categoriesLoading = false;
+                      },
+                      child: const Text("Qayta"),
+                    ),
+                  ],
+                )
+              else
+                _buildCategoryDropdown(),
+
+              const SizedBox(height: 8),
+
+              Align(
+                alignment: Alignment.centerLeft,
+                child: TextButton.icon(
+                  onPressed: _showAddCategoryDialog,
+                  icon: const Icon(Icons.add_circle_outline, size: 18),
+                  label: const Text("Yangi category qo'shish"),
+                ),
+              ),
+              const SizedBox(height: 12),
+              // ==================== END CATEGORY ====================
 
               // Tip tanlash
               const Text(
@@ -159,7 +331,6 @@ class _EditTaskUiState extends State<EditTaskUi> {
                       final bool isSelected = selectedWeekDays.contains(
                         weekDay['id'],
                       );
-
                       return Card(
                         margin: const EdgeInsets.only(bottom: 8),
                         child: CheckboxListTile(
@@ -233,7 +404,6 @@ class _EditTaskUiState extends State<EditTaskUi> {
               ),
               const SizedBox(height: 10),
 
-              // Vaqt ko'rsatish yoki tanlash tugmasi
               GestureDetector(
                 onTap: () {
                   setState(() {
@@ -295,7 +465,6 @@ class _EditTaskUiState extends State<EditTaskUi> {
               ),
               const SizedBox(height: 15),
 
-              // Vaqt picker (faqat ochilganda ko'rinadi)
               if (showTimePicker)
                 Container(
                   height: 200,
@@ -344,6 +513,50 @@ class _EditTaskUiState extends State<EditTaskUi> {
           ),
         ),
       ),
+    );
+  }
+
+  // --- Category Dropdown ---
+  Widget _buildCategoryDropdown() {
+    return DropdownButtonFormField<int>(
+      value: selectedCategoryId,
+      isExpanded: true,
+      decoration: const InputDecoration(border: OutlineInputBorder()),
+      hint: const Text("Выбирать"),
+      items: categories
+          .map(
+            (cat) => DropdownMenuItem<int>(
+              value: cat.id,
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Flexible(
+                    child: Text(cat.name, overflow: TextOverflow.ellipsis),
+                  ),
+                  const SizedBox(width: 8),
+                  GestureDetector(
+                    onTap: () {
+                      FocusManager.instance.primaryFocus?.unfocus();
+                      WidgetsBinding.instance.addPostFrameCallback((_) {
+                        _confirmDeleteCategory(cat);
+                      });
+                    },
+                    child: const Icon(
+                      Icons.delete_outline,
+                      size: 18,
+                      color: Colors.red,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          )
+          .toList(),
+      onChanged: (value) {
+        setState(() {
+          selectedCategoryId = value;
+        });
+      },
     );
   }
 }

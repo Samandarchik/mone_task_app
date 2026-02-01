@@ -1,10 +1,11 @@
 import 'package:flutter/material.dart';
-import 'package:mone_task_app/admin/ui/admin_ui.dart';
 import 'package:mone_task_app/core/di/di.dart';
+import 'package:mone_task_app/home/ui/splash_screen.dart';
+import 'package:mone_task_app/local_not_service.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  // await Firebase.initializeApp();
+  await NotificationService.initialize();
 
   await setupInit();
   runApp(const MyApp());
@@ -15,11 +16,6 @@ class MyApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'Camera Switch Video',
-      debugShowCheckedModeBanner: false,
-      theme: ThemeData(primarySwatch: Colors.blue, useMaterial3: true),
-      home: AdminTaskUi(),
-    );
+    return MaterialApp(debugShowCheckedModeBanner: false, home: SpleshScreen());
   }
 }

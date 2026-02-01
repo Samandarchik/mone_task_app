@@ -2,10 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:mone_task_app/admin/ui/admin_ui.dart';
 import 'package:mone_task_app/checker/ui/checker_home_ui.dart';
 import 'package:mone_task_app/core/context_extension.dart';
+import 'package:mone_task_app/core/data/local/token_storage.dart';
+import 'package:mone_task_app/core/di/di.dart';
 import 'package:mone_task_app/home/service/check_version.dart';
 import 'package:mone_task_app/home/service/login_service.dart';
+import 'package:mone_task_app/worker/model/user_model.dart';
 import 'package:mone_task_app/worker/ui/task_worker_ui.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 
 class SpleshScreen extends StatefulWidget {
   const SpleshScreen({super.key});
@@ -15,12 +17,16 @@ class SpleshScreen extends StatefulWidget {
 }
 
 class SpleshScreenState extends State<SpleshScreen> {
+  TokenStorage tokenStorage = sl<TokenStorage>();
+  UserModel? userModel;
+  String? token;
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       bool needsUpdate = await VersionChecker.checkVersion(context);
-
+      token = await tokenStorage.getToken();
+      userModel = tokenStorage.getUserData();
       // Agar update kerak bo'lmasa, token tekshiradi
       if (!needsUpdate) {
         _loadSavedAccounts();
@@ -29,20 +35,16 @@ class SpleshScreenState extends State<SpleshScreen> {
   }
 
   void _loadSavedAccounts() async {
-    SharedPreferences prefs = await SharedPreferences.getInstance();
-    String? token = prefs.getString("access_token");
-
-    if (token == null) {
+    if (token == null || userModel == null) {
       context.pushAndRemove(LoginPage());
       return;
     }
-    String? role = prefs.getString("role");
 
-    if (role == "super_admin") {
+    if (userModel?.role == "super_admin") {
       context.pushAndRemove(AdminTaskUi());
-    } else if (role == "checker") {
+    } else if (userModel?.role == "checker") {
       context.pushAndRemove(CheckerHomeUi());
-    } else if (role != null) {
+    } else if (userModel?.role == "worker") {
       context.pushAndRemove(TaskWorkerUi());
     } else {
       context.pushAndRemove(LoginPage());

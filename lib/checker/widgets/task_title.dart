@@ -68,29 +68,6 @@ class _TaskListWidgetState extends State<TaskListWidget> {
     return '${videosDir.path}/$fileName';
   }
 
-  // Videoni cache'dan olish yoki yuklab olish
-  Future<String> _getCachedOrDownloadVideo(String videoUrl) async {
-    // Agar cache'da bo'lsa, local path qaytarish
-    if (cachedVideos.containsKey(videoUrl)) {
-      final localPath = cachedVideos[videoUrl]!;
-      final file = File(localPath);
-      if (await file.exists() && await file.length() > 0) {
-        return localPath;
-      }
-    }
-
-    // Agar hozir yuklanayotgan bo'lsa, network URL qaytarish
-    if (downloadingVideos.contains(videoUrl)) {
-      return videoUrl;
-    }
-
-    // Yuklab olishni boshlash (background'da)
-    _downloadVideoInBackground(videoUrl);
-
-    // Hozircha network URL qaytarish
-    return videoUrl;
-  }
-
   // Video'ni background'da yuklab olish
   Future<void> _downloadVideoInBackground(String videoUrl) async {
     if (downloadingVideos.contains(videoUrl)) {
@@ -343,6 +320,7 @@ class _TaskListItemState extends State<TaskListItem> {
             final bool isDelete = await AdminTaskService().updateTaskStatus(
               task.taskId,
               1,
+              widget.selectedDate,
             );
             if (isDelete) {
               widget.onRefresh();
@@ -350,15 +328,17 @@ class _TaskListItemState extends State<TaskListItem> {
           },
           onTap: () async {
             if (task.videoUrl != null && task.videoUrl!.isNotEmpty) {
-              if (widget.selectedDate.day == DateTime.now().day) {
-                final bool isSucsess = await AdminTaskService()
-                    .updateTaskStatus(task.taskId, 3);
-                if (isSucsess && mounted) {
-                  setState(() {
-                    task.status = 3;
-                  });
-                }
+              final bool isSucsess = await AdminTaskService().updateTaskStatus(
+                task.taskId,
+                3,
+                widget.selectedDate,
+              );
+              if (isSucsess && mounted) {
+                setState(() {
+                  task.status = 3;
+                });
               }
+
               widget.onShowVideoPlayer(task.videoUrl!);
             }
           },

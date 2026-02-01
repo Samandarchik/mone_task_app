@@ -3,6 +3,7 @@ class CheckerCheckTaskModel {
   String task;
   String? submittedBy;
   DateTime? submittedAt;
+  String? category;
   String? date;
   int type;
   int filialId;
@@ -22,6 +23,7 @@ class CheckerCheckTaskModel {
     this.days,
     this.submittedBy,
     this.submittedAt,
+    this.category,
     this.date,
   });
 
@@ -32,6 +34,7 @@ class CheckerCheckTaskModel {
       type: json['type'],
       filialId: json['filialId'],
       status: json['status'],
+      category: json['category'],
       videoUrl: json["videoUrl"],
       notificationTime: json["notificationTime"] ?? "12:00",
       days: json["days"] != null ? List<int>.from(json["days"]) : null,

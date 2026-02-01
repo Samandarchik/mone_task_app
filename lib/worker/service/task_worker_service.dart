@@ -4,12 +4,13 @@ import 'package:dio/dio.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:mone_task_app/core/constants/urls.dart';
 import 'package:mone_task_app/core/di/di.dart';
+import 'package:mone_task_app/not_get_service.dart';
 import 'package:mone_task_app/worker/model/response_task_model.dart';
 import 'package:mone_task_app/worker/model/task_worker_model.dart';
 
 class TaskWorkerService {
   final Dio _dio = sl<Dio>();
-
+  final apiService = ApiService();
   Future<List<TaskWorkerModel>> fetchTasks() async {
     try {
       final response = await _dio.get(AppUrls.tasks);
@@ -23,6 +24,8 @@ class TaskWorkerService {
       if (data is! List) {
         throw Exception("Server noto'g'ri format qaytardi");
       }
+
+      await apiService.fetchAndScheduleNotifications();
 
       return data.map((e) => TaskWorkerModel.fromJson(e)).toList();
     } catch (e) {

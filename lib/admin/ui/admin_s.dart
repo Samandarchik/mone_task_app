@@ -334,6 +334,7 @@ class _AdminTaskListItemState extends State<AdminTaskListItem> {
               final bool isSucsess = await AdminTaskService().updateTaskStatus(
                 task.taskId,
                 3,
+                widget.selectedDate,
               );
               if (isSucsess && mounted) {
                 setState(() {

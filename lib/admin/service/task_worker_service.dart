@@ -4,6 +4,7 @@ import 'package:mone_task_app/admin/model/admin_task_model.dart';
 import 'package:mone_task_app/admin/model/all_task_model.dart';
 import 'package:mone_task_app/admin/model/edit_task_ui_model.dart';
 import 'package:mone_task_app/admin/model/filial_model.dart';
+import 'package:mone_task_app/admin/ui/add_admin_task.dart';
 import 'package:mone_task_app/core/constants/urls.dart';
 import 'package:mone_task_app/core/di/di.dart';
 
@@ -88,7 +89,7 @@ class AdminTaskService {
 
   Future<List<FilialModel>> fetchCategories() async {
     try {
-      final response = await _dio.get(AppUrls.category);
+      final response = await _dio.get(AppUrls.filial);
       return (response.data['data'] as List)
           .map((e) => FilialModel.fromJson(e))
           .toList();
@@ -104,6 +105,83 @@ class AdminTaskService {
       return response.statusCode == 200;
     } catch (e) {
       return false;
+    }
+  }
+
+  Future<bool> addFilial(String filial) async {
+    try {
+      final response = await _dio.post(AppUrls.filial, data: {"name": filial});
+      return response.statusCode == 200 || response.statusCode == 201;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  Future<bool> deleteFilial(int filial) async {
+    try {
+      final response = await _dio.delete("${AppUrls.filial}/$filial");
+      return response.statusCode == 200 || response.statusCode == 201;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  Future<bool> updateFilial(int filial, String name) async {
+    try {
+      final response = await _dio.put(
+        "${AppUrls.filial}/$filial",
+        data: {"name": name},
+      );
+      return response.statusCode == 200 || response.statusCode == 201;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  Future<List<CategoryModel>> fetchCategoriesList() async {
+    try {
+      final response = await _dio.get(AppUrls.categories); // category URL
+      return (response.data['data'] as List)
+          .map((e) => CategoryModel.fromJson(e))
+          .toList();
+    } catch (e) {
+      rethrow;
+    }
+  }
+
+  Future<bool> addCategory(String name) async {
+    try {
+      final response = await _dio.post(
+        AppUrls.categories,
+        data: {"name": name},
+      );
+      return response.statusCode == 200 || response.statusCode == 201;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  Future<bool> deleteCategory(int id) async {
+    try {
+      final response = await _dio.delete("${AppUrls.categories}/$id");
+      return response.statusCode == 200;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  // --- Category API ---
+  Future<List<CategoryModel>> loadCategories() async {
+    try {
+      final response = await _dio.get(AppUrls.categories);
+      if (response.data == null) {
+        return [];
+      }
+      return (response.data['data'] as List)
+          .map((e) => CategoryModel.fromJson(e))
+          .toList();
+    } catch (e) {
+      return [];
     }
   }
 }
