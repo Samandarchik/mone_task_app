@@ -4,9 +4,15 @@ import 'package:mone_task_app/core/di/di.dart';
 
 class LogOutService {
   Dio dio = sl<Dio>();
-  Future<void> logOut() async {
+  Future<bool> logOut() async {
     try {
-      await dio.post(AppUrls.logOut);
-    } catch (e) {}
+      final response = await dio.post(AppUrls.logOut);
+      if (response.statusCode == 200) {
+        return true;
+      }
+      return false;
+    } catch (e) {
+      return false;
+    }
   }
 }
