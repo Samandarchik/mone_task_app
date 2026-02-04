@@ -190,13 +190,11 @@ class _TaskWorkerUiState extends State<TaskWorkerUi> {
             ),
           IconButton(
             onPressed: () async {
-              final bool result = await LogOutService().logOut();
+              await LogOutService().logOut();
 
-              if (result) {
-                TokenStorage tokenStorage = sl<TokenStorage>();
-                tokenStorage.removeToken();
-                context.pushAndRemove(LoginPage());
-              }
+              tokenStorage.removeToken();
+              tokenStorage.putUserData({});
+              context.pushAndRemove(LoginPage());
             },
             icon: const Icon(Icons.logout),
           ),

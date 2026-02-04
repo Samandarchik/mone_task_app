@@ -1,6 +1,7 @@
 import 'package:dio/dio.dart';
 import 'package:mone_task_app/core/constants/urls.dart';
 import 'package:mone_task_app/core/network/print.dart';
+import 'package:mone_task_app/main.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:talker_dio_logger/talker_dio_logger_interceptor.dart';
 import 'package:talker_dio_logger/talker_dio_logger_settings.dart';
@@ -89,16 +90,21 @@ class AppInterceptors extends QueuedInterceptorsWrapper {
 
   @override
   void onError(DioException err, ErrorInterceptorHandler handler) async {
-    pPrint('onError: ${err.message}', 4);
+    print("onError: ${err.message}");
 
-    dio.post(
-      "https://api.telegram.org/bot8597207666:AAERNUsWS8ud3qnnze1CjqN5erRLRhik07k/sendMessage",
-      data: {
-        "chat_id": "1066137436",
-        "text":
-            "error status code: ${err.response?.statusCode}\nurl: ${err.requestOptions.uri}\nrequest data: ${err.requestOptions.data}\n\nmessage: ${err.message}",
-      },
-    );
+    if (err.response?.statusCode == 401) {
+      // Tokenni o'chirish
+      tokenStorage.removeToken();
+      tokenStorage.putUserData({});
+
+      // Login sahifasiga o'tkazish
+      navigatorKey.currentState?.pushNamedAndRemoveUntil(
+        "/login",
+        (route) => false,
+      );
+    }
+
+    return handler.next(err);
   }
 }
 

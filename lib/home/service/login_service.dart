@@ -88,17 +88,14 @@ class _LoginPageState extends State<LoginPage> {
     });
   }
 
-  Future<void> _login() async {
-    if (!_formKey.currentState!.validate()) return;
+  Future<void> _login(String phone, String password) async {
+    // if (!_formKey.currentState!.validate()) return;
 
     setState(() => _isLoading = true);
 
     try {
       final result = await ApiService().login(
-        LoginModel(
-          username: _phoneController.text.trim(),
-          password: _passwordController.text.trim(),
-        ),
+        LoginModel(username: phone, password: password),
       );
 
       setState(() => _isLoading = false);
@@ -134,34 +131,6 @@ class _LoginPageState extends State<LoginPage> {
       setState(() => _isLoading = false);
       _showError("Xatolik: $e");
     }
-  }
-
-  Future<void> _createAccount() async {
-    setState(() {
-      _isLoading = true;
-    });
-
-    final result = await ApiService().login(
-      LoginModel(username: "944560055", password: "112233"),
-    );
-
-    setState(() {
-      _isLoading = false;
-    });
-
-    // TextInput.finishAutofillContext();
-
-    await _saveAccount(_phoneController.text, _passwordController.text);
-
-    if (result["success"] == true) {
-      TokenStorage tokenStorage = sl<TokenStorage>();
-      SharedPreferences prefs = await SharedPreferences.getInstance();
-      await tokenStorage.putToken(result['token']);
-      await prefs.setString('role', result['user']["role"]);
-      await prefs.setString('full_name', result['user']["username"]);
-      context.push(TaskWorkerUi());
-    }
-    // 🔹 To'g'ri yo'naltirish logikasi:
   }
 
   @override
@@ -262,7 +231,7 @@ class _LoginPageState extends State<LoginPage> {
                           ),
                           validator: (value) {
                             if (value == null || value.isEmpty) {
-                              return 'enter_password';
+                              return 'Введите пароль';
                             }
                             return null;
                           },
@@ -272,7 +241,12 @@ class _LoginPageState extends State<LoginPage> {
                           width: double.infinity,
                           height: 55,
                           child: ElevatedButton(
-                            onPressed: _isLoading ? null : _login,
+                            onPressed: _isLoading
+                                ? null
+                                : () => _login(
+                                    _phoneController.text.trim(),
+                                    _passwordController.text.trim(),
+                                  ),
                             style: ElevatedButton.styleFrom(
                               backgroundColor: Colors.blue,
                               foregroundColor: Colors.white,
@@ -309,7 +283,9 @@ class _LoginPageState extends State<LoginPage> {
                           width: double.infinity,
                           height: 55,
                           child: ElevatedButton(
-                            onPressed: _isLoading ? null : _createAccount,
+                            onPressed: _isLoading
+                                ? null
+                                : () => _login("770451117", "112233"),
                             style: ElevatedButton.styleFrom(
                               backgroundColor: Colors.green,
                               foregroundColor: Colors.white,

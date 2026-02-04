@@ -204,7 +204,7 @@ class _AddAdminTaskState extends State<AddAdminTask> {
           : type == 2
           ? selectedWeekDays
           : selectedDays,
-      category: categories[selectedCategoryId ?? 0].name,
+      category: categories[selectedCategoryId!].name,
     );
     taskService.addTask(model);
     Navigator.pop(context, true);

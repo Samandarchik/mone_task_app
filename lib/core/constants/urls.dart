@@ -1,6 +1,6 @@
 abstract final class AppUrls {
-  static const String baseUrl = "https://task.monebakeryuz.uz";
-  // static const String baseUrl = "http://172.20.10.4:8000";
+  // static const String baseUrl = "https://task.monebakeryuz.uz";
+  static const String baseUrl = "http://192.168.0.107:8000";
   static const String login = '$baseUrl/api/auth/login';
   static const String register = '$baseUrl/api/auth/register';
   static const String logOut = '$baseUrl/api/auth/logout';
