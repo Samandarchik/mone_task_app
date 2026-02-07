@@ -361,6 +361,10 @@ class _AdminTaskListItemState extends State<AdminTaskListItem> {
                         fontWeight: FontWeight.bold,
                       ),
                     ),
+                    if (task.submittedBy != null)
+                      Text(
+                        "${task.submittedBy} | ${task.submittedAt?.toLocal().hour.toString().padLeft(2, '0')}:${task.submittedAt?.minute.toString().padLeft(2, '0')}",
+                      ),
                     const SizedBox(height: 4),
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,

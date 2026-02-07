@@ -26,6 +26,7 @@ class SpleshScreenState extends State<SpleshScreen> {
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       bool needsUpdate = await VersionChecker.checkVersion(context);
       token = await tokenStorage.getToken();
+      print("token: $token");
       userModel = tokenStorage.getUserData();
       // Agar update kerak bo'lmasa, token tekshiradi
       if (!needsUpdate) {
@@ -34,12 +35,11 @@ class SpleshScreenState extends State<SpleshScreen> {
     });
   }
 
-  void _loadSavedAccounts() async {
+  void _loadSavedAccounts() {
     if (token == null || userModel == null) {
       context.pushAndRemove(LoginPage());
       return;
     }
-
     if (userModel?.role == "super_admin") {
       context.pushAndRemove(AdminTaskUi());
     } else if (userModel?.role == "checker") {

@@ -359,18 +359,8 @@ class _TaskListItemState extends State<TaskListItem> {
                         ),
                       ),
                       if (task.submittedBy != null)
-                        Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              task.submittedBy!,
-                              style: const TextStyle(fontSize: 13),
-                            ),
-                            Text(
-                              "${task.submittedAt!.hour}:${task.submittedAt!.minute}",
-                              style: const TextStyle(fontSize: 13),
-                            ),
-                          ],
+                        Text(
+                          "${task.submittedBy} | ${task.submittedAt?.toLocal().hour.toString().padLeft(2, '0')}:${task.submittedAt?.minute.toString().padLeft(2, '0')}",
                         ),
                       const SizedBox(height: 2),
                       Row(

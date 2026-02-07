@@ -102,7 +102,17 @@ class _AdminTaskUiState extends State<AdminTaskUi> {
         // Kategoriyalarda xatolik bo'lsa
         if (categorySnapshot.hasError) {
           return Scaffold(
-            appBar: AppBar(title: Text(user?.username ?? "")),
+            appBar: AppBar(
+              leading: IconButton(
+                icon: const Icon(Icons.logout),
+                onPressed: () {
+                  tokenStorage.removeToken();
+                  tokenStorage.putUserData({});
+                  context.pushAndRemove(LoginPage());
+                },
+              ),
+              title: Text(user?.username ?? ""),
+            ),
             body: Center(
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
@@ -140,6 +150,10 @@ class _AdminTaskUiState extends State<AdminTaskUi> {
           initialIndex: 0,
           child: Scaffold(
             appBar: AppBar(
+              leading: IconButton(
+                icon: const Icon(Icons.logout),
+                onPressed: _handleLogout,
+              ),
               actions: [
                 GestureDetector(
                   onTap: () {
@@ -170,10 +184,7 @@ class _AdminTaskUiState extends State<AdminTaskUi> {
                 ),
               ],
               title: Text(user?.username ?? ""),
-              leading: IconButton(
-                icon: const Icon(Icons.logout),
-                onPressed: _handleLogout,
-              ),
+
               bottom: TabBar(
                 padding: EdgeInsets.zero,
                 isScrollable: true,

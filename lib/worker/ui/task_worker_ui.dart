@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:mone_task_app/checker/ui/player.dart';
+import 'package:mone_task_app/core/constants/urls.dart';
 import 'package:mone_task_app/core/context_extension.dart';
 import 'package:mone_task_app/core/data/local/token_storage.dart';
 import 'package:mone_task_app/core/di/di.dart';
@@ -218,7 +220,16 @@ class _TaskWorkerUiState extends State<TaskWorkerUi> {
             child: ListView.builder(
               itemCount: tasks.length,
               itemBuilder: (_, i) => InkWell(
-                onTap: _isRecording ? null : () => _showVideoRecorder(tasks[i]),
+                onTap: tasks[i].videoUrl == null
+                    ? null
+                    : () => showDialog(
+                        context: context,
+                        barrierColor: Colors.black87,
+                        builder: (context) => CircleVideoPlayer(
+                          videoUrl: "${AppUrls.baseUrl}/${tasks[i].videoUrl}",
+                          isLocal: false,
+                        ),
+                      ),
                 child: Container(
                   padding: const EdgeInsets.symmetric(
                     vertical: 12,
@@ -246,14 +257,25 @@ class _TaskWorkerUiState extends State<TaskWorkerUi> {
                                 fontSize: 16,
                               ),
                             ),
+                            if (tasks[i].submittedBy != null)
+                              Text(
+                                "${tasks[i].submittedBy} | ${tasks[i].submittedAt?.toLocal().hour.toString().padLeft(2, '0')}:${tasks[i].submittedAt?.minute.toString().padLeft(2, '0')}",
+                              ),
                           ],
                         ),
                       ),
-                      Icon(
-                        _isRecording
-                            ? Icons.fiber_manual_record
-                            : Icons.videocam,
-                        color: _isRecording ? Colors.red : Colors.grey.shade600,
+                      IconButton(
+                        onPressed: _isRecording
+                            ? null
+                            : () => _showVideoRecorder(tasks[i]),
+                        icon: Icon(
+                          _isRecording
+                              ? Icons.fiber_manual_record
+                              : Icons.videocam,
+                          color: _isRecording
+                              ? Colors.red
+                              : Colors.grey.shade600,
+                        ),
                       ),
                     ],
                   ),
