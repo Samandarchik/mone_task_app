@@ -5,7 +5,6 @@ import 'package:mone_task_app/admin/ui/add_worker.dart';
 import 'package:mone_task_app/admin/ui/dialog.dart';
 import 'package:mone_task_app/admin/ui/edit.dart';
 import 'package:mone_task_app/admin/ui/user_servise.dart';
-import 'package:mone_task_app/core/context_extension.dart';
 import 'package:mone_task_app/worker/model/user_model.dart';
 
 class UsersPage extends StatefulWidget {
@@ -62,7 +61,7 @@ class _UsersPageState extends State<UsersPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Foydalanuvchilar'),
+        title: const Text('Пользователи'),
         actions: [
           IconButton(onPressed: _refreshUsers, icon: const Icon(Icons.refresh)),
         ],
@@ -85,7 +84,7 @@ class _UsersPageState extends State<UsersPage> {
                   const SizedBox(height: 16),
                   ElevatedButton(
                     onPressed: _refreshUsers,
-                    child: const Text('Qayta urinish'),
+                    child: const Text('Повторить попытку'),
                   ),
                 ],
               ),
@@ -127,12 +126,22 @@ class _UsersPageState extends State<UsersPage> {
                       }
                     }
                   },
-                  onEdit: () {
-                    context.push(
-                      EditUserPage(user: user, category: widget.filialModel),
+                  onEdit: () async {
+                    final result = await Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => EditUserPage(
+                          user: user,
+                          category: widget.filialModel,
+                        ),
+                      ),
                     );
-                    _refreshUsers();
+
+                    if (result == true) {
+                      _refreshUsers();
+                    }
                   },
+
                   getRoleText: _getRoleText,
                   getRoleColor: _getRoleColor,
                 );

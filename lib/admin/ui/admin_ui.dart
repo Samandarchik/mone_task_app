@@ -35,7 +35,7 @@ class _AdminTaskUiState extends State<AdminTaskUi> {
     super.initState();
     user = tokenStorage.getUserData();
     tasksFuture = AdminTaskService().fetchTasks(selectedDate);
-    filialModel = AdminTaskService().fetchCategories();
+    filialModel = AdminTaskService().fetchFilials();
   }
 
   void _showCircleVideoPlayer(String videoPath) async {
@@ -53,7 +53,7 @@ class _AdminTaskUiState extends State<AdminTaskUi> {
 
   void _refreshCategories() {
     setState(() {
-      filialModel = AdminTaskService().fetchCategories();
+      filialModel = AdminTaskService().fetchFilials();
     });
   }
 

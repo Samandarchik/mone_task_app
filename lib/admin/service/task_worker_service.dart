@@ -184,4 +184,16 @@ class AdminTaskService {
       return [];
     }
   }
+
+  Future<bool> updateCategory(int id, String name) async {
+    try {
+      final response = await _dio.put(
+        "${AppUrls.categories}/$id",
+        data: {"name": name},
+      );
+      return response.statusCode == 200;
+    } catch (e) {
+      return false;
+    }
+  }
 }

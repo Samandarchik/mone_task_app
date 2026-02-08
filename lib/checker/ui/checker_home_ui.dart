@@ -31,7 +31,7 @@ class _CheckerHomeUiState extends State<CheckerHomeUi> {
     super.initState();
     user = tokenStorage.getUserData();
     tasksFuture = AdminTaskService().fetchTasks(selectedDate);
-    categoriesFuture = AdminTaskService().fetchCategories();
+    categoriesFuture = AdminTaskService().fetchFilials();
   }
 
   void _showCircleVideoPlayer(String videoPath) async {
@@ -83,7 +83,7 @@ class _CheckerHomeUiState extends State<CheckerHomeUi> {
                   ElevatedButton(
                     onPressed: () {
                       setState(() {
-                        categoriesFuture = AdminTaskService().fetchCategories();
+                        categoriesFuture = AdminTaskService().fetchFilials();
                       });
                     },
                     child: const Text('Qayta urinish'),

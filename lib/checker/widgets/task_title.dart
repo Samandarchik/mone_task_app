@@ -352,7 +352,7 @@ class _TaskListItemState extends State<TaskListItem> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        task.task,
+                        "${task.taskId}. ${task.task}",
                         style: const TextStyle(
                           fontSize: 16,
                           fontWeight: FontWeight.bold,

@@ -2,6 +2,7 @@
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:mone_task_app/admin/model/filial_model.dart';
+import 'package:mone_task_app/admin/ui/add_admin_task.dart';
 import 'package:mone_task_app/admin/ui/user_servise.dart';
 import 'package:mone_task_app/checker/service/task_worker_service.dart';
 import 'package:mone_task_app/worker/model/user_model.dart';
@@ -23,7 +24,8 @@ class _EditUserPageState extends State<EditUserPage> {
   late List<String> _selectedCategories;
 
   final UserService _userService = UserService();
-  late Future<List<FilialModel>> _categoriesFuture;
+  late Future<List<FilialModel>> filial;
+  late Future<List<CategoryModel>> categories;
 
   bool _isLoading = false;
 
@@ -34,7 +36,8 @@ class _EditUserPageState extends State<EditUserPage> {
     _selectedRole = widget.user.role;
     _selectedFilialIds = widget.user.filialIds ?? [];
     _selectedCategories = widget.user.categories ?? [];
-    _categoriesFuture = AdminTaskService().fetchCategories();
+    filial = AdminTaskService().fetchFilials();
+    categories = AdminTaskService().fetchCategories();
   }
 
   @override
@@ -111,14 +114,19 @@ class _EditUserPageState extends State<EditUserPage> {
             IconButton(onPressed: _saveUser, icon: const Icon(Icons.check)),
         ],
       ),
-      body: FutureBuilder<List<FilialModel>>(
-        future: _categoriesFuture,
+      body: FutureBuilder<List<dynamic>>(
+        future: Future.wait([filial, categories]),
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
             return const Center(child: CircularProgressIndicator.adaptive());
           }
 
-          final categories = snapshot.data ?? [];
+          if (!snapshot.hasData) {
+            return const Center(child: Text('Ma\'lumot yuklanmadi'));
+          }
+
+          final filials = snapshot.data![0] as List<FilialModel>;
+          final categoryList = snapshot.data![1] as List<CategoryModel>;
 
           return SingleChildScrollView(
             padding: const EdgeInsets.all(16),
@@ -165,16 +173,21 @@ class _EditUserPageState extends State<EditUserPage> {
                 ),
                 const SizedBox(height: 16),
 
-                // Filiallar (faqat worker va checker uchun)
+                // Filiallar (faqat worker uchun)
                 if (_selectedRole == 'worker') ...[
-                  const Text(
-                    'Филиал',
-                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                  Center(
+                    child: const Text(
+                      'Филиал',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
                   ),
                   const SizedBox(height: 8),
-                  ...categories.map((category) {
+                  ...filials.map((filial) {
                     final isSelected = _selectedFilialIds.contains(
-                      category.filialId,
+                      filial.filialId,
                     );
 
                     return Row(
@@ -184,9 +197,66 @@ class _EditUserPageState extends State<EditUserPage> {
                             onTap: () {
                               setState(() {
                                 if (!isSelected) {
-                                  _selectedFilialIds.add(category.filialId);
+                                  _selectedFilialIds.add(filial.filialId);
                                 } else {
-                                  _selectedFilialIds.remove(category.filialId);
+                                  _selectedFilialIds.remove(filial.filialId);
+                                }
+                              });
+                            },
+                            child: Padding(
+                              padding: const EdgeInsets.symmetric(vertical: 8),
+                              child: Text(
+                                filial.name,
+                                style: const TextStyle(fontSize: 16),
+                              ),
+                            ),
+                          ),
+                        ),
+                        CupertinoSwitch(
+                          value: isSelected,
+                          onChanged: (value) {
+                            setState(() {
+                              if (value == true) {
+                                _selectedFilialIds.add(filial.filialId);
+                              } else {
+                                _selectedFilialIds.remove(filial.filialId);
+                              }
+                            });
+                          },
+                        ),
+                      ],
+                    );
+                  }),
+                  const SizedBox(height: 16),
+                ],
+
+                // Categories (faqat worker uchun)
+                if (_selectedRole == 'worker') ...[
+                  Center(
+                    child: const Text(
+                      'Категории',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  ...categoryList.map((category) {
+                    final isSelected = _selectedCategories.contains(
+                      category.name,
+                    );
+
+                    return Row(
+                      children: [
+                        Expanded(
+                          child: GestureDetector(
+                            onTap: () {
+                              setState(() {
+                                if (!isSelected) {
+                                  _selectedCategories.add(category.name);
+                                } else {
+                                  _selectedCategories.remove(category.name);
                                 }
                               });
                             },
@@ -204,9 +274,9 @@ class _EditUserPageState extends State<EditUserPage> {
                           onChanged: (value) {
                             setState(() {
                               if (value == true) {
-                                _selectedFilialIds.add(category.filialId);
+                                _selectedCategories.add(category.name);
                               } else {
-                                _selectedFilialIds.remove(category.filialId);
+                                _selectedCategories.remove(category.name);
                               }
                             });
                           },
@@ -215,44 +285,7 @@ class _EditUserPageState extends State<EditUserPage> {
                     );
                   }),
                   const SizedBox(height: 16),
-                ],
-
-                // Categories (faqat worker uchun)
-                if (_selectedRole == 'worker') ...[
-                  const Text(
-                    'Kategoriyalar',
-                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-                  ),
-                  const SizedBox(height: 8),
-                  TextField(
-                    decoration: const InputDecoration(
-                      labelText: 'Kategoriya qo\'shish',
-                      border: OutlineInputBorder(),
-                      hintText: 'Shef Povar, Ofitsiant...',
-                    ),
-                    onSubmitted: (value) {
-                      if (value.trim().isNotEmpty &&
-                          !_selectedCategories.contains(value.trim())) {
-                        setState(() {
-                          _selectedCategories.add(value.trim());
-                        });
-                      }
-                    },
-                  ),
-                  const SizedBox(height: 8),
-                  Wrap(
-                    spacing: 8,
-                    children: _selectedCategories.map((category) {
-                      return Chip(
-                        label: Text(category),
-                        onDeleted: () {
-                          setState(() {
-                            _selectedCategories.remove(category);
-                          });
-                        },
-                      );
-                    }).toList(),
-                  ),
+                  ElevatedButton(onPressed: () {}, child: Text("Выпускать")),
                 ],
               ],
             ),

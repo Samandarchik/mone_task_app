@@ -124,7 +124,7 @@ class TaskWorkerService {
         },
       );
 
-      print('✅ Barcha segmentlar yuklandi. Status: ${response.statusCode}');
+      print('✅ : ${response.statusCode}');
       return response.statusCode == 200;
     } catch (e) {
       print('❌ Segmentlarni yuklashda xatolik: $e');

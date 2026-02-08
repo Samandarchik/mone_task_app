@@ -49,7 +49,8 @@ class _TelegramStyleVideoRecorderState
 
       _controller = CameraController(
         _cameras[_currentCameraIndex],
-        ResolutionPreset.high,
+        ResolutionPreset.medium,
+        fps: 20,
         enableAudio: true,
       );
 
@@ -89,7 +90,8 @@ class _TelegramStyleVideoRecorderState
 
       _controller = CameraController(
         _cameras[_currentCameraIndex],
-        ResolutionPreset.high,
+        ResolutionPreset.medium,
+        fps: 20,
         enableAudio: true,
       );
 
@@ -269,7 +271,7 @@ class _TelegramStyleVideoRecorderState
               painter: CircleMaskPainter(
                 circleRadius: size.width * 0.5,
                 borderColor: _isRecording
-                    ? (_isPaused ? Colors.orange : Colors.red)
+                    ? (_isPaused ? Colors.orange : Colors.white)
                     : Colors.white,
                 borderWidth: 4,
               ),

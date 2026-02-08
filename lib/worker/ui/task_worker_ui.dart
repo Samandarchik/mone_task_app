@@ -272,9 +272,7 @@ class _TaskWorkerUiState extends State<TaskWorkerUi> {
                           _isRecording
                               ? Icons.fiber_manual_record
                               : Icons.videocam,
-                          color: _isRecording
-                              ? Colors.red
-                              : Colors.grey.shade600,
+                          color: Colors.grey.shade600,
                         ),
                       ),
                     ],

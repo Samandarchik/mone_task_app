@@ -1,5 +1,6 @@
 import 'package:dio/dio.dart';
 import 'package:mone_task_app/admin/model/filial_model.dart';
+import 'package:mone_task_app/admin/ui/add_admin_task.dart';
 import 'package:mone_task_app/checker/model/checker_check_task_model.dart';
 import 'package:mone_task_app/core/constants/urls.dart';
 import 'package:mone_task_app/core/di/di.dart';
@@ -58,6 +59,17 @@ class AdminTaskService {
     }
   }
 
+  Future<List<CategoryModel>> fetchCategories() async {
+    try {
+      final response = await _dio.get(AppUrls.categories);
+      return (response.data['data'] as List)
+          .map((e) => CategoryModel.fromJson(e))
+          .toList();
+    } catch (e) {
+      rethrow; // UI ushlashi uchun
+    }
+  }
+
   Future<bool> updateTaskStatus(int taskId, int status, DateTime date) async {
     try {
       final response = await _dio.post(
@@ -71,7 +83,7 @@ class AdminTaskService {
     }
   }
 
-  Future<List<FilialModel>> fetchCategories() async {
+  Future<List<FilialModel>> fetchFilials() async {
     try {
       final response = await _dio.get(AppUrls.filial);
       return (response.data['data'] as List)

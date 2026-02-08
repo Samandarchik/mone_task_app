@@ -2,15 +2,15 @@ import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
-import 'package:mone_task_app/core/constants/urls.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 class VersionChecker {
-  static const String _endpoint = "${AppUrls.baseUrl}/health";
+  static const String _endpoint =
+      "https://version.uzaidev.uz/health?appName=task_mone_app";
 
   static const String fallbackAppStoreUrl =
-      "https://apps.apple.com/app/id6752371524";
+      "https://apps.apple.com/us/app/task-app-mone/id6756741172";
   static const String fallbackPlayStoreUrl =
       "https://play.google.com/store/apps/details?id=com.example.app";
 
@@ -28,7 +28,7 @@ class VersionChecker {
       final data = decoded['data'];
       if (data == null) return false;
 
-      final iosVersion = data['iphoneVersion']?.toString();
+      final iosVersion = data['iosVersion']?.toString();
       final androidVersion = data['androidVersion']?.toString();
       final appStoreUrl = (data['appstoreUrl'] ?? fallbackAppStoreUrl)
           .toString();
