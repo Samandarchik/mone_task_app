@@ -49,6 +49,15 @@ class _TaskListWidgetState extends State<TaskListWidget> {
     if (!await videosDir.exists()) {
       await videosDir.create(recursive: true);
     }
+
+    // Mavjud cache'langan fayllarni tekshirish
+    final files = videosDir.listSync();
+    for (var file in files) {
+      if (file is File) {
+        // File nomidan URL ni qayta tiklash (bu qism ixtiyoriy)
+        // Realda video URL'lar bilan mapping saqlanishi kerak
+      }
+    }
   }
 
   // Video URL'dan local file path olish
@@ -218,6 +227,24 @@ class _TaskListWidgetState extends State<TaskListWidget> {
     }
   }
 
+  // Local yoki online video path olish
+  String? _getVideoPath(String? videoUrl) {
+    if (videoUrl == null || videoUrl.isEmpty) return null;
+
+    String fullUrl = videoUrl;
+    if (!fullUrl.startsWith('http')) {
+      fullUrl = '${AppUrls.baseUrl}/$videoUrl';
+    }
+
+    // Agar cache'da bo'lsa, local path qaytaramiz
+    if (cachedVideos.containsKey(fullUrl)) {
+      return cachedVideos[fullUrl];
+    }
+
+    // Aks holda online URL qaytaramiz
+    return fullUrl;
+  }
+
   @override
   Widget build(BuildContext context) {
     List<CheckerCheckTaskModel> filtered = widget.tasks
@@ -256,6 +283,7 @@ class _TaskListWidgetState extends State<TaskListWidget> {
             onRefresh: widget.onRefresh,
             onShowVideoPlayer: widget.onShowVideoPlayer,
             onShareVideo: () => _shareVideo(filtered[i]),
+            getVideoPath: _getVideoPath, // Yangi callback qo'shildi
           );
         },
       ),
@@ -272,6 +300,7 @@ class TaskListItem extends StatefulWidget {
   final VoidCallback onRefresh;
   final Function(String) onShowVideoPlayer;
   final VoidCallback onShareVideo;
+  final String? Function(String?) getVideoPath; // Yangi parameter
 
   const TaskListItem({
     super.key,
@@ -283,6 +312,7 @@ class TaskListItem extends StatefulWidget {
     required this.onRefresh,
     required this.onShowVideoPlayer,
     required this.onShareVideo,
+    required this.getVideoPath, // Yangi parameter
   });
 
   @override
@@ -339,7 +369,13 @@ class _TaskListItemState extends State<TaskListItem> {
                 });
               }
 
-              widget.onShowVideoPlayer(task.videoUrl!);
+              // Local yoki online path olish
+              final videoPath = widget.getVideoPath(task.videoUrl);
+              if (videoPath != null) {
+                widget.onShowVideoPlayer(
+                  videoPath,
+                ); // Local yoki online path yuboriladi
+              }
             }
           },
           child: Padding(
@@ -352,7 +388,7 @@ class _TaskListItemState extends State<TaskListItem> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        "${task.taskId}. ${task.task}",
+                        task.task,
                         style: const TextStyle(
                           fontSize: 16,
                           fontWeight: FontWeight.bold,

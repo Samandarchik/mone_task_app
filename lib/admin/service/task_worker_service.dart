@@ -87,7 +87,7 @@ class AdminTaskService {
     }
   }
 
-  Future<List<FilialModel>> fetchCategories() async {
+  Future<List<FilialModel>> fetchFilials() async {
     try {
       final response = await _dio.get(AppUrls.filial);
       return (response.data['data'] as List)

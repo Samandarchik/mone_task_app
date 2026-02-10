@@ -1,8 +1,11 @@
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:mone_task_app/admin/model/filial_model.dart';
+import 'package:mone_task_app/admin/service/get_excel_ui.dart';
 import 'package:mone_task_app/admin/ui/admin_s.dart';
 import 'package:mone_task_app/admin/ui/all_task_ui.dart';
 import 'package:mone_task_app/admin/ui/user_list_page.dart';
+import 'package:mone_task_app/admin/ui/video_cache_manager_page.dart';
 import 'package:mone_task_app/checker/model/checker_check_task_model.dart';
 import 'package:mone_task_app/checker/service/task_worker_service.dart';
 import 'package:mone_task_app/checker/ui/player.dart';
@@ -39,15 +42,12 @@ class _AdminTaskUiState extends State<AdminTaskUi> {
   }
 
   void _showCircleVideoPlayer(String videoPath) async {
-    String realUrl = videoPath.startsWith('http')
-        ? videoPath
-        : '${AppUrls.baseUrl}/$videoPath';
+    String realUrl = videoPath.startsWith('http') ? videoPath : videoPath;
 
     showDialog(
       context: context,
       barrierColor: Colors.black87,
-      builder: (context) =>
-          CircleVideoPlayer(videoUrl: realUrl, isLocal: false),
+      builder: (context) => CircleVideoPlayer(videoUrl: realUrl),
     );
   }
 
@@ -149,37 +149,65 @@ class _AdminTaskUiState extends State<AdminTaskUi> {
           length: categories.length,
           initialIndex: 0,
           child: Scaffold(
-            appBar: AppBar(
-              leading: IconButton(
-                icon: const Icon(Icons.logout),
-                onPressed: _handleLogout,
+            drawer: Drawer(
+              child: SafeArea(
+                child: Column(
+                  children: [
+                    ListTile(
+                      onTap: () {
+                        context.pop;
+
+                        context.push(UsersPage(filialModel: categories));
+                      },
+                      leading: Icon(CupertinoIcons.person_2),
+                      title: Text("Все пользователи"),
+                    ),
+                    ListTile(
+                      onTap: () {
+                        context.pop;
+                        context.push(
+                          TemplateTaskAdminUi(
+                            name: user?.username ?? "",
+                            category: categories,
+                          ),
+                        );
+                      },
+                      leading: Icon(CupertinoIcons.list_bullet),
+                      title: Text("Все задачи"),
+                    ),
+                    ListTile(
+                      onTap: () {
+                        context.pop;
+                        context.push(VideoCacheManagerPage());
+                      },
+                      leading: Icon(CupertinoIcons.videocam_fill),
+                      title: Text("Все задачи"),
+                    ),
+                    ListTile(
+                      onTap: () {
+                        context.pop;
+                        context.push(ExcelReportPage(filials: categories));
+                      },
+                      leading: Icon(CupertinoIcons.doc_plaintext),
+                      title: Text("Отчеты"),
+                    ),
+                    ListTile(
+                      onTap: _handleLogout,
+                      leading: Icon(Icons.logout, color: Colors.red),
+                      title: Text("Выйти", style: TextStyle(color: Colors.red)),
+                    ),
+                  ],
+                ),
               ),
+            ),
+            appBar: AppBar(
               actions: [
-                GestureDetector(
-                  onTap: () {
-                    context.push(UsersPage(filialModel: categories));
-                  },
-                  child: Icon(Icons.person),
-                ),
-                SizedBox(width: 5),
-                GestureDetector(
-                  onTap: () {
-                    context.push(
-                      TemplateTaskAdminUi(
-                        name: user?.username ?? "",
-                        category: categories,
-                      ),
-                    );
-                  },
-                  child: const Icon(Icons.menu),
-                ),
-                SizedBox(width: 5),
                 GestureDetector(
                   onTap: _handleDateSelection,
                   child: Text(
                     selectedDate.day == DateTime.now().day
                         ? "Сегодня "
-                        : "${selectedDate.day}/${selectedDate.month}  ",
+                        : "${selectedDate.day}/${selectedDate.month.toString().padLeft(2, '0')}  ",
                   ),
                 ),
               ],
@@ -239,6 +267,7 @@ class _AdminTaskUiState extends State<AdminTaskUi> {
                 return TabBarView(
                   children: categories.map((category) {
                     return AdminTaskListWidget(
+                      role: user?.role ?? "",
                       tasks: allTasks,
                       filialId: category.filialId,
                       selectedDate: selectedDate,

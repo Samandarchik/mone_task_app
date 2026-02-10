@@ -31,7 +31,7 @@ class _TemplateTaskAdminUiState extends State<TemplateTaskAdminUi> {
   void initState() {
     super.initState();
     templatesFuture = AdminTaskService().fetchTemplates();
-    categoriesFuture = AdminTaskService().fetchCategories();
+    categoriesFuture = AdminTaskService().fetchFilials();
   }
 
   @override
@@ -266,7 +266,7 @@ class _TemplateTaskAdminUiState extends State<TemplateTaskAdminUi> {
                 if (result) {
                   // Yangi filiallarni yuklash
                   setState(() {
-                    categoriesFuture = AdminTaskService().fetchCategories();
+                    categoriesFuture = AdminTaskService().fetchFilials();
                   });
                 }
               } catch (e) {}
@@ -330,7 +330,7 @@ class _TemplateTaskAdminUiState extends State<TemplateTaskAdminUi> {
                 await AdminTaskService().deleteFilial(filial.filialId);
 
                 setState(() {
-                  categoriesFuture = AdminTaskService().fetchCategories();
+                  categoriesFuture = AdminTaskService().fetchFilials();
                 });
               }
             },
@@ -354,7 +354,7 @@ class _TemplateTaskAdminUiState extends State<TemplateTaskAdminUi> {
               Navigator.pop(context);
               await AdminTaskService().updateFilial(filial.filialId, newName);
               setState(() {
-                categoriesFuture = AdminTaskService().fetchCategories();
+                categoriesFuture = AdminTaskService().fetchFilials();
               });
             },
             child: const Text("Saqlash"),

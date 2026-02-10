@@ -16,6 +16,8 @@ class AdminTaskListWidget extends StatefulWidget {
   final List<CheckerCheckTaskModel> tasks;
   final int filialId;
   final DateTime selectedDate;
+  final String role;
+
   final VoidCallback onRefresh;
   final Function(String) onShowVideoPlayer;
 
@@ -23,6 +25,7 @@ class AdminTaskListWidget extends StatefulWidget {
     super.key,
     required this.tasks,
     required this.filialId,
+    required this.role,
     required this.selectedDate,
     required this.onRefresh,
     required this.onShowVideoPlayer,
@@ -71,6 +74,15 @@ class _AdminTaskListWidgetState extends State<AdminTaskListWidget> {
     return '${videosDir.path}/$fileName';
   }
 
+  // Original URL ni full URL ga aylantirish
+  String _getFullUrl(String originalUrl) {
+    if (originalUrl.startsWith('http://') ||
+        originalUrl.startsWith('https://')) {
+      return originalUrl;
+    }
+    return '${AppUrls.baseUrl}/$originalUrl';
+  }
+
   // Video'ni background'da yuklab olish
   Future<void> _downloadVideoInBackground(String videoUrl) async {
     if (downloadingVideos.contains(videoUrl)) {
@@ -95,9 +107,11 @@ class _AdminTaskListWidgetState extends State<AdminTaskListWidget> {
             downloadingVideos.remove(videoUrl);
           });
         }
+        print('Admin: Video allaqachon cache\'da: $videoUrl -> $localPath');
         return;
       }
 
+      print('Admin: Video yuklanmoqda: $videoUrl -> $localPath');
       final dio = Dio();
       await dio.download(videoUrl, localPath);
 
@@ -108,9 +122,10 @@ class _AdminTaskListWidgetState extends State<AdminTaskListWidget> {
             downloadingVideos.remove(videoUrl);
           });
         }
+        print('Admin: Video muvaffaqiyatli yuklandi: $videoUrl -> $localPath');
       }
     } catch (e) {
-      print('Video yuklashda xatolik: $videoUrl - $e');
+      print('Admin: Video yuklashda xatolik: $videoUrl - $e');
       if (mounted) {
         setState(() {
           downloadingVideos.remove(videoUrl);
@@ -127,13 +142,7 @@ class _AdminTaskListWidgetState extends State<AdminTaskListWidget> {
 
     final videoUrls = filteredTasks
         .where((task) => task.videoUrl != null && task.videoUrl!.isNotEmpty)
-        .map((task) {
-          String url = task.videoUrl!;
-          if (!url.startsWith('http')) {
-            url = '${AppUrls.baseUrl}/$url';
-          }
-          return url;
-        })
+        .map((task) => _getFullUrl(task.videoUrl!))
         .toSet()
         .toList();
 
@@ -156,9 +165,7 @@ class _AdminTaskListWidgetState extends State<AdminTaskListWidget> {
         return;
       }
 
-      if (!videoUrl.startsWith('http')) {
-        videoUrl = '${AppUrls.baseUrl}/$videoUrl';
-      }
+      final fullUrl = _getFullUrl(videoUrl);
 
       // Loading ko'rsatish
       if (mounted) {
@@ -173,23 +180,23 @@ class _AdminTaskListWidgetState extends State<AdminTaskListWidget> {
       String? localPath;
 
       // Agar video cache'da bo'lsa, uni ishlatamiz
-      if (cachedVideos.containsKey(videoUrl)) {
-        localPath = cachedVideos[videoUrl];
+      if (cachedVideos.containsKey(fullUrl)) {
+        localPath = cachedVideos[fullUrl];
       } else {
         // Aks holda yuklab olamiz
-        localPath = await _getLocalFilePath(videoUrl);
+        localPath = await _getLocalFilePath(fullUrl);
         final file = File(localPath);
 
         // Agar fayl mavjud bo'lmasa, yuklab olamiz
         if (!await file.exists() || await file.length() == 0) {
           final dio = Dio();
-          await dio.download(videoUrl, localPath);
+          await dio.download(fullUrl, localPath);
         }
 
         // Cache'ga qo'shamiz
         if (mounted) {
           setState(() {
-            cachedVideos[videoUrl!] = localPath!;
+            cachedVideos[fullUrl] = localPath!;
           });
         }
       }
@@ -217,7 +224,7 @@ class _AdminTaskListWidgetState extends State<AdminTaskListWidget> {
       if (mounted && Navigator.of(context).canPop()) {
         Navigator.of(context).pop();
       }
-      print('Share xatolik: $e');
+      print('Admin: Share xatolik: $e');
     }
   }
 
@@ -239,27 +246,39 @@ class _AdminTaskListWidgetState extends State<AdminTaskListWidget> {
         padding: const EdgeInsets.all(8),
         itemCount: filtered.length,
         itemBuilder: (_, i) {
-          String? videoUrl = filtered[i].videoUrl;
-          if (videoUrl != null &&
-              videoUrl.isNotEmpty &&
-              !videoUrl.startsWith('http')) {
-            videoUrl = '${AppUrls.baseUrl}/$videoUrl';
+          final task = filtered[i];
+
+          // Full URL olish
+          String? fullVideoUrl;
+          if (task.videoUrl != null && task.videoUrl!.isNotEmpty) {
+            fullVideoUrl = _getFullUrl(task.videoUrl!);
           }
 
           bool isVideoCached =
-              videoUrl != null && cachedVideos.containsKey(videoUrl);
+              fullVideoUrl != null && cachedVideos.containsKey(fullVideoUrl);
           bool isDownloading =
-              videoUrl != null && downloadingVideos.contains(videoUrl);
+              fullVideoUrl != null && downloadingVideos.contains(fullVideoUrl);
+
+          // Video path olish (local yoki online)
+          String? videoPath;
+          if (fullVideoUrl != null) {
+            if (isVideoCached) {
+              videoPath = cachedVideos[fullVideoUrl]; // Local path
+            } else {
+              videoPath = fullVideoUrl; // Online URL
+            }
+          }
 
           return AdminTaskListItem(
-            task: filtered[i],
-            videoUrl: videoUrl,
+            task: task,
+            role: widget.role,
+            videoPath: videoPath,
             isVideoCached: isVideoCached,
             isDownloading: isDownloading,
             selectedDate: widget.selectedDate,
             onRefresh: widget.onRefresh,
             onShowVideoPlayer: widget.onShowVideoPlayer,
-            onShareVideo: () => _shareVideo(filtered[i]),
+            onShareVideo: () => _shareVideo(task),
           );
         },
       ),
@@ -269,10 +288,12 @@ class _AdminTaskListWidgetState extends State<AdminTaskListWidget> {
 
 class AdminTaskListItem extends StatefulWidget {
   final CheckerCheckTaskModel task;
-  final String? videoUrl;
+  final String? videoPath; // Bu local yoki online path bo'lishi mumkin
   final bool isVideoCached;
   final bool isDownloading;
   final DateTime selectedDate;
+  final String role;
+
   final VoidCallback onRefresh;
   final Function(String) onShowVideoPlayer;
   final VoidCallback onShareVideo;
@@ -280,12 +301,13 @@ class AdminTaskListItem extends StatefulWidget {
   const AdminTaskListItem({
     super.key,
     required this.task,
-    required this.videoUrl,
+    required this.videoPath,
     required this.isVideoCached,
     required this.isDownloading,
     required this.selectedDate,
     required this.onRefresh,
     required this.onShowVideoPlayer,
+    required this.role,
     required this.onShareVideo,
   });
 
@@ -329,7 +351,7 @@ class _AdminTaskListItemState extends State<AdminTaskListItem> {
           context.push(EditTaskUi(task: task));
         },
         onTap: () async {
-          if (task.videoUrl != null && task.videoUrl!.isNotEmpty) {
+          if (widget.videoPath != null || widget.role == "super_admin") {
             if (widget.selectedDate.day == DateTime.now().day) {
               final bool isSucsess = await AdminTaskService().updateTaskStatus(
                 task.taskId,
@@ -342,7 +364,9 @@ class _AdminTaskListItemState extends State<AdminTaskListItem> {
                 });
               }
             }
-            widget.onShowVideoPlayer(task.videoUrl!);
+
+            // Video path ni to'g'ridan-to'g'ri yuboramiz (local yoki online)
+            widget.onShowVideoPlayer(widget.videoPath!);
           }
         },
         child: Padding(
@@ -355,7 +379,7 @@ class _AdminTaskListItemState extends State<AdminTaskListItem> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      "${task.taskId}. ${task.task}",
+                      task.task,
                       style: const TextStyle(
                         fontSize: 16,
                         fontWeight: FontWeight.bold,
@@ -397,7 +421,7 @@ class _AdminTaskListItemState extends State<AdminTaskListItem> {
                                   const SizedBox(
                                     width: 14,
                                     height: 14,
-                                    child: CircularProgressIndicator.adaptive(
+                                    child: CircularProgressIndicator(
                                       strokeWidth: 2,
                                       valueColor: AlwaysStoppedAnimation<Color>(
                                         Colors.white,

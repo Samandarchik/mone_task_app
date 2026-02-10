@@ -10,4 +10,11 @@ class LogOutService {
       if (response.statusCode == 200) {}
     } catch (e) {}
   }
+
+  Future<void> logOutUser(int id) async {
+    try {
+      final response = await dio.post("${AppUrls.forceLogout}/$id");
+      if (response.statusCode == 200) {}
+    } catch (e) {}
+  }
 }

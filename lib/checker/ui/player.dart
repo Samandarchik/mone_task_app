@@ -4,13 +4,7 @@ import 'package:video_player/video_player.dart';
 
 class CircleVideoPlayer extends StatefulWidget {
   final String videoUrl;
-  final bool isLocal; // YANGI: local yoki network ekanligini bilish
-
-  const CircleVideoPlayer({
-    super.key,
-    required this.videoUrl,
-    this.isLocal = false,
-  });
+  const CircleVideoPlayer({super.key, required this.videoUrl});
 
   @override
   State<CircleVideoPlayer> createState() => _CircleVideoPlayerState();
@@ -22,6 +16,7 @@ class _CircleVideoPlayerState extends State<CircleVideoPlayer>
   bool _isInitialized = false;
   bool _isPlaying = false;
   bool _hasError = false;
+  String? _errorMessage;
 
   late AnimationController _animationController;
 
@@ -39,22 +34,55 @@ class _CircleVideoPlayerState extends State<CircleVideoPlayer>
 
   Future<void> _initializeVideo() async {
     try {
-      // LOCAL → file orqali o‘qiydi
-      if (widget.isLocal) {
-        final file = File(widget.videoUrl);
+      String videoPath = widget.videoUrl;
+
+      // MUAMMO: Agar URL http bilan boshlansa, lekin ichida local path bo'lsa
+      // Masalan: https://example.com//Users/...
+      // Buni to'g'rilash kerak
+      if (videoPath.contains('://') && videoPath.contains('/Users/')) {
+        // Local path ni ajratib olish
+        final localPathMatch = RegExp(r'/Users/.*').firstMatch(videoPath);
+        if (localPathMatch != null) {
+          videoPath = localPathMatch.group(0)!;
+        }
+      } else if (videoPath.contains('://') && videoPath.contains('/data/')) {
+        // Android uchun ham
+        final localPathMatch = RegExp(r'/data/.*').firstMatch(videoPath);
+        if (localPathMatch != null) {
+          videoPath = localPathMatch.group(0)!;
+        }
+      }
+
+      // Avtomatik ravishda local yoki network ekanligini aniqlash
+      bool isLocal =
+          !videoPath.startsWith('http://') && !videoPath.startsWith('https://');
+
+      if (isLocal) {
+        // LOCAL FILE
+        final file = File(videoPath);
+
+        if (await file.exists()) {}
 
         if (!await file.exists()) {
-          setState(() => _hasError = true);
+          setState(() {
+            _hasError = true;
+            _errorMessage = 'Fayl topilmadi: $videoPath';
+          });
+          return;
+        }
+
+        if (await file.length() == 0) {
+          setState(() {
+            _hasError = true;
+            _errorMessage = 'Video fayl bo\'sh';
+          });
           return;
         }
 
         _controller = VideoPlayerController.file(file);
-      }
-      // NETWORK → url orqali yuklaydi
-      else {
-        _controller = VideoPlayerController.networkUrl(
-          Uri.parse(widget.videoUrl),
-        );
+      } else {
+        // NETWORK URL
+        _controller = VideoPlayerController.networkUrl(Uri.parse(videoPath));
       }
 
       await _controller.initialize();
@@ -70,7 +98,11 @@ class _CircleVideoPlayerState extends State<CircleVideoPlayer>
         _isPlaying = true;
       });
     } catch (e) {
-      setState(() => _hasError = true);
+      print('Video yuklashda xatolik: $e');
+      setState(() {
+        _hasError = true;
+        _errorMessage = e.toString();
+      });
     }
   }
 
@@ -91,7 +123,7 @@ class _CircleVideoPlayerState extends State<CircleVideoPlayer>
     final position = _controller.value.position;
 
     final progress = duration.inMilliseconds == 0
-        ? 0
+        ? 0.0
         : position.inMilliseconds / duration.inMilliseconds;
 
     final progressWidth = circleSize * 0.9;
@@ -140,7 +172,7 @@ class _CircleVideoPlayerState extends State<CircleVideoPlayer>
                     ),
                   ),
                   FractionallySizedBox(
-                    widthFactor: (progress.clamp(0, 1)) as double,
+                    widthFactor: progress.clamp(0.0, 1.0),
                     child: Container(
                       height: 5,
                       decoration: BoxDecoration(
@@ -150,7 +182,7 @@ class _CircleVideoPlayerState extends State<CircleVideoPlayer>
                     ),
                   ),
                   Positioned(
-                    left: (progressWidth - 32) * progress.clamp(0, 1),
+                    left: (progressWidth - 32) * progress.clamp(0.0, 1.0),
                     top: 7,
                     child: Container(
                       width: 16,
@@ -173,7 +205,7 @@ class _CircleVideoPlayerState extends State<CircleVideoPlayer>
 
   void _seekTo(double x, double width) {
     final d = _controller.value.duration;
-    final ratio = (x - 16).clamp(0, width) / width;
+    final ratio = (x - 16).clamp(0.0, width) / width;
     _controller.seekTo(d * ratio);
   }
 
@@ -240,10 +272,42 @@ class _CircleVideoPlayerState extends State<CircleVideoPlayer>
                             ),
 
                           if (_hasError)
-                            const Center(
-                              child: Text(
-                                "Video yuklanmadi",
-                                style: TextStyle(color: Colors.white),
+                            Center(
+                              child: Padding(
+                                padding: const EdgeInsets.all(20.0),
+                                child: Column(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    const Icon(
+                                      Icons.error_outline,
+                                      color: Colors.red,
+                                      size: 48,
+                                    ),
+                                    const SizedBox(height: 16),
+                                    const Text(
+                                      "Video yuklanmadi",
+                                      style: TextStyle(
+                                        color: Colors.white,
+                                        fontSize: 16,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                      textAlign: TextAlign.center,
+                                    ),
+                                    if (_errorMessage != null) ...[
+                                      const SizedBox(height: 8),
+                                      Text(
+                                        _errorMessage!,
+                                        style: const TextStyle(
+                                          color: Colors.white70,
+                                          fontSize: 12,
+                                        ),
+                                        textAlign: TextAlign.center,
+                                        maxLines: 3,
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                    ],
+                                  ],
+                                ),
                               ),
                             ),
 

@@ -49,7 +49,7 @@ class _TelegramStyleVideoRecorderState
 
       _controller = CameraController(
         _cameras[_currentCameraIndex],
-        ResolutionPreset.medium,
+        ResolutionPreset.high,
         fps: 20,
         enableAudio: true,
       );
@@ -90,7 +90,7 @@ class _TelegramStyleVideoRecorderState
 
       _controller = CameraController(
         _cameras[_currentCameraIndex],
-        ResolutionPreset.medium,
+        ResolutionPreset.high,
         fps: 20,
         enableAudio: true,
       );

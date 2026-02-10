@@ -1,10 +1,12 @@
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:mone_task_app/admin/model/filial_model.dart';
+import 'package:mone_task_app/admin/service/get_excel_ui.dart';
+import 'package:mone_task_app/admin/ui/video_cache_manager_page.dart';
 import 'package:mone_task_app/checker/model/checker_check_task_model.dart';
 import 'package:mone_task_app/checker/service/task_worker_service.dart';
 import 'package:mone_task_app/checker/ui/player.dart';
 import 'package:mone_task_app/checker/widgets/task_title.dart';
-import 'package:mone_task_app/core/constants/urls.dart';
 import 'package:mone_task_app/core/context_extension.dart';
 import 'package:mone_task_app/core/data/local/token_storage.dart';
 import 'package:mone_task_app/core/di/di.dart';
@@ -35,15 +37,12 @@ class _CheckerHomeUiState extends State<CheckerHomeUi> {
   }
 
   void _showCircleVideoPlayer(String videoPath) async {
-    String realUrl = videoPath.startsWith('http')
-        ? videoPath
-        : '${AppUrls.baseUrl}/$videoPath';
+    String realUrl = videoPath.startsWith('http') ? videoPath : videoPath;
 
     showDialog(
       context: context,
       barrierColor: Colors.black87,
-      builder: (context) =>
-          CircleVideoPlayer(videoUrl: realUrl, isLocal: false),
+      builder: (context) => CircleVideoPlayer(videoUrl: realUrl),
     );
   }
 
@@ -110,6 +109,35 @@ class _CheckerHomeUiState extends State<CheckerHomeUi> {
           length: categories.length,
           initialIndex: 0,
           child: Scaffold(
+            drawer: Drawer(
+              child: SafeArea(
+                child: Column(
+                  children: [
+                    ListTile(
+                      onTap: () {
+                        context.pop;
+                        context.push(VideoCacheManagerPage());
+                      },
+                      leading: Icon(CupertinoIcons.videocam_fill),
+                      title: Text("Все задачи"),
+                    ),
+                    ListTile(
+                      onTap: () {
+                        context.pop;
+                        context.push(ExcelReportPage(filials: categories));
+                      },
+                      leading: Icon(CupertinoIcons.doc_plaintext),
+                      title: Text("Отчеты"),
+                    ),
+                    ListTile(
+                      onTap: _handleLogout,
+                      leading: Icon(Icons.logout, color: Colors.red),
+                      title: Text("Выйти", style: TextStyle(color: Colors.red)),
+                    ),
+                  ],
+                ),
+              ),
+            ),
             appBar: AppBar(
               actions: [
                 GestureDetector(
@@ -140,15 +168,7 @@ class _CheckerHomeUiState extends State<CheckerHomeUi> {
                 ),
               ],
               title: Text(user?.username ?? "Checker"),
-              leading: IconButton(
-                icon: const Icon(Icons.logout),
-                onPressed: () async {
-                  await LogOutService().logOut();
-                  tokenStorage.removeToken();
-                  tokenStorage.putUserData({});
-                  context.pushAndRemove(LoginPage());
-                },
-              ),
+
               bottom: TabBar(
                 padding: EdgeInsets.zero,
                 isScrollable: true,
@@ -215,5 +235,12 @@ class _CheckerHomeUiState extends State<CheckerHomeUi> {
         );
       },
     );
+  }
+
+  Future<void> _handleLogout() async {
+    await LogOutService().logOut();
+    tokenStorage.removeToken();
+    tokenStorage.putUserData({});
+    context.pushAndRemove(LoginPage());
   }
 }

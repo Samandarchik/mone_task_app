@@ -43,7 +43,7 @@ class _AddAdminTaskState extends State<AddAdminTask> {
   void initState() {
     super.initState();
     controller = TextEditingController();
-    filialsFuture = AdminTaskService().fetchCategories();
+    filialsFuture = AdminTaskService().fetchFilials();
     _loadCategories();
   }
 
@@ -235,7 +235,7 @@ class _AddAdminTaskState extends State<AddAdminTask> {
                     onPressed: () {
                       Future.microtask(() {
                         setState(() {
-                          filialsFuture = AdminTaskService().fetchCategories();
+                          filialsFuture = AdminTaskService().fetchFilials();
                         });
                       });
                     },

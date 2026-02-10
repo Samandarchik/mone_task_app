@@ -6,6 +6,7 @@ import 'package:mone_task_app/admin/ui/add_admin_task.dart';
 import 'package:mone_task_app/admin/ui/user_servise.dart';
 import 'package:mone_task_app/checker/service/task_worker_service.dart';
 import 'package:mone_task_app/worker/model/user_model.dart';
+import 'package:mone_task_app/worker/service/log_out.dart';
 
 class EditUserPage extends StatefulWidget {
   final List<FilialModel> category;
@@ -285,7 +286,12 @@ class _EditUserPageState extends State<EditUserPage> {
                     );
                   }),
                   const SizedBox(height: 16),
-                  ElevatedButton(onPressed: () {}, child: Text("Выпускать")),
+                  ElevatedButton(
+                    onPressed: () async {
+                      await LogOutService().logOutUser(widget.user.userId);
+                    },
+                    child: Text("Выпускать"),
+                  ),
                 ],
               ],
             ),

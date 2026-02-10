@@ -1,5 +1,8 @@
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:mone_task_app/admin/service/get_excel_ui.dart';
+import 'package:mone_task_app/admin/ui/video_cache_manager_page.dart';
 import 'package:mone_task_app/checker/ui/player.dart';
 import 'package:mone_task_app/core/constants/urls.dart';
 import 'package:mone_task_app/core/context_extension.dart';
@@ -110,14 +113,14 @@ class _TaskWorkerUiState extends State<TaskWorkerUi> {
       );
 
       if (success) {
-        _refresh();
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
-              content: Text("✅ Muvaffaqiyatli yuborildi!"),
+              content: Text("✅ Отправка успешно завершена!"),
               backgroundColor: Colors.green,
             ),
           );
+          Future.delayed(const Duration(seconds: 2), () => _refresh());
         }
       } else {
         _refresh();
@@ -180,16 +183,38 @@ class _TaskWorkerUiState extends State<TaskWorkerUi> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      drawer: Drawer(
+        child: SafeArea(
+          child: Column(
+            children: [
+              ListTile(
+                onTap: () {
+                  context.pop;
+                  context.push(VideoCacheManagerPage());
+                },
+                leading: Icon(CupertinoIcons.videocam_fill),
+                title: Text("Все задачи"),
+              ),
+              ListTile(
+                onTap: () {
+                  context.pop;
+                  context.push(ExcelReportPage(filialIds: user?.filialIds));
+                },
+                leading: Icon(CupertinoIcons.doc_plaintext),
+                title: Text("Отчеты"),
+              ),
+              ListTile(
+                onTap: _handleLogout,
+                leading: Icon(Icons.logout, color: Colors.red),
+                title: Text("Выйти", style: TextStyle(color: Colors.red)),
+              ),
+            ],
+          ),
+        ),
+      ),
       appBar: AppBar(
         title: Text(user?.username ?? ""),
         actions: [
-          // Yozish paytida stop tugmasi
-          if (_isRecording)
-            IconButton(
-              onPressed: _stopRecording,
-              icon: const Icon(Icons.stop_circle, color: Colors.red),
-              tooltip: "To'xtatish",
-            ),
           IconButton(
             onPressed: () async {
               await LogOutService().logOut();
@@ -227,7 +252,6 @@ class _TaskWorkerUiState extends State<TaskWorkerUi> {
                         barrierColor: Colors.black87,
                         builder: (context) => CircleVideoPlayer(
                           videoUrl: "${AppUrls.baseUrl}/${tasks[i].videoUrl}",
-                          isLocal: false,
                         ),
                       ),
                 child: Container(
@@ -251,7 +275,7 @@ class _TaskWorkerUiState extends State<TaskWorkerUi> {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
-                              "${tasks[i].id}. ${tasks[i].description}",
+                              tasks[i].description,
                               style: const TextStyle(
                                 fontWeight: FontWeight.bold,
                                 fontSize: 16,
@@ -284,5 +308,12 @@ class _TaskWorkerUiState extends State<TaskWorkerUi> {
         },
       ),
     );
+  }
+
+  Future<void> _handleLogout() async {
+    await LogOutService().logOut();
+    tokenStorage.removeToken();
+    tokenStorage.putUserData({});
+    context.pushAndRemove(LoginPage());
   }
 }
