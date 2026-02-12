@@ -270,6 +270,7 @@ class _AdminTaskListWidgetState extends State<AdminTaskListWidget> {
           }
 
           return AdminTaskListItem(
+            index: i+1,
             task: task,
             role: widget.role,
             videoPath: videoPath,
@@ -287,6 +288,7 @@ class _AdminTaskListWidgetState extends State<AdminTaskListWidget> {
 }
 
 class AdminTaskListItem extends StatefulWidget {
+  final int index;
   final CheckerCheckTaskModel task;
   final String? videoPath; // Bu local yoki online path bo'lishi mumkin
   final bool isVideoCached;
@@ -301,6 +303,7 @@ class AdminTaskListItem extends StatefulWidget {
   const AdminTaskListItem({
     super.key,
     required this.task,
+    required this.index,
     required this.videoPath,
     required this.isVideoCached,
     required this.isDownloading,
@@ -379,7 +382,7 @@ class _AdminTaskListItemState extends State<AdminTaskListItem> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      task.task,
+                      "${widget.index}. ${task.task}",
                       style: const TextStyle(
                         fontSize: 16,
                         fontWeight: FontWeight.bold,

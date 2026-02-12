@@ -6,7 +6,7 @@ import 'package:mone_task_app/local_not_service.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  await NotificationService.initialize();
+  // await NotificationService.initialize();
 
   await setupInit();
   runApp(const MyApp());
