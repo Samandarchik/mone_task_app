@@ -276,6 +276,7 @@ class _TaskListWidgetState extends State<TaskListWidget> {
 
           return TaskListItem(
             task: filtered[i],
+            index: i,
             videoUrl: videoUrl,
             isVideoCached: isVideoCached,
             isDownloading: isDownloading,
@@ -294,6 +295,7 @@ class _TaskListWidgetState extends State<TaskListWidget> {
 class TaskListItem extends StatefulWidget {
   final CheckerCheckTaskModel task;
   final String? videoUrl;
+  final int index;
   final bool isVideoCached;
   final bool isDownloading;
   final DateTime selectedDate;
@@ -305,6 +307,7 @@ class TaskListItem extends StatefulWidget {
   const TaskListItem({
     super.key,
     required this.task,
+    required this.index,
     required this.videoUrl,
     required this.isVideoCached,
     required this.isDownloading,
@@ -388,7 +391,7 @@ class _TaskListItemState extends State<TaskListItem> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        task.task,
+                        "${widget.index + 1}. ${task.task}",
                         style: const TextStyle(
                           fontSize: 16,
                           fontWeight: FontWeight.bold,

@@ -93,14 +93,6 @@ class _TaskWorkerUiState extends State<TaskWorkerUi> {
     }
   }
 
-  /// Video yozuvni to'xtatish
-  void _stopRecording() {
-    if (_isRecording) {
-      Navigator.of(context).pop(); // Dialogni yopish
-      setState(() => _isRecording = false);
-    }
-  }
-
   /// Barcha video segmentlarni yuborish
   Future<void> _uploadVideoSegments(
     TaskWorkerModel task,
@@ -275,7 +267,7 @@ class _TaskWorkerUiState extends State<TaskWorkerUi> {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
-                              tasks[i].description,
+                              "${i + 1}. ${tasks[i].description}",
                               style: const TextStyle(
                                 fontWeight: FontWeight.bold,
                                 fontSize: 16,

@@ -286,13 +286,13 @@ class _EditUserPageState extends State<EditUserPage> {
                     );
                   }),
                   const SizedBox(height: 16),
-                  ElevatedButton(
-                    onPressed: () async {
-                      await LogOutService().logOutUser(widget.user.userId);
-                    },
-                    child: Text("Выпускать"),
-                  ),
                 ],
+                ElevatedButton(
+                  onPressed: () async {
+                    await LogOutService().logOutUser(widget.user.userId);
+                  },
+                  child: Text("Выпускать"),
+                ),
               ],
             ),
           );
