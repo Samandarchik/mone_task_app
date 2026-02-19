@@ -1,9 +1,11 @@
+import 'dart:ui';
+
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:mone_task_app/admin/service/get_excel_ui.dart';
 import 'package:mone_task_app/admin/ui/video_cache_manager_page.dart';
-import 'package:mone_task_app/checker/ui/player.dart';
+import 'package:mone_task_app/checker/ui/player2.dart';
 import 'package:mone_task_app/core/constants/urls.dart';
 import 'package:mone_task_app/core/context_extension.dart';
 import 'package:mone_task_app/core/data/local/token_storage.dart';
@@ -62,7 +64,7 @@ class _TaskWorkerUiState extends State<TaskWorkerUi> {
       barrierColor: Colors.black.withOpacity(0.8),
       transitionDuration: const Duration(milliseconds: 300),
       pageBuilder: (context, animation, secondaryAnimation) {
-        return TelegramStyleVideoRecorder(taskId: task.id, maxDuration: 40);
+        return TelegramStyleVideoRecorder(taskId: task.id);
       },
       transitionBuilder: (context, animation, secondaryAnimation, child) {
         return FadeTransition(
@@ -241,9 +243,15 @@ class _TaskWorkerUiState extends State<TaskWorkerUi> {
                     ? null
                     : () => showDialog(
                         context: context,
-                        barrierColor: Colors.black87,
-                        builder: (context) => CircleVideoPlayer(
-                          videoUrl: "${AppUrls.baseUrl}/${tasks[i].videoUrl}",
+                        barrierColor: Colors.white12,
+                        builder: (context) => BackdropFilter(
+                          filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+                          child: Center(
+                            child: CircleVideoPlayer2(
+                              videoUrl:
+                                  "${AppUrls.baseUrl}/${tasks[i].videoUrl}",
+                            ),
+                          ),
                         ),
                       ),
                 child: Container(

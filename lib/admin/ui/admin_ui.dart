@@ -1,8 +1,10 @@
+import 'dart:ui';
+
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:mone_task_app/admin/model/filial_model.dart';
 import 'package:mone_task_app/admin/service/get_excel_ui.dart';
-import 'package:mone_task_app/admin/ui/admin_s.dart';
+import 'package:mone_task_app/admin/ui/admin_list.dart';
 import 'package:mone_task_app/admin/ui/all_task_ui.dart';
 import 'package:mone_task_app/admin/ui/user_list_page.dart';
 import 'package:mone_task_app/admin/ui/video_cache_manager_page.dart';
@@ -26,8 +28,8 @@ class AdminTaskUi extends StatefulWidget {
 class _AdminTaskUiState extends State<AdminTaskUi> {
   TokenStorage tokenStorage = sl<TokenStorage>();
   late Future<List<CheckerCheckTaskModel>> tasksFuture;
-
   late Future<List<FilialModel>> filialModel;
+
   DateTime selectedDate = DateTime.now();
   UserModel? user;
 
@@ -39,13 +41,17 @@ class _AdminTaskUiState extends State<AdminTaskUi> {
     filialModel = AdminTaskService().fetchFilials();
   }
 
-  void _showCircleVideoPlayer(String videoPath) async {
-    String realUrl = videoPath.startsWith('http') ? videoPath : videoPath;
-
+  // Bitta video URL uchun — AdminTaskListWidget dan String keladi
+  void _showCircleVideoPlayer(String videoPath) {
     showDialog(
       context: context,
-      barrierColor: Colors.black87,
-      builder: (context) => CircleVideoPlayer(videoUrl: realUrl),
+      barrierColor: Colors.white12,
+
+      builder: (context) => BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+
+        child: CircleVideoPlayer(videoUrls: [videoPath], initialIndex: 0),
+      ),
     );
   }
 
@@ -81,7 +87,7 @@ class _AdminTaskUiState extends State<AdminTaskUi> {
     await LogOutService().logOut();
     tokenStorage.removeToken();
     tokenStorage.putUserData({});
-    context.pushAndRemove(LoginPage());
+    if (mounted) context.pushAndRemove(LoginPage());
   }
 
   @override
@@ -89,7 +95,7 @@ class _AdminTaskUiState extends State<AdminTaskUi> {
     return FutureBuilder<List<FilialModel>>(
       future: filialModel,
       builder: (context, categorySnapshot) {
-        // Kategoriyalar yuklanayotganida
+        // Yuklanayotgan holat
         if (categorySnapshot.connectionState == ConnectionState.waiting) {
           return Scaffold(
             appBar: AppBar(title: Text(user?.username ?? "")),
@@ -97,7 +103,7 @@ class _AdminTaskUiState extends State<AdminTaskUi> {
           );
         }
 
-        // Kategoriyalarda xatolik bo'lsa
+        // Xatolik holati
         if (categorySnapshot.hasError) {
           return Scaffold(
             appBar: AppBar(
@@ -119,6 +125,7 @@ class _AdminTaskUiState extends State<AdminTaskUi> {
                   const SizedBox(height: 16),
                   Text(
                     'Kategoriyalarni yuklashda xatolik: ${categorySnapshot.error}',
+                    textAlign: TextAlign.center,
                   ),
                   const SizedBox(height: 16),
                   ElevatedButton(
@@ -131,7 +138,7 @@ class _AdminTaskUiState extends State<AdminTaskUi> {
           );
         }
 
-        // Kategoriyalar bo'sh bo'lsa
+        // Bo'sh holat
         if (!categorySnapshot.hasData ||
             categorySnapshot.data == null ||
             categorySnapshot.data!.isEmpty) {
@@ -147,22 +154,24 @@ class _AdminTaskUiState extends State<AdminTaskUi> {
           length: categories.length,
           initialIndex: 0,
           child: Scaffold(
+            // ─── DRAWER ───────────────────────────────────────────────────
             drawer: Drawer(
               child: SafeArea(
                 child: Column(
                   children: [
+                    // Foydalanuvchilar
                     ListTile(
                       onTap: () {
-                        context.pop;
-
+                        Navigator.pop(context);
                         context.push(UsersPage(filialModel: categories));
                       },
-                      leading: Icon(CupertinoIcons.person_2),
-                      title: Text("Все пользователи"),
+                      leading: const Icon(CupertinoIcons.person_2),
+                      title: const Text("Все пользователи"),
                     ),
+                    // Barcha vazifalar
                     ListTile(
                       onTap: () {
-                        context.pop;
+                        Navigator.pop(context);
                         context.push(
                           TemplateTaskAdminUi(
                             name: user?.username ?? "",
@@ -170,47 +179,66 @@ class _AdminTaskUiState extends State<AdminTaskUi> {
                           ),
                         );
                       },
-                      leading: Icon(CupertinoIcons.list_bullet),
-                      title: Text("Все задачи"),
+                      leading: const Icon(CupertinoIcons.list_bullet),
+                      title: const Text("Все задачи"),
                     ),
+                    // Video kesh
                     ListTile(
                       onTap: () {
-                        context.pop;
+                        Navigator.pop(context);
                         context.push(VideoCacheManagerPage());
                       },
-                      leading: Icon(CupertinoIcons.videocam_fill),
-                      title: Text("Все задачи"),
+                      leading: const Icon(CupertinoIcons.videocam_fill),
+                      title: const Text("Кэш видео"),
                     ),
+                    // Hisobotlar
                     ListTile(
                       onTap: () {
-                        context.pop;
+                        Navigator.pop(context);
                         context.push(ExcelReportPage(filials: categories));
                       },
-                      leading: Icon(CupertinoIcons.doc_plaintext),
-                      title: Text("Отчеты"),
+                      leading: const Icon(CupertinoIcons.doc_plaintext),
+                      title: const Text("Отчеты"),
                     ),
+                    const Divider(),
+                    // Chiqish
                     ListTile(
                       onTap: _handleLogout,
-                      leading: Icon(Icons.logout, color: Colors.red),
-                      title: Text("Выйти", style: TextStyle(color: Colors.red)),
+                      leading: const Icon(Icons.logout, color: Colors.red),
+                      title: const Text(
+                        "Выйти",
+                        style: TextStyle(color: Colors.red),
+                      ),
                     ),
                   ],
                 ),
               ),
             ),
+
+            // ─── APP BAR ──────────────────────────────────────────────────
             appBar: AppBar(
+              title: Text(user?.username ?? ""),
               actions: [
                 GestureDetector(
                   onTap: _handleDateSelection,
-                  child: Text(
-                    selectedDate.day == DateTime.now().day
-                        ? "Сегодня "
-                        : "${selectedDate.day}/${selectedDate.month.toString().padLeft(2, '0')}  ",
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 12),
+                    child: Center(
+                      child: Text(
+                        selectedDate.day == DateTime.now().day
+                            ? "Сегодня"
+                            : "${selectedDate.day}/${selectedDate.month.toString().padLeft(2, '0')}",
+                        style: const TextStyle(fontSize: 14),
+                      ),
+                    ),
                   ),
                 ),
+                // Yangilash tugmasi
+                IconButton(
+                  onPressed: _refreshTasks,
+                  icon: const Icon(Icons.refresh),
+                ),
               ],
-              title: Text(user?.username ?? ""),
-
               bottom: TabBar(
                 padding: EdgeInsets.zero,
                 isScrollable: true,
@@ -221,15 +249,19 @@ class _AdminTaskUiState extends State<AdminTaskUi> {
                 ),
               ),
             ),
+
+            // ─── BODY ─────────────────────────────────────────────────────
             body: FutureBuilder<List<CheckerCheckTaskModel>>(
               future: tasksFuture,
               builder: (context, taskSnapshot) {
+                // Yuklanayotgan holat
                 if (taskSnapshot.connectionState == ConnectionState.waiting) {
                   return const Center(
                     child: CircularProgressIndicator.adaptive(),
                   );
                 }
 
+                // Xatolik holati
                 if (taskSnapshot.hasError) {
                   return Center(
                     child: Column(
@@ -241,7 +273,10 @@ class _AdminTaskUiState extends State<AdminTaskUi> {
                           size: 48,
                         ),
                         const SizedBox(height: 16),
-                        Text('Xatolik: ${taskSnapshot.error}'),
+                        Text(
+                          'Xatolik: ${taskSnapshot.error}',
+                          textAlign: TextAlign.center,
+                        ),
                         const SizedBox(height: 16),
                         ElevatedButton(
                           onPressed: _refreshTasks,
@@ -252,6 +287,7 @@ class _AdminTaskUiState extends State<AdminTaskUi> {
                   );
                 }
 
+                // Bo'sh holat
                 if (!taskSnapshot.hasData ||
                     taskSnapshot.data == null ||
                     taskSnapshot.data!.isEmpty) {
@@ -270,6 +306,7 @@ class _AdminTaskUiState extends State<AdminTaskUi> {
                       filialId: category.filialId,
                       selectedDate: selectedDate,
                       onRefresh: _refreshTasks,
+                      // String keladi → [url] ga o'rab CircleVideoPlayer ga uzatamiz
                       onShowVideoPlayer: _showCircleVideoPlayer,
                     );
                   }).toList(),

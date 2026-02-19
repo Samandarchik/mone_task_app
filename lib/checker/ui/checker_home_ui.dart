@@ -42,7 +42,8 @@ class _CheckerHomeUiState extends State<CheckerHomeUi> {
     showDialog(
       context: context,
       barrierColor: Colors.black87,
-      builder: (context) => CircleVideoPlayer(videoUrl: realUrl),
+      builder: (context) =>
+          CircleVideoPlayer(videoUrls: [realUrl], initialIndex: 0),
     );
   }
 

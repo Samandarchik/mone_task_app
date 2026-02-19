@@ -6,13 +6,8 @@ import 'package:mone_task_app/worker/ui/video_pervi.dart';
 
 class TelegramStyleVideoRecorder extends StatefulWidget {
   final int taskId;
-  final int maxDuration;
 
-  const TelegramStyleVideoRecorder({
-    super.key,
-    required this.taskId,
-    required this.maxDuration,
-  });
+  const TelegramStyleVideoRecorder({super.key, required this.taskId});
 
   @override
   State<TelegramStyleVideoRecorder> createState() =>
@@ -50,7 +45,7 @@ class _TelegramStyleVideoRecorderState
       _controller = CameraController(
         _cameras[_currentCameraIndex],
         ResolutionPreset.high,
-        fps: 20,
+        fps: 30,
         enableAudio: true,
       );
 
@@ -134,7 +129,7 @@ class _TelegramStyleVideoRecorderState
             _recordedSeconds++;
           });
 
-          if (_recordedSeconds >= widget.maxDuration) {
+          if (_recordedSeconds >= 40) {
             _stopRecording();
           }
         }
@@ -271,9 +266,13 @@ class _TelegramStyleVideoRecorderState
               painter: CircleMaskPainter(
                 circleRadius: size.width * 0.5,
                 borderColor: _isRecording
-                    ? (_isPaused ? Colors.orange : Colors.white)
+                    ? (_isPaused ? Colors.orange : Colors.red)
                     : Colors.white,
-                borderWidth: 4,
+                borderWidth: 6,
+                // _recordedSeconds / maxDuration = progress
+                progress: _isRecording
+                    ? (_recordedSeconds / 40).clamp(0.0, 1.0)
+                    : 0.0,
               ),
             ),
           ),
@@ -406,7 +405,7 @@ class _TelegramStyleVideoRecorderState
                             width: _isRecording ? 30 : 60,
                             height: _isRecording ? 30 : 60,
                             decoration: BoxDecoration(
-                              color: _isRecording ? Colors.red : Colors.red,
+                              color: Colors.red,
                               borderRadius: BorderRadius.circular(
                                 _isRecording ? 8 : 40,
                               ),
@@ -458,16 +457,18 @@ class _TelegramStyleVideoRecorderState
   }
 }
 
-// Aylana mask yaratish uchun custom painter
+// CircleMaskPainter ga progress qo'shish
 class CircleMaskPainter extends CustomPainter {
   final double circleRadius;
   final Color borderColor;
   final double borderWidth;
+  final double progress; // 0.0 dan 1.0 gacha
 
   CircleMaskPainter({
     required this.circleRadius,
     required this.borderColor,
     required this.borderWidth,
+    this.progress = 0.0,
   });
 
   @override
@@ -486,19 +487,39 @@ class CircleMaskPainter extends CustomPainter {
 
     canvas.drawPath(path, blurPaint);
 
-    // Aylana border
-    final borderPaint = Paint()
-      ..color = borderColor
+    // Background circle (bo'sh qism)
+    final bgPaint = Paint()
+      ..color = Colors.white.withOpacity(0.3)
       ..style = PaintingStyle.stroke
       ..strokeWidth = borderWidth;
 
-    canvas.drawCircle(center, circleRadius, borderPaint);
+    canvas.drawCircle(center, circleRadius, bgPaint);
+
+    // Progress arc
+    if (progress > 0) {
+      final progressPaint = Paint()
+        ..color = borderColor
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = borderWidth
+        ..strokeCap = StrokeCap.round;
+
+      final rect = Rect.fromCircle(center: center, radius: circleRadius);
+      // -pi/2 dan boshlab (yuqoridan) soat yo'nalishida
+      canvas.drawArc(
+        rect,
+        -3.14159 / 2, // start angle (12 o'clock)
+        2 * 3.14159 * progress, // sweep angle
+        false,
+        progressPaint,
+      );
+    }
   }
 
   @override
   bool shouldRepaint(CircleMaskPainter oldDelegate) {
     return oldDelegate.borderColor != borderColor ||
         oldDelegate.circleRadius != circleRadius ||
-        oldDelegate.borderWidth != borderWidth;
+        oldDelegate.borderWidth != borderWidth ||
+        oldDelegate.progress != progress;
   }
 }

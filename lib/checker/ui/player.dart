@@ -3,8 +3,16 @@ import 'package:flutter/material.dart';
 import 'package:video_player/video_player.dart';
 
 class CircleVideoPlayer extends StatefulWidget {
-  final String videoUrl;
-  const CircleVideoPlayer({super.key, required this.videoUrl});
+  final List<String> videoUrls;
+  final int initialIndex;
+  final VoidCallback? onHalfWatched; // ← 50% ko'rilganda chaqiriladi
+
+  const CircleVideoPlayer({
+    super.key,
+    required this.videoUrls,
+    this.initialIndex = 0,
+    this.onHalfWatched,
+  });
 
   @override
   State<CircleVideoPlayer> createState() => _CircleVideoPlayerState();
@@ -17,52 +25,55 @@ class _CircleVideoPlayerState extends State<CircleVideoPlayer>
   bool _isPlaying = false;
   bool _hasError = false;
   String? _errorMessage;
+  bool _halfWatchedFired = false; // 50% faqat bir marta chaqirilsin
+  late int _currentIndex;
 
   late AnimationController _animationController;
 
   @override
   void initState() {
     super.initState();
-
+    _currentIndex = widget.initialIndex;
     _animationController = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 300),
     )..forward();
-
     _initializeVideo();
   }
 
-  Future<void> _initializeVideo() async {
-    try {
-      String videoPath = widget.videoUrl;
+  String get _currentUrl => widget.videoUrls[_currentIndex];
+  bool get _hasPrev => _currentIndex > 0;
+  bool get _hasNext => _currentIndex < widget.videoUrls.length - 1;
 
-      // MUAMMO: Agar URL http bilan boshlansa, lekin ichida local path bo'lsa
-      // Masalan: https://example.com//Users/...
-      // Buni to'g'rilash kerak
+  Future<void> _initializeVideo() async {
+    if (_isInitialized) {
+      _controller.removeListener(_onVideoListener);
+      await _controller.dispose();
+    }
+
+    setState(() {
+      _isInitialized = false;
+      _hasError = false;
+      _errorMessage = null;
+      _halfWatchedFired = false;
+    });
+
+    try {
+      String videoPath = _currentUrl;
+
       if (videoPath.contains('://') && videoPath.contains('/Users/')) {
-        // Local path ni ajratib olish
-        final localPathMatch = RegExp(r'/Users/.*').firstMatch(videoPath);
-        if (localPathMatch != null) {
-          videoPath = localPathMatch.group(0)!;
-        }
+        final m = RegExp(r'/Users/.*').firstMatch(videoPath);
+        if (m != null) videoPath = m.group(0)!;
       } else if (videoPath.contains('://') && videoPath.contains('/data/')) {
-        // Android uchun ham
-        final localPathMatch = RegExp(r'/data/.*').firstMatch(videoPath);
-        if (localPathMatch != null) {
-          videoPath = localPathMatch.group(0)!;
-        }
+        final m = RegExp(r'/data/.*').firstMatch(videoPath);
+        if (m != null) videoPath = m.group(0)!;
       }
 
-      // Avtomatik ravishda local yoki network ekanligini aniqlash
       bool isLocal =
           !videoPath.startsWith('http://') && !videoPath.startsWith('https://');
 
       if (isLocal) {
-        // LOCAL FILE
         final file = File(videoPath);
-
-        if (await file.exists()) {}
-
         if (!await file.exists()) {
           setState(() {
             _hasError = true;
@@ -70,35 +81,32 @@ class _CircleVideoPlayerState extends State<CircleVideoPlayer>
           });
           return;
         }
-
         if (await file.length() == 0) {
           setState(() {
             _hasError = true;
-            _errorMessage = 'Video fayl bo\'sh';
+            _errorMessage = "Video fayl bo'sh";
           });
           return;
         }
-
         _controller = VideoPlayerController.file(file);
       } else {
-        // NETWORK URL
         _controller = VideoPlayerController.networkUrl(Uri.parse(videoPath));
       }
 
       await _controller.initialize();
-      await _controller.setLooping(true);
+      await _controller.setLooping(false);
       await _controller.play();
 
-      _controller.addListener(() {
-        if (mounted) setState(() {});
-      });
+      _controller.addListener(_onVideoListener);
 
       setState(() {
         _isInitialized = true;
         _isPlaying = true;
       });
+
+      _animationController.reset();
+      _animationController.forward();
     } catch (e) {
-      print('Video yuklashda xatolik: $e');
       setState(() {
         _hasError = true;
         _errorMessage = e.toString();
@@ -106,9 +114,48 @@ class _CircleVideoPlayerState extends State<CircleVideoPlayer>
     }
   }
 
+  void _onVideoListener() {
+    if (!mounted) return;
+    setState(() {});
+
+    final value = _controller.value;
+    if (!value.isInitialized) return;
+
+    final total = value.duration.inMilliseconds;
+    final current = value.position.inMilliseconds;
+
+    // 50% tekshirish — faqat bir marta
+    if (!_halfWatchedFired && total > 0 && current >= total * 0.5) {
+      _halfWatchedFired = true;
+      widget.onHalfWatched?.call();
+    }
+
+    // Video tugasa keyingiga o'tish
+    if (!value.isPlaying && current >= total - 200) {
+      _goToNext();
+    }
+  }
+
+  void _goToNext() {
+    if (_hasNext) {
+      setState(() => _currentIndex++);
+      _initializeVideo();
+    }
+  }
+
+  void _goToPrev() {
+    if (_hasPrev) {
+      setState(() => _currentIndex--);
+      _initializeVideo();
+    }
+  }
+
   @override
   void dispose() {
-    _controller.dispose();
+    if (_isInitialized) {
+      _controller.removeListener(_onVideoListener);
+      _controller.dispose();
+    }
     _animationController.dispose();
     super.dispose();
   }
@@ -121,11 +168,9 @@ class _CircleVideoPlayerState extends State<CircleVideoPlayer>
   Widget _buildProgressBar(double circleSize) {
     final duration = _controller.value.duration;
     final position = _controller.value.position;
-
     final progress = duration.inMilliseconds == 0
         ? 0.0
         : position.inMilliseconds / duration.inMilliseconds;
-
     final progressWidth = circleSize * 0.9;
 
     return Container(
@@ -138,6 +183,14 @@ class _CircleVideoPlayerState extends State<CircleVideoPlayer>
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
+          if (widget.videoUrls.length > 1)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 6),
+              child: Text(
+                '${_currentIndex + 1} / ${widget.videoUrls.length}',
+                style: const TextStyle(color: Colors.white70, fontSize: 12),
+              ),
+            ),
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
@@ -152,13 +205,10 @@ class _CircleVideoPlayerState extends State<CircleVideoPlayer>
             ],
           ),
           const SizedBox(height: 10),
-
-          /// Slider
           GestureDetector(
-            onHorizontalDragUpdate: (details) =>
-                _seekTo(details.localPosition.dx, progressWidth - 32),
-            onTapDown: (details) =>
-                _seekTo(details.localPosition.dx, progressWidth - 32),
+            onHorizontalDragUpdate: (d) =>
+                _seekTo(d.localPosition.dx, progressWidth - 32),
+            onTapDown: (d) => _seekTo(d.localPosition.dx, progressWidth - 32),
             child: Container(
               height: 30,
               color: Colors.transparent,
@@ -198,6 +248,45 @@ class _CircleVideoPlayerState extends State<CircleVideoPlayer>
               ),
             ),
           ),
+          const SizedBox(height: 8),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              IconButton(
+                onPressed: _hasPrev ? _goToPrev : null,
+                icon: Icon(
+                  Icons.skip_previous_rounded,
+                  color: _hasPrev ? Colors.white : Colors.white30,
+                  size: 32,
+                ),
+              ),
+              const SizedBox(width: 8),
+              IconButton(
+                onPressed: () {
+                  setState(() {
+                    _isPlaying ? _controller.pause() : _controller.play();
+                    _isPlaying = !_isPlaying;
+                  });
+                },
+                icon: Icon(
+                  _isPlaying
+                      ? Icons.pause_circle_filled_rounded
+                      : Icons.play_circle_filled_rounded,
+                  color: Colors.white,
+                  size: 40,
+                ),
+              ),
+              const SizedBox(width: 8),
+              IconButton(
+                onPressed: _hasNext ? _goToNext : null,
+                icon: Icon(
+                  Icons.skip_next_rounded,
+                  color: _hasNext ? Colors.white : Colors.white30,
+                  size: 32,
+                ),
+              ),
+            ],
+          ),
         ],
       ),
     );
@@ -218,19 +307,16 @@ class _CircleVideoPlayerState extends State<CircleVideoPlayer>
       backgroundColor: Colors.transparent,
       body: Stack(
         children: [
-          /// Back tap -> close
           Positioned.fill(
             child: GestureDetector(
               onTap: () => Navigator.pop(context),
               child: Container(color: Colors.transparent),
             ),
           ),
-
           Center(
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                /// Circle Video
                 ScaleTransition(
                   scale: Tween(begin: 0.8, end: 1.0).animate(
                     CurvedAnimation(
@@ -238,96 +324,100 @@ class _CircleVideoPlayerState extends State<CircleVideoPlayer>
                       curve: Curves.easeOut,
                     ),
                   ),
-                  child: Container(
-                    width: circleSize,
-                    height: circleSize,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      color: Colors.black,
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.black54,
-                          blurRadius: 20,
-                          spreadRadius: 5,
-                        ),
-                      ],
-                    ),
-                    child: ClipOval(
-                      child: Stack(
-                        fit: StackFit.expand,
-                        children: [
-                          if (_isInitialized && !_hasError)
-                            FittedBox(
-                              fit: BoxFit.cover,
-                              child: SizedBox(
-                                width: _controller.value.size.width,
-                                height: _controller.value.size.height,
-                                child: VideoPlayer(_controller),
+                  child: GestureDetector(
+                    onHorizontalDragEnd: (details) {
+                      if (details.primaryVelocity != null) {
+                        if (details.primaryVelocity! < -300) _goToNext();
+                        if (details.primaryVelocity! > 300) _goToPrev();
+                      }
+                    },
+                    child: Container(
+                      width: circleSize,
+                      height: circleSize,
+                      decoration: const BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: Colors.black,
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black54,
+                            blurRadius: 20,
+                            spreadRadius: 5,
+                          ),
+                        ],
+                      ),
+                      child: ClipOval(
+                        child: Stack(
+                          fit: StackFit.expand,
+                          children: [
+                            if (_isInitialized && !_hasError)
+                              FittedBox(
+                                fit: BoxFit.cover,
+                                child: SizedBox(
+                                  width: _controller.value.size.width,
+                                  height: _controller.value.size.height,
+                                  child: VideoPlayer(_controller),
+                                ),
                               ),
-                            ),
-
-                          if (!_isInitialized && !_hasError)
-                            const Center(
-                              child: CircularProgressIndicator.adaptive(),
-                            ),
-
-                          if (_hasError)
-                            Center(
-                              child: Padding(
-                                padding: const EdgeInsets.all(20.0),
-                                child: Column(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    const Icon(
-                                      Icons.error_outline,
-                                      color: Colors.red,
-                                      size: 48,
-                                    ),
-                                    const SizedBox(height: 16),
-                                    const Text(
-                                      "Video yuklanmadi",
-                                      style: TextStyle(
-                                        color: Colors.white,
-                                        fontSize: 16,
-                                        fontWeight: FontWeight.bold,
+                            if (!_isInitialized && !_hasError)
+                              const Center(
+                                child: CircularProgressIndicator.adaptive(),
+                              ),
+                            if (_hasError)
+                              Center(
+                                child: Padding(
+                                  padding: const EdgeInsets.all(20.0),
+                                  child: Column(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      const Icon(
+                                        Icons.error_outline,
+                                        color: Colors.red,
+                                        size: 48,
                                       ),
-                                      textAlign: TextAlign.center,
-                                    ),
-                                    if (_errorMessage != null) ...[
-                                      const SizedBox(height: 8),
-                                      Text(
-                                        _errorMessage!,
-                                        style: const TextStyle(
-                                          color: Colors.white70,
-                                          fontSize: 12,
+                                      const SizedBox(height: 16),
+                                      const Text(
+                                        "Video yuklanmadi",
+                                        style: TextStyle(
+                                          color: Colors.white,
+                                          fontSize: 16,
+                                          fontWeight: FontWeight.bold,
                                         ),
                                         textAlign: TextAlign.center,
-                                        maxLines: 3,
-                                        overflow: TextOverflow.ellipsis,
                                       ),
+                                      if (_errorMessage != null) ...[
+                                        const SizedBox(height: 8),
+                                        Text(
+                                          _errorMessage!,
+                                          style: const TextStyle(
+                                            color: Colors.white70,
+                                            fontSize: 12,
+                                          ),
+                                          textAlign: TextAlign.center,
+                                          maxLines: 3,
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
+                                      ],
                                     ],
-                                  ],
+                                  ),
                                 ),
                               ),
-                            ),
-
-                          if (_isInitialized && !_isPlaying)
-                            Container(
-                              color: Colors.black26,
-                              child: const Center(
-                                child: Icon(
-                                  Icons.play_arrow,
-                                  size: 70,
-                                  color: Colors.white,
+                            if (_isInitialized && !_isPlaying)
+                              Container(
+                                color: Colors.black26,
+                                child: const Center(
+                                  child: Icon(
+                                    Icons.play_arrow,
+                                    size: 70,
+                                    color: Colors.white,
+                                  ),
                                 ),
                               ),
-                            ),
-                        ],
+                          ],
+                        ),
                       ),
                     ),
                   ),
                 ),
-
                 if (_isInitialized && !_hasError)
                   Padding(
                     padding: const EdgeInsets.only(top: 24),
@@ -336,8 +426,6 @@ class _CircleVideoPlayerState extends State<CircleVideoPlayer>
               ],
             ),
           ),
-
-          /// Close button
           Positioned(
             top: MediaQuery.of(context).padding.top + 16,
             right: 16,
@@ -349,8 +437,6 @@ class _CircleVideoPlayerState extends State<CircleVideoPlayer>
               ),
             ),
           ),
-
-          /// Volume
           if (_isInitialized && !_hasError)
             Positioned(
               top: MediaQuery.of(context).padding.top + 16,
