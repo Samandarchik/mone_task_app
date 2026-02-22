@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:dio/dio.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:intl/intl.dart';
 import 'package:mone_task_app/core/constants/urls.dart';
 import 'package:mone_task_app/core/di/di.dart';
 import 'package:mone_task_app/worker/model/response_task_model.dart';
@@ -9,9 +10,17 @@ import 'package:mone_task_app/worker/model/task_worker_model.dart';
 
 class TaskWorkerService {
   final Dio _dio = sl<Dio>();
-  Future<List<TaskWorkerModel>> fetchTasks() async {
+
+  /// [date] berilmasa bugungi kun ishlatiladi
+  Future<List<TaskWorkerModel>> fetchTasks({DateTime? date}) async {
     try {
-      final response = await _dio.get(AppUrls.tasks);
+      final String dateStr = DateFormat(
+        'yyyy-MM-dd',
+      ).format(date ?? DateTime.now());
+      final response = await _dio.get(
+        AppUrls.tasks,
+        queryParameters: {'date': dateStr},
+      );
 
       if (response.data == null) {
         throw Exception("Task ma'lumotlari mavjud emas");
@@ -25,11 +34,10 @@ class TaskWorkerService {
 
       return data.map((e) => TaskWorkerModel.fromJson(e)).toList();
     } catch (e) {
-      rethrow; // UI ushlashi uchun
+      rethrow;
     }
   }
 
-  /// Bitta video faylni yuborish (eski funksiya)
   Future<bool> completeTask(RequestTaskModel request) async {
     try {
       final compressedVideo = File(request.file!.path);
@@ -45,15 +53,12 @@ class TaskWorkerService {
         "${AppUrls.tasks}/${request.id}/submit",
         data: formData,
       );
-      print(response.statusCode);
       return response.statusCode == 200;
     } catch (e) {
       rethrow;
     }
   }
 
-  /// VARIANT 1: Har bir segmentni alohida yuborish
-  /// Bu variantda har bir segment alohida request sifatida yuboriladi
   Future<bool> completeTaskSegment({
     required int taskId,
     required XFile segment,
@@ -81,30 +86,21 @@ class TaskWorkerService {
         },
       );
 
-      print(
-        '✅ Segment $segmentNumber yuklandi. Status: ${response.statusCode}',
-      );
       return response.statusCode == 200;
     } catch (e) {
-      print('❌ Segment $segmentNumber yuklashda xatolik: $e');
       rethrow;
     }
   }
 
-  /// VARIANT 2: Barcha segmentlarni bitta requestda yuborish
-  /// Bu variantda barcha segmentlar bitta multipart requestda yuboriladi
   Future<bool> completeTaskWithSegments({
     required int taskId,
     required List<XFile> segments,
   }) async {
     try {
-      if (segments.isEmpty) {
-        throw Exception('Segmentlar mavjud emas');
-      }
+      if (segments.isEmpty) throw Exception('Segmentlar mavjud emas');
 
       Map<String, dynamic> formDataMap = {'segment_count': segments.length};
 
-      // Barcha segmentlarni qo'shish
       for (int i = 0; i < segments.length; i++) {
         final videoFile = File(segments[i].path);
         formDataMap['video_$i'] = await MultipartFile.fromFile(
@@ -124,10 +120,8 @@ class TaskWorkerService {
         },
       );
 
-      print('✅ : ${response.statusCode}');
       return response.statusCode == 200;
     } catch (e) {
-      print('❌ Segmentlarni yuklashda xatolik: $e');
       rethrow;
     }
   }

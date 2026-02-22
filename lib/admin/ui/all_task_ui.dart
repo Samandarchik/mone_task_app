@@ -316,7 +316,10 @@ class _TemplateTaskAdminUiState extends State<TemplateTaskAdminUi> {
                       child: const Text("Yo'q"),
                     ),
                     TextButton(
-                      onPressed: () => Navigator.pop(context, true),
+                      onPressed: () {
+                        AdminTaskService().deleteFilial(filial.filialId);
+                        Navigator.pop(context, true);
+                      },
                       style: TextButton.styleFrom(foregroundColor: Colors.red),
                       child: const Text("Ha, o'chirish"),
                     ),

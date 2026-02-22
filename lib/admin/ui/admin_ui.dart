@@ -41,16 +41,19 @@ class _AdminTaskUiState extends State<AdminTaskUi> {
     filialModel = AdminTaskService().fetchFilials();
   }
 
-  // Bitta video URL uchun — AdminTaskListWidget dan String keladi
-  void _showCircleVideoPlayer(String videoPath) {
+  /// AdminTaskListWidget dan List<String> va startIndex keladi
+  void _showCircleVideoPlayer(List<String> videoPaths, int startIndex) {
+    if (videoPaths.isEmpty) return;
     showDialog(
       context: context,
-      barrierColor: Colors.white12,
 
+      barrierColor: Colors.white30,
       builder: (context) => BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
-
-        child: CircleVideoPlayer(videoUrls: [videoPath], initialIndex: 0),
+        filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
+        child: CircleVideoPlayer(
+          videoUrls: videoPaths,
+          initialIndex: startIndex,
+        ),
       ),
     );
   }
@@ -74,7 +77,6 @@ class _AdminTaskUiState extends State<AdminTaskUi> {
       initialDate: selectedDate,
       lastDate: DateTime.now(),
     );
-
     if (picked != null) {
       setState(() {
         selectedDate = picked;
@@ -95,7 +97,6 @@ class _AdminTaskUiState extends State<AdminTaskUi> {
     return FutureBuilder<List<FilialModel>>(
       future: filialModel,
       builder: (context, categorySnapshot) {
-        // Yuklanayotgan holat
         if (categorySnapshot.connectionState == ConnectionState.waiting) {
           return Scaffold(
             appBar: AppBar(title: Text(user?.username ?? "")),
@@ -103,7 +104,6 @@ class _AdminTaskUiState extends State<AdminTaskUi> {
           );
         }
 
-        // Xatolik holati
         if (categorySnapshot.hasError) {
           return Scaffold(
             appBar: AppBar(
@@ -124,7 +124,7 @@ class _AdminTaskUiState extends State<AdminTaskUi> {
                   const Icon(Icons.error_outline, color: Colors.red, size: 48),
                   const SizedBox(height: 16),
                   Text(
-                    'Kategoriyalarni yuklashda xatolik: ${categorySnapshot.error}',
+                    'Kategoriyalarni yuklashda xatolik:\n${categorySnapshot.error}',
                     textAlign: TextAlign.center,
                   ),
                   const SizedBox(height: 16),
@@ -138,7 +138,6 @@ class _AdminTaskUiState extends State<AdminTaskUi> {
           );
         }
 
-        // Bo'sh holat
         if (!categorySnapshot.hasData ||
             categorySnapshot.data == null ||
             categorySnapshot.data!.isEmpty) {
@@ -154,12 +153,11 @@ class _AdminTaskUiState extends State<AdminTaskUi> {
           length: categories.length,
           initialIndex: 0,
           child: Scaffold(
-            // ─── DRAWER ───────────────────────────────────────────────────
+            // ─── DRAWER ──────────────────────────────────────────────────
             drawer: Drawer(
               child: SafeArea(
                 child: Column(
                   children: [
-                    // Foydalanuvchilar
                     ListTile(
                       onTap: () {
                         Navigator.pop(context);
@@ -168,7 +166,6 @@ class _AdminTaskUiState extends State<AdminTaskUi> {
                       leading: const Icon(CupertinoIcons.person_2),
                       title: const Text("Все пользователи"),
                     ),
-                    // Barcha vazifalar
                     ListTile(
                       onTap: () {
                         Navigator.pop(context);
@@ -182,7 +179,6 @@ class _AdminTaskUiState extends State<AdminTaskUi> {
                       leading: const Icon(CupertinoIcons.list_bullet),
                       title: const Text("Все задачи"),
                     ),
-                    // Video kesh
                     ListTile(
                       onTap: () {
                         Navigator.pop(context);
@@ -191,7 +187,6 @@ class _AdminTaskUiState extends State<AdminTaskUi> {
                       leading: const Icon(CupertinoIcons.videocam_fill),
                       title: const Text("Кэш видео"),
                     ),
-                    // Hisobotlar
                     ListTile(
                       onTap: () {
                         Navigator.pop(context);
@@ -201,7 +196,6 @@ class _AdminTaskUiState extends State<AdminTaskUi> {
                       title: const Text("Отчеты"),
                     ),
                     const Divider(),
-                    // Chiqish
                     ListTile(
                       onTap: _handleLogout,
                       leading: const Icon(Icons.logout, color: Colors.red),
@@ -215,7 +209,7 @@ class _AdminTaskUiState extends State<AdminTaskUi> {
               ),
             ),
 
-            // ─── APP BAR ──────────────────────────────────────────────────
+            // ─── APP BAR ─────────────────────────────────────────────────
             appBar: AppBar(
               title: Text(user?.username ?? ""),
               actions: [
@@ -233,11 +227,6 @@ class _AdminTaskUiState extends State<AdminTaskUi> {
                     ),
                   ),
                 ),
-                // Yangilash tugmasi
-                IconButton(
-                  onPressed: _refreshTasks,
-                  icon: const Icon(Icons.refresh),
-                ),
               ],
               bottom: TabBar(
                 padding: EdgeInsets.zero,
@@ -250,18 +239,16 @@ class _AdminTaskUiState extends State<AdminTaskUi> {
               ),
             ),
 
-            // ─── BODY ─────────────────────────────────────────────────────
+            // ─── BODY ────────────────────────────────────────────────────
             body: FutureBuilder<List<CheckerCheckTaskModel>>(
               future: tasksFuture,
               builder: (context, taskSnapshot) {
-                // Yuklanayotgan holat
                 if (taskSnapshot.connectionState == ConnectionState.waiting) {
                   return const Center(
                     child: CircularProgressIndicator.adaptive(),
                   );
                 }
 
-                // Xatolik holati
                 if (taskSnapshot.hasError) {
                   return Center(
                     child: Column(
@@ -287,7 +274,6 @@ class _AdminTaskUiState extends State<AdminTaskUi> {
                   );
                 }
 
-                // Bo'sh holat
                 if (!taskSnapshot.hasData ||
                     taskSnapshot.data == null ||
                     taskSnapshot.data!.isEmpty) {
@@ -306,7 +292,7 @@ class _AdminTaskUiState extends State<AdminTaskUi> {
                       filialId: category.filialId,
                       selectedDate: selectedDate,
                       onRefresh: _refreshTasks,
-                      // String keladi → [url] ga o'rab CircleVideoPlayer ga uzatamiz
+                      // ← List<String> va int keladi
                       onShowVideoPlayer: _showCircleVideoPlayer,
                     );
                   }).toList(),

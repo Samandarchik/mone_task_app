@@ -36,14 +36,24 @@ class _CheckerHomeUiState extends State<CheckerHomeUi> {
     categoriesFuture = AdminTaskService().fetchFilials();
   }
 
-  void _showCircleVideoPlayer(String videoPath) async {
-    String realUrl = videoPath.startsWith('http') ? videoPath : videoPath;
-
+  /// TaskListWidget dan List<String> va startIndex keladi.
+  /// onHalfWatched → 50% ko'rilganda status=3 qilinadi.
+  /// Lekin taskId TaskListWidget ichida mavjud, shuning uchun
+  /// u yerdan callback orqali uzatiladi (pastga qarang).
+  void _showCircleVideoPlayer(
+    List<String> videoPaths,
+    int startIndex, {
+    VoidCallback? onHalfWatched,
+  }) {
+    if (videoPaths.isEmpty) return;
     showDialog(
       context: context,
       barrierColor: Colors.black87,
-      builder: (context) =>
-          CircleVideoPlayer(videoUrls: [realUrl], initialIndex: 0),
+      builder: (context) => CircleVideoPlayer(
+        videoUrls: videoPaths,
+        initialIndex: startIndex,
+        onHalfWatched: onHalfWatched,
+      ),
     );
   }
 
@@ -53,12 +63,39 @@ class _CheckerHomeUiState extends State<CheckerHomeUi> {
     });
   }
 
+  void _refreshCategories() {
+    setState(() {
+      categoriesFuture = AdminTaskService().fetchFilials();
+    });
+  }
+
+  Future<void> _handleDateSelection() async {
+    final DateTime? picked = await showDatePicker(
+      context: context,
+      firstDate: DateTime.now().subtract(const Duration(days: 5)),
+      initialDate: selectedDate,
+      lastDate: DateTime.now(),
+    );
+    if (picked != null) {
+      setState(() {
+        selectedDate = picked;
+        tasksFuture = AdminTaskService().fetchTasks(selectedDate);
+      });
+    }
+  }
+
+  Future<void> _handleLogout() async {
+    await LogOutService().logOut();
+    tokenStorage.removeToken();
+    tokenStorage.putUserData({});
+    if (mounted) context.pushAndRemove(LoginPage());
+  }
+
   @override
   Widget build(BuildContext context) {
     return FutureBuilder<List<FilialModel>>(
       future: categoriesFuture,
       builder: (context, categorySnapshot) {
-        // Kategoriyalar yuklanayotganida
         if (categorySnapshot.connectionState == ConnectionState.waiting) {
           return Scaffold(
             appBar: AppBar(title: Text(user?.username ?? "Checker")),
@@ -66,7 +103,6 @@ class _CheckerHomeUiState extends State<CheckerHomeUi> {
           );
         }
 
-        // Kategoriyalarda xatolik bo'lsa
         if (categorySnapshot.hasError) {
           return Scaffold(
             appBar: AppBar(title: Text(user?.username ?? "Checker")),
@@ -77,15 +113,12 @@ class _CheckerHomeUiState extends State<CheckerHomeUi> {
                   const Icon(Icons.error_outline, color: Colors.red, size: 48),
                   const SizedBox(height: 16),
                   Text(
-                    'Kategoriyalarni yuklashda xatolik: ${categorySnapshot.error}',
+                    'Kategoriyalarni yuklashda xatolik:\n${categorySnapshot.error}',
+                    textAlign: TextAlign.center,
                   ),
                   const SizedBox(height: 16),
                   ElevatedButton(
-                    onPressed: () {
-                      setState(() {
-                        categoriesFuture = AdminTaskService().fetchFilials();
-                      });
-                    },
+                    onPressed: _refreshCategories,
                     child: const Text('Qayta urinish'),
                   ),
                 ],
@@ -94,7 +127,6 @@ class _CheckerHomeUiState extends State<CheckerHomeUi> {
           );
         }
 
-        // Kategoriyalar bo'sh bo'lsa
         if (!categorySnapshot.hasData ||
             categorySnapshot.data == null ||
             categorySnapshot.data!.isEmpty) {
@@ -110,74 +142,73 @@ class _CheckerHomeUiState extends State<CheckerHomeUi> {
           length: categories.length,
           initialIndex: 0,
           child: Scaffold(
+            // ─── DRAWER ──────────────────────────────────────────────────
             drawer: Drawer(
               child: SafeArea(
                 child: Column(
                   children: [
                     ListTile(
                       onTap: () {
-                        context.pop;
+                        Navigator.pop(context);
                         context.push(VideoCacheManagerPage());
                       },
-                      leading: Icon(CupertinoIcons.videocam_fill),
-                      title: Text("Все задачи"),
+                      leading: const Icon(CupertinoIcons.videocam_fill),
+                      title: const Text("Кэш видео"),
                     ),
                     ListTile(
                       onTap: () {
-                        context.pop;
+                        Navigator.pop(context);
                         context.push(ExcelReportPage(filials: categories));
                       },
-                      leading: Icon(CupertinoIcons.doc_plaintext),
-                      title: Text("Отчеты"),
+                      leading: const Icon(CupertinoIcons.doc_plaintext),
+                      title: const Text("Отчеты"),
                     ),
+                    const Divider(),
                     ListTile(
                       onTap: _handleLogout,
-                      leading: Icon(Icons.logout, color: Colors.red),
-                      title: Text("Выйти", style: TextStyle(color: Colors.red)),
+                      leading: const Icon(Icons.logout, color: Colors.red),
+                      title: const Text(
+                        "Выйти",
+                        style: TextStyle(color: Colors.red),
+                      ),
                     ),
                   ],
                 ),
               ),
             ),
+
+            // ─── APP BAR ─────────────────────────────────────────────────
             appBar: AppBar(
+              title: Text(user?.username ?? "Checker"),
               actions: [
                 GestureDetector(
-                  child: Text(
-                    selectedDate.day == DateTime.now().day
-                        ? "Сегодня "
-                        : "${selectedDate.day}/${selectedDate.month}/${selectedDate.year} ",
-                  ),
-                  onTap: () async {
-                    final DateTime? picked = await showDatePicker(
-                      context: context,
-                      firstDate: DateTime.now().subtract(
-                        const Duration(days: 5),
+                  onTap: _handleDateSelection,
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 12),
+                    child: Center(
+                      child: Text(
+                        selectedDate.day == DateTime.now().day
+                            ? "Сегодня"
+                            : "${selectedDate.day}/${selectedDate.month.toString().padLeft(2, '0')}/${selectedDate.year}",
+                        style: const TextStyle(fontSize: 14),
                       ),
-                      initialDate: selectedDate,
-                      lastDate: DateTime.now(),
-                    );
-
-                    if (picked != null) {
-                      setState(() {
-                        selectedDate = picked;
-                        tasksFuture = AdminTaskService().fetchTasks(
-                          selectedDate,
-                        );
-                      });
-                    }
-                  },
+                    ),
+                  ),
+                ),
+                IconButton(
+                  onPressed: _refreshTasks,
+                  icon: const Icon(Icons.refresh),
                 ),
               ],
-              title: Text(user?.username ?? "Checker"),
-
               bottom: TabBar(
                 padding: EdgeInsets.zero,
                 isScrollable: true,
-                tabs: categories
-                    .map((category) => Tab(text: category.name))
-                    .toList(),
+                tabAlignment: TabAlignment.start,
+                tabs: categories.map((c) => Tab(text: c.name)).toList(),
               ),
             ),
+
+            // ─── BODY ────────────────────────────────────────────────────
             body: FutureBuilder<List<CheckerCheckTaskModel>>(
               future: tasksFuture,
               builder: (context, taskSnapshot) {
@@ -198,7 +229,10 @@ class _CheckerHomeUiState extends State<CheckerHomeUi> {
                           size: 48,
                         ),
                         const SizedBox(height: 16),
-                        Text('Xatolik: ${taskSnapshot.error}'),
+                        Text(
+                          'Xatolik: ${taskSnapshot.error}',
+                          textAlign: TextAlign.center,
+                        ),
                         const SizedBox(height: 16),
                         ElevatedButton(
                           onPressed: _refreshTasks,
@@ -226,7 +260,11 @@ class _CheckerHomeUiState extends State<CheckerHomeUi> {
                       filialId: category.filialId,
                       selectedDate: selectedDate,
                       onRefresh: _refreshTasks,
-                      onShowVideoPlayer: _showCircleVideoPlayer,
+                      // TaskListWidget ichidan List<String>, int, va
+                      // onHalfWatched callback keladi
+                      onShowVideoPlayer: (String videoPath) {
+                        _showCircleVideoPlayer([videoPath], 0);
+                      },
                     );
                   }).toList(),
                 );
@@ -236,12 +274,5 @@ class _CheckerHomeUiState extends State<CheckerHomeUi> {
         );
       },
     );
-  }
-
-  Future<void> _handleLogout() async {
-    await LogOutService().logOut();
-    tokenStorage.removeToken();
-    tokenStorage.putUserData({});
-    context.pushAndRemove(LoginPage());
   }
 }

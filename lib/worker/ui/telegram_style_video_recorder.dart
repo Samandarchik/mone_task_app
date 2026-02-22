@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:camera/camera.dart';
+import 'package:wakelock_plus/wakelock_plus.dart';
 import 'package:mone_task_app/worker/ui/video_pervi.dart';
 
 class TelegramStyleVideoRecorder extends StatefulWidget {
@@ -28,6 +29,14 @@ class _TelegramStyleVideoRecorderState
 
   List<XFile> _videoSegments = [];
 
+  // ── ZOOM ──────────────────────────────────────────────
+  double _currentZoom = 1.0;
+  double _minZoom = 1.0;
+  double _maxZoom = 16.0; // 16x gacha
+  bool _showZoomSlider = false;
+  Timer? _zoomSliderHideTimer;
+  // ──────────────────────────────────────────────────────
+
   @override
   void initState() {
     super.initState();
@@ -50,6 +59,12 @@ class _TelegramStyleVideoRecorderState
       );
 
       await _controller!.initialize();
+
+      // Zoom chegaralarini olish (max 16x gacha cheklash)
+      _minZoom = await _controller!.getMinZoomLevel();
+      final double deviceMax = await _controller!.getMaxZoomLevel();
+      _maxZoom = deviceMax.clamp(_minZoom, 16.0);
+      _currentZoom = _minZoom;
 
       if (mounted) {
         setState(() {
@@ -74,9 +89,6 @@ class _TelegramStyleVideoRecorderState
         await _controller!.pauseVideoRecording();
         final currentVideo = await _controller!.stopVideoRecording();
         _videoSegments.add(currentVideo);
-        print(
-          'Segment ${_videoSegments.length} saqlandi: ${currentVideo.path}',
-        );
       }
 
       _currentCameraIndex = _currentCameraIndex == 0 ? 1 : 0;
@@ -86,15 +98,21 @@ class _TelegramStyleVideoRecorderState
       _controller = CameraController(
         _cameras[_currentCameraIndex],
         ResolutionPreset.high,
-        fps: 20,
+        fps: 30,
         enableAudio: true,
       );
 
       await _controller!.initialize();
 
+      // Yangi kamera uchun zoom chegaralarini yangilash (max 16x)
+      _minZoom = await _controller!.getMinZoomLevel();
+      final double newDeviceMax = await _controller!.getMaxZoomLevel();
+      _maxZoom = newDeviceMax.clamp(_minZoom, 16.0);
+      _currentZoom = _minZoom;
+      await _controller!.setZoomLevel(_currentZoom);
+
       if (_isRecording && !_isPaused) {
         await _controller!.startVideoRecording();
-        print('Yangi kamera bilan recording davom ettirildi');
       }
 
       if (mounted) {
@@ -110,12 +128,30 @@ class _TelegramStyleVideoRecorderState
     }
   }
 
+  // ── ZOOM SLIDER ───────────────────────────────────────
+  void _onZoomChanged(double value) {
+    if (_controller == null || !_controller!.value.isInitialized) return;
+    final clamped = value.clamp(_minZoom, _maxZoom);
+    _currentZoom = clamped;
+    _controller!.setZoomLevel(_currentZoom);
+
+    // 3 soniyadan keyin sliderni yashirish
+    _zoomSliderHideTimer?.cancel();
+    _zoomSliderHideTimer = Timer(const Duration(seconds: 3), () {
+      if (mounted) setState(() => _showZoomSlider = false);
+    });
+
+    setState(() => _showZoomSlider = true);
+  }
+  // ──────────────────────────────────────────────────────
+
   void _startRecording() async {
     if (_controller == null || !_controller!.value.isInitialized) return;
     if (_isRecording) return;
 
     try {
       await _controller!.startVideoRecording();
+      await WakelockPlus.enable(); // Ekran uchmasin
       setState(() {
         _isRecording = true;
         _isPaused = false;
@@ -144,13 +180,11 @@ class _TelegramStyleVideoRecorderState
 
     try {
       if (_isPaused) {
-        // Resume
         await _controller!.resumeVideoRecording();
         setState(() {
           _isPaused = false;
         });
       } else {
-        // Pause
         await _controller!.pauseVideoRecording();
         setState(() {
           _isPaused = true;
@@ -174,7 +208,7 @@ class _TelegramStyleVideoRecorderState
       final XFile lastSegment = await _controller!.stopVideoRecording();
       _videoSegments.add(lastSegment);
 
-      print('Jami ${_videoSegments.length} ta segment yozildi');
+      await WakelockPlus.disable(); // Ekran normal rejimga qaytsin
 
       setState(() {
         _isRecording = false;
@@ -182,7 +216,6 @@ class _TelegramStyleVideoRecorderState
       });
 
       if (_videoSegments.isNotEmpty) {
-        // Preview ekraniga o'tish
         final result = await Navigator.of(context).push(
           MaterialPageRoute(
             builder: (context) => VideoPreviewScreen(
@@ -192,12 +225,10 @@ class _TelegramStyleVideoRecorderState
           ),
         );
 
-        // Natijani qaytarish
         if (result != null && result is Map) {
           if (result['action'] == 'send') {
             Navigator.of(context).pop(_videoSegments);
           } else if (result['action'] == 'retake') {
-            // Qaytadan yozish - ekranda qolish
             setState(() {
               _videoSegments.clear();
               _recordedSeconds = 0;
@@ -220,13 +251,14 @@ class _TelegramStyleVideoRecorderState
   @override
   void dispose() {
     _timer?.cancel();
+    _zoomSliderHideTimer?.cancel();
+    WakelockPlus.disable(); // Widget yopilganda ham o'chirish
     _controller?.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    // NULL CHECK MUAMMOSINI HAL QILISH
     if (!_isInitialized || _controller == null) {
       return const Material(
         color: Colors.black,
@@ -242,16 +274,13 @@ class _TelegramStyleVideoRecorderState
       color: Colors.transparent,
       child: Stack(
         children: [
-          // To'liq ekran kamera preview
+          // ── Kamera preview + ZOOM GESTURE ───────────────
           Positioned.fill(
             child: _isSwitchingCamera
                 ? BackdropFilter(
-                    filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
-                    child: Container(
-                      color: Colors.black.withOpacity(0.5),
-                      child: const Center(
-                        child: CircularProgressIndicator(color: Colors.white),
-                      ),
+                    filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
+                    child: const Center(
+                      child: CircularProgressIndicator.adaptive(),
                     ),
                   )
                 : Transform.scale(
@@ -260,7 +289,7 @@ class _TelegramStyleVideoRecorderState
                   ),
           ),
 
-          // Blur orqa fon faqat kamera tashqarisida
+          // Blur mask (doira tashqarisi)
           Positioned.fill(
             child: CustomPaint(
               painter: CircleMaskPainter(
@@ -269,13 +298,14 @@ class _TelegramStyleVideoRecorderState
                     ? (_isPaused ? Colors.orange : Colors.red)
                     : Colors.white,
                 borderWidth: 6,
-                // _recordedSeconds / maxDuration = progress
                 progress: _isRecording
                     ? (_recordedSeconds / 40).clamp(0.0, 1.0)
                     : 0.0,
               ),
             ),
           ),
+
+          // ─────────────────────────────────────────────────
 
           // UI elementlar
           SafeArea(
@@ -343,7 +373,77 @@ class _TelegramStyleVideoRecorderState
                   ],
                 ),
 
-                const SizedBox(height: 40),
+                const SizedBox(height: 16),
+
+                // ── Gorizontal ZOOM SLIDER (chapdan o'ngga) ──
+                AnimatedOpacity(
+                  opacity: _showZoomSlider ? 1.0 : 0.4,
+                  duration: const Duration(milliseconds: 300),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 24),
+                    child: Row(
+                      children: [
+                        // Min label
+                        Text(
+                          '1×',
+                          style: TextStyle(
+                            color: Colors.black.withOpacity(0.8),
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        // Slider
+                        Expanded(
+                          child: SliderTheme(
+                            data: SliderTheme.of(context).copyWith(
+                              trackHeight: 4,
+                              thumbShape: const RoundSliderThumbShape(
+                                enabledThumbRadius: 10,
+                              ),
+                              overlayShape: const RoundSliderOverlayShape(
+                                overlayRadius: 20,
+                              ),
+                              activeTrackColor: Colors.black,
+                              inactiveTrackColor: Colors.black.withOpacity(0.3),
+                              thumbColor: Colors.black,
+                              overlayColor: Colors.black.withOpacity(0.2),
+                            ),
+                            child: Slider(
+                              value: _currentZoom.clamp(_minZoom, _maxZoom),
+                              min: _minZoom,
+                              max: _maxZoom,
+                              onChanged: _onZoomChanged,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        // Zoom qiymati + max label
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 3,
+                          ),
+                          decoration: BoxDecoration(
+                            color: Colors.black.withOpacity(0.55),
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: Text(
+                            '${_currentZoom.toStringAsFixed(1)}×',
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 13,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+
+                // ─────────────────────────────────────────────
+                const SizedBox(height: 16),
 
                 // Control buttons
                 Row(
@@ -367,7 +467,6 @@ class _TelegramStyleVideoRecorderState
                         ),
                       ),
 
-                    // PAUSE/RESUME BUTTON
                     if (_isRecording) ...[
                       GestureDetector(
                         onTap: _togglePauseResume,
@@ -457,12 +556,11 @@ class _TelegramStyleVideoRecorderState
   }
 }
 
-// CircleMaskPainter ga progress qo'shish
 class CircleMaskPainter extends CustomPainter {
   final double circleRadius;
   final Color borderColor;
   final double borderWidth;
-  final double progress; // 0.0 dan 1.0 gacha
+  final double progress;
 
   CircleMaskPainter({
     required this.circleRadius,
@@ -474,28 +572,26 @@ class CircleMaskPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     final center = Offset(size.width / 2, size.height / 2);
+    final scaledRadius = circleRadius * 0.9;
 
-    // Blur orqa fon
     final blurPaint = Paint()
       ..color = Colors.white.withOpacity(0.9)
       ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 10);
 
     final path = Path()
       ..addRect(Rect.fromLTWH(0, 0, size.width, size.height))
-      ..addOval(Rect.fromCircle(center: center, radius: circleRadius))
+      ..addOval(Rect.fromCircle(center: center, radius: scaledRadius))
       ..fillType = PathFillType.evenOdd;
 
     canvas.drawPath(path, blurPaint);
 
-    // Background circle (bo'sh qism)
     final bgPaint = Paint()
       ..color = Colors.white.withOpacity(0.3)
       ..style = PaintingStyle.stroke
       ..strokeWidth = borderWidth;
 
-    canvas.drawCircle(center, circleRadius, bgPaint);
+    canvas.drawCircle(center, scaledRadius, bgPaint);
 
-    // Progress arc
     if (progress > 0) {
       final progressPaint = Paint()
         ..color = borderColor
@@ -503,12 +599,12 @@ class CircleMaskPainter extends CustomPainter {
         ..strokeWidth = borderWidth
         ..strokeCap = StrokeCap.round;
 
-      final rect = Rect.fromCircle(center: center, radius: circleRadius);
-      // -pi/2 dan boshlab (yuqoridan) soat yo'nalishida
+      final rect = Rect.fromCircle(center: center, radius: scaledRadius);
+
       canvas.drawArc(
         rect,
-        -3.14159 / 2, // start angle (12 o'clock)
-        2 * 3.14159 * progress, // sweep angle
+        -3.14159 / 2,
+        2 * 3.14159 * progress,
         false,
         progressPaint,
       );

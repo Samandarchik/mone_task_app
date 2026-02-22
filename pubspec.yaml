@@ -41,7 +41,7 @@ dependencies:
   talker_dio_logger: ^5.1.5
   http: ^1.6.0
   image_picker: ^1.2.1
-  camera: ^0.11.3
+  camera: ^0.11.4
   video_player: ^2.10.1
   permission_handler: ^12.0.1
   url_launcher: ^6.3.2
@@ -55,6 +55,11 @@ dependencies:
   timezone: ^0.10.1
   intl: ^0.20.2
   video_compress: ^3.1.4
+  wakelock_plus: ^1.4.0
+  record: ^6.2.0
+  just_audio: ^0.10.5
+  flutter_sound: ^9.30.0
+  audioplayers: ^6.5.1
   # video_compress: ^3.1.4
   # ffmpeg_kit_flutter_new: ^4.1.0
   # camera: ^0.10.5+5

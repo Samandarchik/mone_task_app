@@ -4,7 +4,15 @@ import 'package:video_player/video_player.dart';
 
 class CircleVideoPlayer2 extends StatefulWidget {
   final String videoUrl;
-  const CircleVideoPlayer2({super.key, required this.videoUrl});
+
+  /// Video 50% ko'rilganda bir marta chaqiriladi
+  final VoidCallback? onHalfWatched;
+
+  const CircleVideoPlayer2({
+    super.key,
+    required this.videoUrl,
+    this.onHalfWatched,
+  });
 
   @override
   State<CircleVideoPlayer2> createState() => _CircleVideoPlayer2State();
@@ -18,17 +26,21 @@ class _CircleVideoPlayer2State extends State<CircleVideoPlayer2>
   bool _hasError = false;
   String? _errorMessage;
 
+  // 50% callback bir marta chaqirilsin
+  bool _halfWatchedFired = false;
+  // Video real ijro vaqtini hisoblash uchun
+  Duration _watchedDuration = Duration.zero;
+  DateTime? _lastTickTime;
+
   late AnimationController _animationController;
 
   @override
   void initState() {
     super.initState();
-
     _animationController = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 300),
     )..forward();
-
     _initializeVideo();
   }
 
@@ -36,33 +48,19 @@ class _CircleVideoPlayer2State extends State<CircleVideoPlayer2>
     try {
       String videoPath = widget.videoUrl;
 
-      // MUAMMO: Agar URL http bilan boshlansa, lekin ichida local path bo'lsa
-      // Masalan: https://example.com//Users/...
-      // Buni to'g'rilash kerak
       if (videoPath.contains('://') && videoPath.contains('/Users/')) {
-        // Local path ni ajratib olish
-        final localPathMatch = RegExp(r'/Users/.*').firstMatch(videoPath);
-        if (localPathMatch != null) {
-          videoPath = localPathMatch.group(0)!;
-        }
+        final m = RegExp(r'/Users/.*').firstMatch(videoPath);
+        if (m != null) videoPath = m.group(0)!;
       } else if (videoPath.contains('://') && videoPath.contains('/data/')) {
-        // Android uchun ham
-        final localPathMatch = RegExp(r'/data/.*').firstMatch(videoPath);
-        if (localPathMatch != null) {
-          videoPath = localPathMatch.group(0)!;
-        }
+        final m = RegExp(r'/data/.*').firstMatch(videoPath);
+        if (m != null) videoPath = m.group(0)!;
       }
 
-      // Avtomatik ravishda local yoki network ekanligini aniqlash
-      bool isLocal =
+      final isLocal =
           !videoPath.startsWith('http://') && !videoPath.startsWith('https://');
 
       if (isLocal) {
-        // LOCAL FILE
         final file = File(videoPath);
-
-        if (await file.exists()) {}
-
         if (!await file.exists()) {
           setState(() {
             _hasError = true;
@@ -70,7 +68,6 @@ class _CircleVideoPlayer2State extends State<CircleVideoPlayer2>
           });
           return;
         }
-
         if (await file.length() == 0) {
           setState(() {
             _hasError = true;
@@ -78,10 +75,8 @@ class _CircleVideoPlayer2State extends State<CircleVideoPlayer2>
           });
           return;
         }
-
         _controller = VideoPlayerController.file(file);
       } else {
-        // NETWORK URL
         _controller = VideoPlayerController.networkUrl(Uri.parse(videoPath));
       }
 
@@ -89,16 +84,14 @@ class _CircleVideoPlayer2State extends State<CircleVideoPlayer2>
       await _controller.setLooping(true);
       await _controller.play();
 
-      _controller.addListener(() {
-        if (mounted) setState(() {});
-      });
+      // ── 50% listener ─────────────────────────────────────────────────────
+      _controller.addListener(_onVideoProgress);
 
       setState(() {
         _isInitialized = true;
         _isPlaying = true;
       });
     } catch (e) {
-      print('Video yuklashda xatolik: $e');
       setState(() {
         _hasError = true;
         _errorMessage = e.toString();
@@ -106,8 +99,41 @@ class _CircleVideoPlayer2State extends State<CircleVideoPlayer2>
     }
   }
 
+  void _onVideoProgress() {
+    if (mounted) setState(() {});
+
+    if (_halfWatchedFired) return;
+    if (!_controller.value.isInitialized) return;
+
+    final duration = _controller.value.duration;
+    if (duration.inMilliseconds == 0) return;
+
+    // Faqat video ijro bo'layotganda vaqtni hisoblaymiz
+    if (_controller.value.isPlaying) {
+      final now = DateTime.now();
+      if (_lastTickTime != null) {
+        final delta = now.difference(_lastTickTime!);
+        // Delta juda katta bo'lsa (masalan pause dan keyin) — ignore
+        if (delta.inMilliseconds < 500) {
+          _watchedDuration += delta;
+        }
+      }
+      _lastTickTime = now;
+    } else {
+      _lastTickTime = null;
+    }
+
+    // Video uzunligining yarmi ko'rilgan bo'lsa — chaqiramiz
+    final halfDuration = duration ~/ 2;
+    if (_watchedDuration >= halfDuration) {
+      _halfWatchedFired = true;
+      widget.onHalfWatched?.call();
+    }
+  }
+
   @override
   void dispose() {
+    _controller.removeListener(_onVideoProgress);
     _controller.dispose();
     _animationController.dispose();
     super.dispose();
@@ -121,16 +147,14 @@ class _CircleVideoPlayer2State extends State<CircleVideoPlayer2>
   Widget _buildProgressBar(double circleSize) {
     final duration = _controller.value.duration;
     final position = _controller.value.position;
-
     final progress = duration.inMilliseconds == 0
         ? 0.0
         : position.inMilliseconds / duration.inMilliseconds;
-
     final progressWidth = circleSize * 0.9;
 
     return Container(
       width: progressWidth,
-      margin: EdgeInsets.symmetric(vertical: 60),
+      margin: const EdgeInsets.symmetric(vertical: 60),
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       decoration: BoxDecoration(
         color: Colors.black.withOpacity(0.6),
@@ -153,13 +177,10 @@ class _CircleVideoPlayer2State extends State<CircleVideoPlayer2>
             ],
           ),
           const SizedBox(height: 10),
-
-          /// Slider
           GestureDetector(
-            onHorizontalDragUpdate: (details) =>
-                _seekTo(details.localPosition.dx, progressWidth - 32),
-            onTapDown: (details) =>
-                _seekTo(details.localPosition.dx, progressWidth - 32),
+            onHorizontalDragUpdate: (d) =>
+                _seekTo(d.localPosition.dx, progressWidth - 32),
+            onTapDown: (d) => _seekTo(d.localPosition.dx, progressWidth - 32),
             child: Container(
               height: 30,
               color: Colors.transparent,
@@ -219,7 +240,6 @@ class _CircleVideoPlayer2State extends State<CircleVideoPlayer2>
       backgroundColor: Colors.transparent,
       body: Stack(
         children: [
-          /// Back tap -> close
           Positioned.fill(
             child: GestureDetector(
               onTap: () => Navigator.pop(context),
@@ -229,12 +249,9 @@ class _CircleVideoPlayer2State extends State<CircleVideoPlayer2>
 
           Align(
             alignment: Alignment.topCenter,
-
             child: Column(
               mainAxisSize: MainAxisSize.min,
-
               children: [
-                /// Circle Video
                 SizedBox(height: MediaQuery.of(context).size.height * 0.1),
                 ScaleTransition(
                   scale: Tween(begin: 0.8, end: 1.0).animate(
@@ -249,7 +266,7 @@ class _CircleVideoPlayer2State extends State<CircleVideoPlayer2>
                     decoration: BoxDecoration(
                       shape: BoxShape.circle,
                       color: Colors.black,
-                      boxShadow: [
+                      boxShadow: const [
                         BoxShadow(
                           color: Colors.black54,
                           blurRadius: 20,
@@ -342,7 +359,6 @@ class _CircleVideoPlayer2State extends State<CircleVideoPlayer2>
             ),
           ),
 
-          /// Close button
           Positioned(
             top: MediaQuery.of(context).padding.top + 16,
             right: 16,
@@ -355,7 +371,6 @@ class _CircleVideoPlayer2State extends State<CircleVideoPlayer2>
             ),
           ),
 
-          /// Volume
           if (_isInitialized && !_hasError)
             Positioned(
               top: MediaQuery.of(context).padding.top + 16,

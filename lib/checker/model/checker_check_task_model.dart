@@ -10,6 +10,7 @@ class CheckerCheckTaskModel {
   int status;
   String? notificationTime;
   String? videoUrl;
+  String? checkerAudioUrl;
   List<int>? days;
 
   CheckerCheckTaskModel({
@@ -23,6 +24,7 @@ class CheckerCheckTaskModel {
     this.days,
     this.submittedBy,
     this.submittedAt,
+    this.checkerAudioUrl,
     this.category,
     this.date,
   });
@@ -39,6 +41,7 @@ class CheckerCheckTaskModel {
       notificationTime: json["notificationTime"] ?? "12:00",
       days: json["days"] != null ? List<int>.from(json["days"]) : null,
       submittedBy: json["submittedBy"],
+      checkerAudioUrl: json["checkerAudioUrl"],
       submittedAt: json["submittedAt"] != null
           ? DateTime.parse(json["submittedAt"])
           : null,

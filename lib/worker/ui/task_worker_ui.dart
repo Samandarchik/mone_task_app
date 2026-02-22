@@ -3,9 +3,11 @@ import 'dart:ui';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:intl/intl.dart';
 import 'package:mone_task_app/admin/service/get_excel_ui.dart';
 import 'package:mone_task_app/admin/ui/video_cache_manager_page.dart';
 import 'package:mone_task_app/checker/ui/player2.dart';
+import 'package:mone_task_app/worker/ui/worker_audio_player.dart';
 import 'package:mone_task_app/core/constants/urls.dart';
 import 'package:mone_task_app/core/context_extension.dart';
 import 'package:mone_task_app/core/data/local/token_storage.dart';
@@ -29,149 +31,212 @@ class TaskWorkerUi extends StatefulWidget {
 }
 
 class _TaskWorkerUiState extends State<TaskWorkerUi> {
-  late Future<List<TaskWorkerModel>> tasksFuture;
   bool _isRecording = false;
+  bool _isLoading = true;
+  bool _hasError = false;
+  String _errorMessage = '';
+  List<TaskWorkerModel> _tasks = [];
+  DateTime _selectedDate = DateTime.now();
+
   TokenStorage tokenStorage = sl<TokenStorage>();
-  Timer? _recordingTimer;
   UserModel? user;
+
   @override
   void initState() {
     super.initState();
-    tasksFuture = TaskWorkerService().fetchTasks();
     user = tokenStorage.getUserData();
+    _fetchTasks(showLoading: true);
   }
 
-  @override
-  void dispose() {
-    _recordingTimer?.cancel();
-    super.dispose();
-  }
-
-  void _refresh() {
-    setState(() {
-      tasksFuture = TaskWorkerService().fetchTasks();
-    });
-  }
-
-  /// Video olish dialogini ochish
-  Future<void> _showVideoRecorder(TaskWorkerModel task) async {
-    setState(() => _isRecording = true);
-
-    final result = await showGeneralDialog(
-      context: context,
-      barrierDismissible: false, // Yozish paytida dismiss qilmaslik
-      barrierLabel: '',
-      barrierColor: Colors.black.withOpacity(0.8),
-      transitionDuration: const Duration(milliseconds: 300),
-      pageBuilder: (context, animation, secondaryAnimation) {
-        return TelegramStyleVideoRecorder(taskId: task.id);
-      },
-      transitionBuilder: (context, animation, secondaryAnimation, child) {
-        return FadeTransition(
-          opacity: animation,
-          child: ScaleTransition(
-            scale: Tween<double>(begin: 0.8, end: 1.0).animate(
-              CurvedAnimation(parent: animation, curve: Curves.easeOutBack),
-            ),
-            child: child,
-          ),
-        );
-      },
-    );
-
-    setState(() => _isRecording = false);
-
-    if (!context.mounted) return;
-
-    if (result != null) {
-      // Agar List<XFile> bo'lsa
-      if (result is List<XFile>) {
-        await _uploadVideoSegments(task, result);
-      }
-      // Agar bitta XFile bo'lsa
-      else if (result is XFile) {
-        await _uploadVideo(task, result);
-      }
+  Future<void> _fetchTasks({bool showLoading = false}) async {
+    if (showLoading)
+      setState(() {
+        _isLoading = true;
+        _hasError = false;
+      });
+    try {
+      final tasks = await TaskWorkerService().fetchTasks(date: _selectedDate);
+      if (mounted)
+        setState(() {
+          _tasks = tasks;
+          _isLoading = false;
+          _hasError = false;
+        });
+    } catch (e) {
+      if (mounted)
+        setState(() {
+          _isLoading = false;
+          _hasError = true;
+          _errorMessage = e.toString();
+        });
     }
   }
 
-  /// Barcha video segmentlarni yuborish
+  void _refresh() => _fetchTasks(showLoading: false);
+
+  bool get _isToday {
+    final now = DateTime.now();
+    return _selectedDate.year == now.year &&
+        _selectedDate.month == now.month &&
+        _selectedDate.day == now.day;
+  }
+
+  void _goToPrevDay() {
+    setState(
+      () => _selectedDate = _selectedDate.subtract(const Duration(days: 1)),
+    );
+    _fetchTasks(showLoading: true);
+  }
+
+  void _goToNextDay() {
+    if (_isToday) return;
+    setState(() => _selectedDate = _selectedDate.add(const Duration(days: 1)));
+    _fetchTasks(showLoading: true);
+  }
+
+  Future<void> _pickDate() async {
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: _selectedDate,
+      firstDate: DateTime(2024),
+      lastDate: DateTime.now(),
+      locale: const Locale('ru'),
+    );
+    if (picked != null && mounted) {
+      setState(() => _selectedDate = picked);
+      _fetchTasks(showLoading: true);
+    }
+  }
+
+  Future<void> _showVideoRecorder(TaskWorkerModel task) async {
+    setState(() => _isRecording = true);
+    final result = await showGeneralDialog(
+      context: context,
+      barrierDismissible: false,
+      barrierLabel: '',
+      barrierColor: Colors.black.withOpacity(0.8),
+      transitionDuration: const Duration(milliseconds: 300),
+      pageBuilder: (context, animation, secondaryAnimation) =>
+          TelegramStyleVideoRecorder(taskId: task.id),
+      transitionBuilder: (context, animation, secondaryAnimation, child) =>
+          FadeTransition(
+            opacity: animation,
+            child: ScaleTransition(
+              scale: Tween<double>(begin: 0.8, end: 1.0).animate(
+                CurvedAnimation(parent: animation, curve: Curves.easeOutBack),
+              ),
+              child: child,
+            ),
+          ),
+    );
+    setState(() => _isRecording = false);
+    if (!context.mounted) return;
+    if (result is List<XFile>) {
+      await _uploadVideoSegments(task, result);
+    } else if (result is XFile) {
+      await _uploadVideo(task, result);
+    }
+  }
+
   Future<void> _uploadVideoSegments(
     TaskWorkerModel task,
     List<XFile> segments,
   ) async {
     try {
-      bool success = await TaskWorkerService().completeTaskWithSegments(
+      final success = await TaskWorkerService().completeTaskWithSegments(
         taskId: task.id,
         segments: segments,
       );
-
-      if (success) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text("✅ Отправка успешно завершена!"),
-              backgroundColor: Colors.green,
+      if (mounted)
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              success
+                  ? "✅ Отправка успешно завершена!"
+                  : "❌ Yuborishda xatolik!",
             ),
-          );
-          Future.delayed(const Duration(seconds: 2), () => _refresh());
-        }
-      } else {
-        _refresh();
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text("❌ Yuborishda xatolik!"),
-              backgroundColor: Colors.red,
-            ),
-          );
-        }
-      }
+            backgroundColor: success ? Colors.green : Colors.red,
+          ),
+        );
+      Future.delayed(const Duration(seconds: 2), _refresh);
     } catch (e) {
-      _refresh();
-      if (mounted) {
+      Future.delayed(const Duration(seconds: 2), _refresh);
+      if (mounted)
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text("❌ Xatolik: $e"), backgroundColor: Colors.red),
         );
-      }
     }
   }
 
-  /// Videoni serverga yuborish
   Future<void> _uploadVideo(TaskWorkerModel task, XFile video) async {
     try {
-      final requestData = RequestTaskModel(id: task.id, file: video);
-      bool success = await TaskWorkerService().completeTask(requestData);
-
-      if (success) {
-        _refresh();
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text("✅ Muvaffaqiyatli yuborildi!"),
-              backgroundColor: Colors.green,
+      final success = await TaskWorkerService().completeTask(
+        RequestTaskModel(id: task.id, file: video),
+      );
+      if (mounted)
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              success ? "✅ Muvaffaqiyatli yuborildi!" : "❌ Yuborishda xatolik!",
             ),
-          );
-        }
-      } else {
-        _refresh();
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text("❌ Yuborishda xatolik!"),
-              backgroundColor: Colors.red,
-            ),
-          );
-        }
-      }
+            backgroundColor: success ? Colors.green : Colors.red,
+          ),
+        );
+      Future.delayed(const Duration(seconds: 2), _refresh);
     } catch (e) {
-      _refresh();
-      if (mounted) {
+      Future.delayed(const Duration(seconds: 2), _refresh);
+      if (mounted)
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text("❌ Xatolik: $e"), backgroundColor: Colors.red),
         );
-      }
     }
+  }
+
+  Widget _buildDateSelector() {
+    final dateStr = _isToday
+        ? 'Bugun'
+        : DateFormat('d MMMM, yyyy', 'ru').format(_selectedDate);
+
+    return Container(
+      height: 48,
+      color:
+          Theme.of(context).appBarTheme.backgroundColor ??
+          Theme.of(context).colorScheme.surface,
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          IconButton(
+            onPressed: _goToPrevDay,
+            icon: const Icon(Icons.chevron_left),
+            iconSize: 28,
+          ),
+          GestureDetector(
+            onTap: _pickDate,
+            child: Row(
+              children: [
+                Text(
+                  dateStr,
+                  style: const TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                const SizedBox(width: 4),
+                const Icon(Icons.calendar_today_outlined, size: 16),
+              ],
+            ),
+          ),
+          IconButton(
+            onPressed: _isToday ? null : _goToNextDay,
+            icon: Icon(
+              Icons.chevron_right,
+              color: _isToday ? Colors.grey.shade400 : null,
+            ),
+            iconSize: 28,
+          ),
+        ],
+      ),
+    );
   }
 
   @override
@@ -186,21 +251,21 @@ class _TaskWorkerUiState extends State<TaskWorkerUi> {
                   context.pop;
                   context.push(VideoCacheManagerPage());
                 },
-                leading: Icon(CupertinoIcons.videocam_fill),
-                title: Text("Все задачи"),
+                leading: const Icon(CupertinoIcons.videocam_fill),
+                title: const Text("Все задачи"),
               ),
               ListTile(
                 onTap: () {
                   context.pop;
                   context.push(ExcelReportPage(filialIds: user?.filialIds));
                 },
-                leading: Icon(CupertinoIcons.doc_plaintext),
-                title: Text("Отчеты"),
+                leading: const Icon(CupertinoIcons.doc_plaintext),
+                title: const Text("Отчеты"),
               ),
               ListTile(
                 onTap: _handleLogout,
-                leading: Icon(Icons.logout, color: Colors.red),
-                title: Text("Выйти", style: TextStyle(color: Colors.red)),
+                leading: const Icon(Icons.logout, color: Colors.red),
+                title: const Text("Выйти", style: TextStyle(color: Colors.red)),
               ),
             ],
           ),
@@ -209,104 +274,111 @@ class _TaskWorkerUiState extends State<TaskWorkerUi> {
       appBar: AppBar(
         title: Text(user?.username ?? ""),
         actions: [
-          IconButton(
-            onPressed: () async {
-              await LogOutService().logOut();
-
-              tokenStorage.removeToken();
-              tokenStorage.putUserData({});
-              context.pushAndRemove(LoginPage());
-            },
-            icon: const Icon(Icons.logout),
-          ),
+          IconButton(onPressed: _handleLogout, icon: const Icon(Icons.logout)),
         ],
+        bottom: PreferredSize(
+          preferredSize: const Size.fromHeight(48),
+          child: _buildDateSelector(),
+        ),
       ),
-      body: FutureBuilder(
-        future: tasksFuture,
-        builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting) {
-            return const Center(child: CircularProgressIndicator.adaptive());
-          }
+      body: _buildBody(),
+    );
+  }
 
-          if (snapshot.hasError) {
-            return Center(child: Text("Xatolik: ${snapshot.error}"));
-          }
+  Widget _buildBody() {
+    if (_isLoading)
+      return const Center(child: CircularProgressIndicator.adaptive());
+    if (_hasError) return Center(child: Text("Xatolik: $_errorMessage"));
 
-          List<TaskWorkerModel> tasks = snapshot.data ?? [];
+    return RefreshIndicator(
+      onRefresh: () => _fetchTasks(showLoading: false),
+      child: _tasks.isEmpty
+          ? const Center(child: Text("Vazifalar yo'q"))
+          : ListView.builder(
+              itemCount: _tasks.length,
+              itemBuilder: (_, i) {
+                final task = _tasks[i];
+                final hasAudio =
+                    task.checkerAudioUrl != null &&
+                    task.checkerAudioUrl!.isNotEmpty;
 
-          return RefreshIndicator(
-            onRefresh: () async => _refresh(),
-            child: ListView.builder(
-              itemCount: tasks.length,
-              itemBuilder: (_, i) => InkWell(
-                onTap: tasks[i].videoUrl == null
-                    ? null
-                    : () => showDialog(
-                        context: context,
-                        barrierColor: Colors.white12,
-                        builder: (context) => BackdropFilter(
-                          filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
-                          child: Center(
-                            child: CircleVideoPlayer2(
-                              videoUrl:
-                                  "${AppUrls.baseUrl}/${tasks[i].videoUrl}",
+                return InkWell(
+                  onTap: task.videoUrl == null
+                      ? null
+                      : () => showDialog(
+                          context: context,
+                          barrierColor: Colors.white12,
+                          builder: (context) => BackdropFilter(
+                            filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+                            child: Center(
+                              child: CircleVideoPlayer2(
+                                videoUrl: "${AppUrls.baseUrl}/${task.videoUrl}",
+                              ),
                             ),
                           ),
                         ),
-                      ),
-                child: Container(
-                  padding: const EdgeInsets.symmetric(
-                    vertical: 12,
-                    horizontal: 16,
-                  ),
-                  margin: const EdgeInsets.symmetric(
-                    vertical: 4,
-                    horizontal: 8,
-                  ),
-                  decoration: BoxDecoration(
-                    color: getStatusColor(tasks[i].taskStatus),
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: Colors.grey.shade300),
-                  ),
-                  child: Row(
-                    children: [
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      vertical: 12,
+                      horizontal: 16,
+                    ),
+                    margin: const EdgeInsets.symmetric(
+                      vertical: 4,
+                      horizontal: 8,
+                    ),
+                    decoration: BoxDecoration(
+                      color: getStatusColor(task.taskStatus),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: Colors.grey.shade300),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
                           children: [
-                            Text(
-                              "${i + 1}. ${tasks[i].description}",
-                              style: const TextStyle(
-                                fontWeight: FontWeight.bold,
-                                fontSize: 16,
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    "${i + 1}. ${task.description}",
+                                    style: const TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 16,
+                                    ),
+                                  ),
+                                  if (task.submittedBy != null)
+                                    Text(
+                                      "${task.submittedBy} | "
+                                      "${task.submittedAt?.toLocal().hour.toString().padLeft(2, '0')}:"
+                                      "${task.submittedAt?.minute.toString().padLeft(2, '0')}",
+                                    ),
+                                ],
                               ),
                             ),
-                            if (tasks[i].submittedBy != null)
-                              Text(
-                                "${tasks[i].submittedBy} | ${tasks[i].submittedAt?.toLocal().hour.toString().padLeft(2, '0')}:${tasks[i].submittedAt?.minute.toString().padLeft(2, '0')}",
+                            IconButton(
+                              onPressed: _isRecording
+                                  ? null
+                                  : () => _showVideoRecorder(task),
+                              icon: Icon(
+                                _isRecording
+                                    ? Icons.fiber_manual_record
+                                    : Icons.videocam,
+                                color: Colors.grey.shade600,
                               ),
+                            ),
                           ],
                         ),
-                      ),
-                      IconButton(
-                        onPressed: _isRecording
-                            ? null
-                            : () => _showVideoRecorder(tasks[i]),
-                        icon: Icon(
-                          _isRecording
-                              ? Icons.fiber_manual_record
-                              : Icons.videocam,
-                          color: Colors.grey.shade600,
-                        ),
-                      ),
-                    ],
+                        if (hasAudio) ...[
+                          const SizedBox(height: 8),
+                          WorkerAudioPlayer(audioUrl: task.checkerAudioUrl!),
+                        ],
+                      ],
+                    ),
                   ),
-                ),
-              ),
+                );
+              },
             ),
-          );
-        },
-      ),
     );
   }
 

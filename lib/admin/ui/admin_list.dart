@@ -1,5 +1,10 @@
+import 'dart:async';
+import 'dart:io';
+
+import 'package:dio/dio.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
+import 'package:mone_task_app/admin/ui/audio_task_row.dart';
 import 'package:mone_task_app/admin/ui/dialog.dart';
 import 'package:mone_task_app/admin/ui/edit_task_ui.dart';
 import 'package:mone_task_app/checker/model/checker_check_task_model.dart';
@@ -7,10 +12,8 @@ import 'package:mone_task_app/checker/service/task_worker_service.dart';
 import 'package:mone_task_app/core/constants/urls.dart';
 import 'package:mone_task_app/core/context_extension.dart';
 import 'package:mone_task_app/utils/get_color.dart';
-import 'package:share_plus/share_plus.dart';
-import 'package:dio/dio.dart';
 import 'package:path_provider/path_provider.dart';
-import 'dart:io';
+import 'package:share_plus/share_plus.dart';
 
 class AdminTaskListWidget extends StatefulWidget {
   final List<CheckerCheckTaskModel> tasks;
@@ -19,7 +22,7 @@ class AdminTaskListWidget extends StatefulWidget {
   final String role;
 
   final VoidCallback onRefresh;
-  final Function(String) onShowVideoPlayer;
+  final Function(List<String> videoPaths, int startIndex) onShowVideoPlayer;
 
   const AdminTaskListWidget({
     super.key,
@@ -36,7 +39,6 @@ class AdminTaskListWidget extends StatefulWidget {
 }
 
 class _AdminTaskListWidgetState extends State<AdminTaskListWidget> {
-  // Video cache uchun
   Map<String, String> cachedVideos = {};
   Set<String> downloadingVideos = {};
 
@@ -47,34 +49,27 @@ class _AdminTaskListWidgetState extends State<AdminTaskListWidget> {
     _preloadVideos();
   }
 
-  // Mavjud cache'langan videolarni yuklash
   Future<void> _loadCachedVideos() async {
     final directory = await getApplicationDocumentsDirectory();
     final videosDir = Directory('${directory.path}/videos');
-
     if (!await videosDir.exists()) {
       await videosDir.create(recursive: true);
     }
   }
 
-  // Video URL'dan local file path olish
   Future<String> _getLocalFilePath(String videoUrl) async {
     final directory = await getApplicationDocumentsDirectory();
     final videosDir = Directory('${directory.path}/videos');
-
     if (!await videosDir.exists()) {
       await videosDir.create(recursive: true);
     }
-
     final fileName = videoUrl
         .split('/')
         .last
         .replaceAll(RegExp(r'[^\w\s\-\.]'), '_');
-
     return '${videosDir.path}/$fileName';
   }
 
-  // Original URL ni full URL ga aylantirish
   String _getFullUrl(String originalUrl) {
     if (originalUrl.startsWith('http://') ||
         originalUrl.startsWith('https://')) {
@@ -83,23 +78,15 @@ class _AdminTaskListWidgetState extends State<AdminTaskListWidget> {
     return '${AppUrls.baseUrl}/$originalUrl';
   }
 
-  // Video'ni background'da yuklab olish
   Future<void> _downloadVideoInBackground(String videoUrl) async {
-    if (downloadingVideos.contains(videoUrl)) {
-      return;
-    }
+    if (downloadingVideos.contains(videoUrl)) return;
 
-    if (mounted) {
-      setState(() {
-        downloadingVideos.add(videoUrl);
-      });
-    }
+    if (mounted) setState(() => downloadingVideos.add(videoUrl));
 
     try {
       final localPath = await _getLocalFilePath(videoUrl);
       final file = File(localPath);
 
-      // Agar allaqachon mavjud bo'lsa
       if (await file.exists() && await file.length() > 0) {
         if (mounted) {
           setState(() {
@@ -107,11 +94,9 @@ class _AdminTaskListWidgetState extends State<AdminTaskListWidget> {
             downloadingVideos.remove(videoUrl);
           });
         }
-        print('Admin: Video allaqachon cache\'da: $videoUrl -> $localPath');
         return;
       }
 
-      print('Admin: Video yuklanmoqda: $videoUrl -> $localPath');
       final dio = Dio();
       await dio.download(videoUrl, localPath);
 
@@ -122,39 +107,45 @@ class _AdminTaskListWidgetState extends State<AdminTaskListWidget> {
             downloadingVideos.remove(videoUrl);
           });
         }
-        print('Admin: Video muvaffaqiyatli yuklandi: $videoUrl -> $localPath');
       }
     } catch (e) {
-      print('Admin: Video yuklashda xatolik: $videoUrl - $e');
-      if (mounted) {
-        setState(() {
-          downloadingVideos.remove(videoUrl);
-        });
-      }
+      if (mounted) setState(() => downloadingVideos.remove(videoUrl));
     }
   }
 
-  // Videolarni oldindan yuklash (background)
   void _preloadVideos() {
     final filteredTasks = widget.tasks
-        .where((task) => task.filialId == widget.filialId)
+        .where((t) => t.filialId == widget.filialId)
         .toList();
 
     final videoUrls = filteredTasks
-        .where((task) => task.videoUrl != null && task.videoUrl!.isNotEmpty)
-        .map((task) => _getFullUrl(task.videoUrl!))
+        .where((t) => t.videoUrl != null && t.videoUrl!.isNotEmpty)
+        .map((t) => _getFullUrl(t.videoUrl!))
         .toSet()
         .toList();
 
-    for (String url in videoUrls) {
+    for (final url in videoUrls) {
       _downloadVideoInBackground(url);
     }
   }
 
-  // Video ulashish funksiyasi
+  List<String> _getAllVideoPaths() {
+    return widget.tasks
+        .where(
+          (t) =>
+              t.filialId == widget.filialId &&
+              t.videoUrl != null &&
+              t.videoUrl!.isNotEmpty,
+        )
+        .map((t) {
+          final fullUrl = _getFullUrl(t.videoUrl!);
+          return cachedVideos[fullUrl] ?? fullUrl;
+        })
+        .toList();
+  }
+
   Future<void> _shareVideo(CheckerCheckTaskModel task) async {
     try {
-      // Video URL'ni to'liq shakliga keltirish
       String? videoUrl = task.videoUrl;
       if (videoUrl == null || videoUrl.isEmpty) {
         if (mounted) {
@@ -167,7 +158,6 @@ class _AdminTaskListWidgetState extends State<AdminTaskListWidget> {
 
       final fullUrl = _getFullUrl(videoUrl);
 
-      // Loading ko'rsatish
       if (mounted) {
         showDialog(
           context: context,
@@ -179,34 +169,22 @@ class _AdminTaskListWidgetState extends State<AdminTaskListWidget> {
 
       String? localPath;
 
-      // Agar video cache'da bo'lsa, uni ishlatamiz
       if (cachedVideos.containsKey(fullUrl)) {
         localPath = cachedVideos[fullUrl];
       } else {
-        // Aks holda yuklab olamiz
         localPath = await _getLocalFilePath(fullUrl);
         final file = File(localPath);
-
-        // Agar fayl mavjud bo'lmasa, yuklab olamiz
         if (!await file.exists() || await file.length() == 0) {
           final dio = Dio();
           await dio.download(fullUrl, localPath);
         }
-
-        // Cache'ga qo'shamiz
-        if (mounted) {
-          setState(() {
-            cachedVideos[fullUrl] = localPath!;
-          });
-        }
+        if (mounted) setState(() => cachedVideos[fullUrl] = localPath!);
       }
 
-      // Loading yopish
       if (mounted && Navigator.of(context).canPop()) {
         Navigator.of(context).pop();
       }
 
-      // Video faylini ulashish
       final file = File(localPath!);
       if (await file.exists() && await file.length() > 0) {
         await Share.shareXFiles([
@@ -220,17 +198,15 @@ class _AdminTaskListWidgetState extends State<AdminTaskListWidget> {
         }
       }
     } catch (e) {
-      // Loading yopish (agar xatolik bo'lsa)
       if (mounted && Navigator.of(context).canPop()) {
         Navigator.of(context).pop();
       }
-      print('Admin: Share xatolik: $e');
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    List<CheckerCheckTaskModel> filtered = widget.tasks
+    final filtered = widget.tasks
         .where((task) => task.filialId == widget.filialId)
         .toList();
 
@@ -239,38 +215,39 @@ class _AdminTaskListWidgetState extends State<AdminTaskListWidget> {
     }
 
     return RefreshIndicator(
-      onRefresh: () async {
-        widget.onRefresh();
-      },
+      onRefresh: () async => widget.onRefresh(),
       child: ListView.builder(
         padding: const EdgeInsets.all(8),
         itemCount: filtered.length,
         itemBuilder: (_, i) {
           final task = filtered[i];
 
-          // Full URL olish
           String? fullVideoUrl;
           if (task.videoUrl != null && task.videoUrl!.isNotEmpty) {
             fullVideoUrl = _getFullUrl(task.videoUrl!);
           }
 
-          bool isVideoCached =
+          final bool isVideoCached =
               fullVideoUrl != null && cachedVideos.containsKey(fullVideoUrl);
-          bool isDownloading =
+          final bool isDownloading =
               fullVideoUrl != null && downloadingVideos.contains(fullVideoUrl);
 
-          // Video path olish (local yoki online)
           String? videoPath;
           if (fullVideoUrl != null) {
-            if (isVideoCached) {
-              videoPath = cachedVideos[fullVideoUrl]; // Local path
-            } else {
-              videoPath = fullVideoUrl; // Online URL
-            }
+            videoPath = isVideoCached
+                ? cachedVideos[fullVideoUrl]
+                : fullVideoUrl;
           }
 
+          final videoTasksInOrder = filtered
+              .where((t) => t.videoUrl != null && t.videoUrl!.isNotEmpty)
+              .toList();
+          final videoIndex = videoTasksInOrder.indexWhere(
+            (t) => t.taskId == task.taskId,
+          );
+
           return AdminTaskListItem(
-            index: i+1,
+            index: i + 1,
             task: task,
             role: widget.role,
             videoPath: videoPath,
@@ -278,7 +255,11 @@ class _AdminTaskListWidgetState extends State<AdminTaskListWidget> {
             isDownloading: isDownloading,
             selectedDate: widget.selectedDate,
             onRefresh: widget.onRefresh,
-            onShowVideoPlayer: widget.onShowVideoPlayer,
+            onShowVideoPlayer: (path) {
+              final allPaths = _getAllVideoPaths();
+              final startIndex = videoIndex >= 0 ? videoIndex : 0;
+              widget.onShowVideoPlayer(allPaths, startIndex);
+            },
             onShareVideo: () => _shareVideo(task),
           );
         },
@@ -287,10 +268,12 @@ class _AdminTaskListWidgetState extends State<AdminTaskListWidget> {
   }
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+
 class AdminTaskListItem extends StatefulWidget {
   final int index;
   final CheckerCheckTaskModel task;
-  final String? videoPath; // Bu local yoki online path bo'lishi mumkin
+  final String? videoPath;
   final bool isVideoCached;
   final bool isDownloading;
   final DateTime selectedDate;
@@ -318,13 +301,19 @@ class AdminTaskListItem extends StatefulWidget {
   State<AdminTaskListItem> createState() => _AdminTaskListItemState();
 }
 
-class _AdminTaskListItemState extends State<AdminTaskListItem> {
+class _AdminTaskListItemState extends State<AdminTaskListItem>
+    with SingleTickerProviderStateMixin {
   late CheckerCheckTaskModel task;
+  late AnimationController _pulseController;
 
   @override
   void initState() {
     super.initState();
     task = widget.task;
+    _pulseController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 800),
+    )..repeat(reverse: true);
   }
 
   @override
@@ -336,6 +325,12 @@ class _AdminTaskListItemState extends State<AdminTaskListItem> {
   }
 
   @override
+  void dispose() {
+    _pulseController.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
     return Card(
       margin: const EdgeInsets.only(bottom: 12),
@@ -344,7 +339,6 @@ class _AdminTaskListItemState extends State<AdminTaskListItem> {
       child: InkWell(
         onLongPress: () async {
           final isDelete = await NativeDialog.showDeleteDialog();
-
           if (isDelete) {
             await AdminTaskService().deleteTask(task.taskId);
             widget.onRefresh();
@@ -354,113 +348,118 @@ class _AdminTaskListItemState extends State<AdminTaskListItem> {
           context.push(EditTaskUi(task: task));
         },
         onTap: () async {
-          if (widget.videoPath != null || widget.role == "super_admin") {
+          if (widget.videoPath != null) {
             if (widget.selectedDate.day == DateTime.now().day) {
-              final bool isSucsess = await AdminTaskService().updateTaskStatus(
+              final bool isSuccess = await AdminTaskService().updateTaskStatus(
                 task.taskId,
                 3,
                 widget.selectedDate,
               );
-              if (isSucsess && mounted) {
-                setState(() {
-                  task.status = 3;
-                });
+              if (isSuccess && mounted) {
+                setState(() => task.status = 3);
               }
             }
-
-            // Video path ni to'g'ridan-to'g'ri yuboramiz (local yoki online)
             widget.onShowVideoPlayer(widget.videoPath!);
           }
         },
         child: Padding(
           padding: const EdgeInsets.all(12),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      "${widget.index}. ${task.task}",
-                      style: const TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                    if (task.submittedBy != null)
-                      Text(
-                        "${task.submittedBy} | ${task.submittedAt?.toLocal().hour.toString().padLeft(2, '0')}:${task.submittedAt?.minute.toString().padLeft(2, '0')}",
-                      ),
-                    const SizedBox(height: 4),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          "${getTypeName(task.type)} ${task.type == 2 ? getWeekdaysString(task.days) : task.days ?? ""}",
+                          "${widget.index}. ${task.task}",
                           style: const TextStyle(
-                            fontSize: 12,
-                            color: Colors.black,
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
                           ),
                         ),
-                        if (task.videoUrl != null && task.videoUrl!.isNotEmpty)
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 8,
-                              vertical: 4,
-                            ),
-                            decoration: BoxDecoration(
-                              color: widget.isVideoCached
-                                  ? Colors.green
-                                  : (widget.isDownloading
-                                        ? Colors.orange
-                                        : Colors.blue),
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                if (widget.isDownloading)
-                                  const SizedBox(
-                                    width: 14,
-                                    height: 14,
-                                    child: CircularProgressIndicator(
-                                      strokeWidth: 2,
-                                      valueColor: AlwaysStoppedAnimation<Color>(
-                                        Colors.white,
-                                      ),
-                                    ),
-                                  )
-                                else
-                                  Icon(
-                                    widget.isVideoCached
-                                        ? Icons.check_circle
-                                        : Icons.cloud_download,
-                                    size: 16,
-                                    color: Colors.white,
-                                  ),
-                              ],
-                            ),
+                        if (task.submittedBy != null)
+                          Text(
+                            "${task.submittedBy} | "
+                            "${task.submittedAt?.toLocal().hour.toString().padLeft(2, '0')}:"
+                            "${task.submittedAt?.minute.toString().padLeft(2, '0')}",
                           ),
+                        const SizedBox(height: 4),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Text(
+                              "${getTypeName(task.type)} ${task.type == 2 ? getWeekdaysString(task.days) : task.days ?? ""}",
+                              style: const TextStyle(
+                                fontSize: 12,
+                                color: Colors.black,
+                              ),
+                            ),
+                            if (task.videoUrl != null &&
+                                task.videoUrl!.isNotEmpty)
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 8,
+                                  vertical: 4,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: widget.isVideoCached
+                                      ? Colors.green
+                                      : (widget.isDownloading
+                                            ? Colors.orange
+                                            : Colors.blue),
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                                child: widget.isDownloading
+                                    ? const SizedBox(
+                                        width: 14,
+                                        height: 14,
+                                        child: CircularProgressIndicator(
+                                          strokeWidth: 2,
+                                          valueColor:
+                                              AlwaysStoppedAnimation<Color>(
+                                                Colors.white,
+                                              ),
+                                        ),
+                                      )
+                                    : Icon(
+                                        widget.isVideoCached
+                                            ? Icons.check_circle
+                                            : Icons.cloud_download,
+                                        size: 16,
+                                        color: Colors.white,
+                                      ),
+                              ),
+                          ],
+                        ),
                       ],
                     ),
-                  ],
-                ),
+                  ),
+                  // Share button
+                  IconButton(
+                    onPressed: () {
+                      if (task.videoUrl != null && task.videoUrl!.isNotEmpty) {
+                        widget.onShareVideo();
+                      } else {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(content: Text('Video mavjud emas')),
+                        );
+                      }
+                    },
+                    icon: task.videoUrl != null && task.videoUrl!.isNotEmpty
+                        ? const Icon(CupertinoIcons.share)
+                        : const SizedBox(),
+                  ),
+                ],
               ),
-              IconButton(
-                onPressed: () {
-                  if (task.videoUrl != null && task.videoUrl!.isNotEmpty) {
-                    widget.onShareVideo();
-                  } else {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('Video mavjud emas')),
-                    );
-                  }
-                },
-                icon: task.videoUrl != null && task.videoUrl!.isNotEmpty
-                    ? const Icon(CupertinoIcons.share)
-                    : const SizedBox(),
-              ),
+
+              // ── Audio row ────────────────────────────────────────────────
+              const SizedBox(height: 8),
+              const SizedBox(height: 6),
+              AudioTaskRow(task: task, selectedDate: widget.selectedDate),
             ],
           ),
         ),

@@ -1,11 +1,12 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:video_player/video_player.dart';
+import 'package:wakelock_plus/wakelock_plus.dart'; // ← QO'SHILDI
 
 class CircleVideoPlayer extends StatefulWidget {
   final List<String> videoUrls;
   final int initialIndex;
-  final VoidCallback? onHalfWatched; // ← 50% ko'rilganda chaqiriladi
+  final VoidCallback? onHalfWatched;
 
   const CircleVideoPlayer({
     super.key,
@@ -25,7 +26,7 @@ class _CircleVideoPlayerState extends State<CircleVideoPlayer>
   bool _isPlaying = false;
   bool _hasError = false;
   String? _errorMessage;
-  bool _halfWatchedFired = false; // 50% faqat bir marta chaqirilsin
+  bool _halfWatchedFired = false;
   late int _currentIndex;
 
   late AnimationController _animationController;
@@ -34,6 +35,7 @@ class _CircleVideoPlayerState extends State<CircleVideoPlayer>
   void initState() {
     super.initState();
     _currentIndex = widget.initialIndex;
+    WakelockPlus.enable(); // ← Ekranni yoniq ushlab turadi
     _animationController = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 300),
@@ -124,13 +126,11 @@ class _CircleVideoPlayerState extends State<CircleVideoPlayer>
     final total = value.duration.inMilliseconds;
     final current = value.position.inMilliseconds;
 
-    // 50% tekshirish — faqat bir marta
     if (!_halfWatchedFired && total > 0 && current >= total * 0.5) {
       _halfWatchedFired = true;
       widget.onHalfWatched?.call();
     }
 
-    // Video tugasa keyingiga o'tish
     if (!value.isPlaying && current >= total - 200) {
       _goToNext();
     }
@@ -152,6 +152,7 @@ class _CircleVideoPlayerState extends State<CircleVideoPlayer>
 
   @override
   void dispose() {
+    WakelockPlus.disable(); // ← Chiqganda ekran blokini qaytaradi
     if (_isInitialized) {
       _controller.removeListener(_onVideoListener);
       _controller.dispose();

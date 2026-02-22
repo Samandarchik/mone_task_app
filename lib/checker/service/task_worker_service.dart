@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:dio/dio.dart';
 import 'package:mone_task_app/admin/model/filial_model.dart';
 import 'package:mone_task_app/admin/ui/add_admin_task.dart';
@@ -89,6 +91,20 @@ class AdminTaskService {
       return (response.data['data'] as List)
           .map((e) => FilialModel.fromJson(e))
           .toList();
+    } catch (e) {
+      rethrow; // UI ushlashi uchun
+    }
+  }
+
+  Future<bool> pushAudio(int id, File filesi, DateTime date) async {
+    try {
+      final response = await _dio.post(
+        "${AppUrls.tasks}/$id/voice-comment/${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}",
+        data: FormData.fromMap({
+          "audio": await MultipartFile.fromFile(filesi.path),
+        }),
+      );
+      return response.statusCode == 200;
     } catch (e) {
       rethrow; // UI ushlashi uchun
     }
