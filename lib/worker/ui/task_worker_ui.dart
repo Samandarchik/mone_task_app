@@ -3,7 +3,6 @@ import 'dart:ui';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
-import 'package:intl/intl.dart';
 import 'package:mone_task_app/admin/service/get_excel_ui.dart';
 import 'package:mone_task_app/admin/ui/video_cache_manager_page.dart';
 import 'package:mone_task_app/checker/ui/player2.dart';
@@ -81,26 +80,12 @@ class _TaskWorkerUiState extends State<TaskWorkerUi> {
         _selectedDate.day == now.day;
   }
 
-  void _goToPrevDay() {
-    setState(
-      () => _selectedDate = _selectedDate.subtract(const Duration(days: 1)),
-    );
-    _fetchTasks(showLoading: true);
-  }
-
-  void _goToNextDay() {
-    if (_isToday) return;
-    setState(() => _selectedDate = _selectedDate.add(const Duration(days: 1)));
-    _fetchTasks(showLoading: true);
-  }
-
   Future<void> _pickDate() async {
     final picked = await showDatePicker(
       context: context,
+      firstDate: DateTime.now().subtract(const Duration(days: 6)),
       initialDate: _selectedDate,
-      firstDate: DateTime(2024),
       lastDate: DateTime.now(),
-      locale: const Locale('ru'),
     );
     if (picked != null && mounted) {
       setState(() => _selectedDate = picked);
@@ -110,25 +95,22 @@ class _TaskWorkerUiState extends State<TaskWorkerUi> {
 
   Future<void> _showVideoRecorder(TaskWorkerModel task) async {
     setState(() => _isRecording = true);
-    final result = await showGeneralDialog(
-      context: context,
-      barrierDismissible: false,
-      barrierLabel: '',
-      barrierColor: Colors.black.withOpacity(0.8),
-      transitionDuration: const Duration(milliseconds: 300),
-      pageBuilder: (context, animation, secondaryAnimation) =>
-          TelegramStyleVideoRecorder(taskId: task.id),
-      transitionBuilder: (context, animation, secondaryAnimation, child) =>
-          FadeTransition(
-            opacity: animation,
-            child: ScaleTransition(
-              scale: Tween<double>(begin: 0.8, end: 1.0).animate(
-                CurvedAnimation(parent: animation, curve: Curves.easeOutBack),
-              ),
-              child: child,
-            ),
-          ),
+
+    // opaque: false — orqa sahifa render bo'lib turadi,
+    // BackdropFilter shu render ustiga ishlaydi → haqiqiy blur!
+    final result = await Navigator.of(context).push(
+      PageRouteBuilder(
+        opaque: false,
+        barrierColor: Colors.transparent,
+        transitionDuration: const Duration(milliseconds: 300),
+        reverseTransitionDuration: const Duration(milliseconds: 200),
+        pageBuilder: (context, animation, secondaryAnimation) =>
+            _BlurCameraOverlay(taskId: task.id),
+        transitionsBuilder: (context, animation, secondaryAnimation, child) =>
+            FadeTransition(opacity: animation, child: child),
+      ),
     );
+
     setState(() => _isRecording = false);
     if (!context.mounted) return;
     if (result is List<XFile>) {
@@ -192,53 +174,6 @@ class _TaskWorkerUiState extends State<TaskWorkerUi> {
     }
   }
 
-  Widget _buildDateSelector() {
-    final dateStr = _isToday
-        ? 'Bugun'
-        : DateFormat('d MMMM, yyyy', 'ru').format(_selectedDate);
-
-    return Container(
-      height: 48,
-      color:
-          Theme.of(context).appBarTheme.backgroundColor ??
-          Theme.of(context).colorScheme.surface,
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          IconButton(
-            onPressed: _goToPrevDay,
-            icon: const Icon(Icons.chevron_left),
-            iconSize: 28,
-          ),
-          GestureDetector(
-            onTap: _pickDate,
-            child: Row(
-              children: [
-                Text(
-                  dateStr,
-                  style: const TextStyle(
-                    fontSize: 15,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-                const SizedBox(width: 4),
-                const Icon(Icons.calendar_today_outlined, size: 16),
-              ],
-            ),
-          ),
-          IconButton(
-            onPressed: _isToday ? null : _goToNextDay,
-            icon: Icon(
-              Icons.chevron_right,
-              color: _isToday ? Colors.grey.shade400 : null,
-            ),
-            iconSize: 28,
-          ),
-        ],
-      ),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -274,12 +209,22 @@ class _TaskWorkerUiState extends State<TaskWorkerUi> {
       appBar: AppBar(
         title: Text(user?.username ?? ""),
         actions: [
+          GestureDetector(
+            onTap: _pickDate,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12),
+              child: Center(
+                child: Text(
+                  _isToday
+                      ? "Сегодня"
+                      : "${_selectedDate.day}/${_selectedDate.month.toString().padLeft(2, '0')}",
+                  style: const TextStyle(fontSize: 14),
+                ),
+              ),
+            ),
+          ),
           IconButton(onPressed: _handleLogout, icon: const Icon(Icons.logout)),
         ],
-        bottom: PreferredSize(
-          preferredSize: const Size.fromHeight(48),
-          child: _buildDateSelector(),
-        ),
       ),
       body: _buildBody(),
     );
@@ -387,5 +332,32 @@ class _TaskWorkerUiState extends State<TaskWorkerUi> {
     tokenStorage.removeToken();
     tokenStorage.putUserData({});
     context.pushAndRemove(LoginPage());
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Orqa sahifa (tasklar) ustiga blur + kamera overlay
+// opaque:false route tufayli orqa sahifa render bo'lib turadi →
+// BackdropFilter haqiqiy blur effekt beradi
+// ─────────────────────────────────────────────────────────────────────────────
+class _BlurCameraOverlay extends StatelessWidget {
+  final int taskId;
+  const _BlurCameraOverlay({required this.taskId});
+
+  @override
+  Widget build(BuildContext context) {
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        // 1. Orqa fon (tasklar) ustiga blur
+        BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
+          child: Container(color: Colors.black.withOpacity(0.4)),
+        ),
+
+        // 2. Kamera widget — o'zi qora fon bilan
+        TelegramStyleVideoRecorder(taskId: taskId),
+      ],
+    );
   }
 }
