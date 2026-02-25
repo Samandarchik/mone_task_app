@@ -33,6 +33,8 @@ class _EditTaskUiState extends State<EditTaskUi> {
   bool categoriesLoading = true;
   String? categoriesError;
 
+  bool isSubmitting = false;
+
   @override
   void initState() {
     super.initState();
@@ -50,15 +52,48 @@ class _EditTaskUiState extends State<EditTaskUi> {
       selectedHour = int.tryParse(parts[0]);
       selectedMinute = int.tryParse(parts[1]);
     }
-    getCategories();
+    _loadCategories();
   }
 
-  void getCategories() async {
-    final categoriesFuture = await AdminTaskService().loadCategories();
+  /// Kategoriyalarni yuklash va task'dagi categoryni select qilish
+  Future<void> _loadCategories() async {
     setState(() {
-      categories = categoriesFuture;
-      categoriesLoading = false;
+      categoriesLoading = true;
+      categoriesError = null;
     });
+    try {
+      final result = await AdminTaskService().loadCategories();
+      if (!mounted) return;
+      setState(() {
+        categories = result;
+        categoriesLoading = false;
+
+        // --- Task'dagi category bo'yicha oldindan tanlash ---
+        // Agar hali tanlanmagan bo'lsa, task'dagi category nomi bilan moslashtirish
+        if (selectedCategoryId == null) {
+          final taskCategory = widget.task.category;
+          if (taskCategory != null && taskCategory.isNotEmpty) {
+            final match = categories
+                .where((c) => c.name == taskCategory)
+                .firstOrNull;
+            if (match != null) {
+              selectedCategoryId = match.id;
+            }
+          }
+        }
+        // Agar selectedCategoryId bor lekin categories ichida yo'q bo'lsa — null qilish
+        if (selectedCategoryId != null &&
+            !categories.any((c) => c.id == selectedCategoryId)) {
+          selectedCategoryId = null;
+        }
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        categoriesLoading = false;
+        categoriesError = e.toString();
+      });
+    }
   }
 
   @override
@@ -67,24 +102,22 @@ class _EditTaskUiState extends State<EditTaskUi> {
     super.dispose();
   }
 
+  /// Yangi category qo'shish
   Future<void> _addCategory(String name) async {
     final success = await taskService.addCategory(name);
     if (success) {
-      await AdminTaskService().loadCategories();
-      categoriesLoading = false;
+      await _loadCategories();
     }
   }
 
+  /// Category o'chirish
   Future<void> _deleteCategory(int id) async {
     final success = await taskService.deleteCategory(id);
     if (success) {
-      setState(() {
-        if (selectedCategoryId == id) {
-          selectedCategoryId = null;
-        }
-      });
-      await AdminTaskService().loadCategories();
-      categoriesLoading = false;
+      if (selectedCategoryId == id) {
+        selectedCategoryId = null;
+      }
+      await _loadCategories();
     } else {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -173,7 +206,7 @@ class _EditTaskUiState extends State<EditTaskUi> {
   }
 
   // --- Submit ---
-  void _submitTask() {
+  void _submitTask() async {
     if (controller.text.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text("Iltimos, vazifani kiriting")),
@@ -194,12 +227,28 @@ class _EditTaskUiState extends State<EditTaskUi> {
       );
       return;
     }
+
     if (selectedCategoryId == null || categories.isEmpty) {
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(const SnackBar(content: Text("Kategoriyani tanlang")));
       return;
     }
+
+    // Tanlangan category nomini topish
+    final selectedCategory = categories
+        .where((c) => c.id == selectedCategoryId)
+        .firstOrNull;
+
+    if (selectedCategory == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Kategoriyani qayta tanlang")),
+      );
+      return;
+    }
+
+    setState(() => isSubmitting = true);
+
     EditTaskUiModel model = EditTaskUiModel(
       taskId: widget.task.taskId,
       taskType: selectedType ?? 1,
@@ -212,13 +261,22 @@ class _EditTaskUiState extends State<EditTaskUi> {
           : selectedDays,
       hour: selectedHour,
       minute: selectedMinute,
-      category: categories[selectedCategoryId ?? 0].name,
-      // categoryId model'ga qo'shilgan bo'lishi kerak
-      // categoryId: selectedCategoryId,
+      category: selectedCategory.name,
     );
 
-    taskService.updateTaskStatus(model);
-    Navigator.pop(context, true);
+    try {
+      await taskService.updateTaskStatus(model);
+      if (mounted) {
+        Navigator.pop(context, true);
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => isSubmitting = false);
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text("Xatolik: $e")));
+      }
+    }
   }
 
   @override
@@ -254,16 +312,15 @@ class _EditTaskUiState extends State<EditTaskUi> {
               else if (categoriesError != null)
                 Row(
                   children: [
-                    Text(
-                      "Xatolik: $categoriesError",
-                      style: const TextStyle(color: Colors.red),
+                    Flexible(
+                      child: Text(
+                        "Xatolik: $categoriesError",
+                        style: const TextStyle(color: Colors.red),
+                      ),
                     ),
                     const SizedBox(width: 8),
                     TextButton(
-                      onPressed: () async {
-                        await AdminTaskService().loadCategories();
-                        categoriesLoading = false;
-                      },
+                      onPressed: _loadCategories,
                       child: const Text("Qayta"),
                     ),
                   ],
@@ -497,14 +554,16 @@ class _EditTaskUiState extends State<EditTaskUi> {
                 child: SizedBox(
                   width: double.infinity,
                   child: CupertinoButton.filled(
-                    onPressed: _submitTask,
-                    child: const Text(
-                      "Сохранить изменения",
-                      style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
+                    onPressed: isSubmitting ? null : _submitTask,
+                    child: isSubmitting
+                        ? const CupertinoActivityIndicator(color: Colors.white)
+                        : const Text(
+                            "Сохранить изменения",
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
                   ),
                 ),
               ),
@@ -560,21 +619,3 @@ class _EditTaskUiState extends State<EditTaskUi> {
     );
   }
 }
-
-// Types ma'lumotlari
-const List<Map<String, dynamic>> types = [
-  {'id': 1, 'name': 'Ежедневно'},
-  {'id': 2, 'name': 'Еженедельно'},
-  {'id': 3, 'name': 'Ежемесячно'},
-];
-
-// Hafta kunlari
-const List<Map<String, dynamic>> week = [
-  {'id': 1, 'name': 'Понедельник'},
-  {'id': 2, 'name': 'Вторник'},
-  {'id': 3, 'name': 'Среда'},
-  {'id': 4, 'name': 'Четверг'},
-  {'id': 5, 'name': 'Пятница'},
-  {'id': 6, 'name': 'Суббота'},
-  {'id': 7, 'name': 'Воскресенье'},
-];

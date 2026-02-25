@@ -87,28 +87,87 @@ class _AdminTaskListWidgetState extends State<AdminTaskListWidget> {
       final localPath = await _getLocalFilePath(videoUrl);
       final file = File(localPath);
 
+      // Allaqachon to'liq yuklangan faylni tekshirish
       if (await file.exists() && await file.length() > 0) {
-        if (mounted) {
-          setState(() {
-            cachedVideos[videoUrl] = localPath;
-            downloadingVideos.remove(videoUrl);
-          });
+        // Content-length bilan solishtirish
+        try {
+          final dio = Dio();
+          final head = await dio.head(videoUrl);
+          final serverSize = int.tryParse(
+            head.headers.value('content-length') ?? '',
+          );
+          final localSize = await file.length();
+
+          if (serverSize != null && localSize < serverSize) {
+            // Yarim yuklangan — o'chiramiz
+            await file.delete();
+          } else {
+            // To'liq
+            if (mounted) {
+              setState(() {
+                cachedVideos[videoUrl] = localPath;
+                downloadingVideos.remove(videoUrl);
+              });
+            }
+            return;
+          }
+        } catch (_) {
+          // HEAD ishlamasa, mavjud faylni ishlatamiz
+          if (mounted) {
+            setState(() {
+              cachedVideos[videoUrl] = localPath;
+              downloadingVideos.remove(videoUrl);
+            });
+          }
+          return;
         }
-        return;
       }
+
+      // ✅ TEMP faylga yuklaymiz (yarim qolsa asosiy faylga ta'sir qilmaydi)
+      final tempPath = '$localPath.tmp';
+      final tempFile = File(tempPath);
 
       final dio = Dio();
-      await dio.download(videoUrl, localPath);
+      await dio.download(videoUrl, tempPath);
 
-      if (await file.exists() && await file.length() > 0) {
+      // Yuklash tugagandan keyin validatsiya
+      if (await tempFile.exists() && await tempFile.length() > 0) {
+        // Server hajmi bilan tekshirish
+        try {
+          final head = await dio.head(videoUrl);
+          final serverSize = int.tryParse(
+            head.headers.value('content-length') ?? '',
+          );
+          final downloadedSize = await tempFile.length();
+
+          if (serverSize != null && downloadedSize < serverSize) {
+            // To'liq yuklanmagan — o'chirib tashlaymiz
+            await tempFile.delete();
+            if (mounted) setState(() => downloadingVideos.remove(videoUrl));
+            return;
+          }
+        } catch (_) {}
+
+        // ✅ To'liq yuklangan — rename qilamiz
+        await tempFile.rename(localPath);
+
         if (mounted) {
           setState(() {
             cachedVideos[videoUrl] = localPath;
             downloadingVideos.remove(videoUrl);
           });
         }
+      } else {
+        if (await tempFile.exists()) await tempFile.delete();
+        if (mounted) setState(() => downloadingVideos.remove(videoUrl));
       }
     } catch (e) {
+      // Xatolikda temp faylni tozalash
+      try {
+        final localPath = await _getLocalFilePath(videoUrl);
+        final tempFile = File('$localPath.tmp');
+        if (await tempFile.exists()) await tempFile.delete();
+      } catch (_) {}
       if (mounted) setState(() => downloadingVideos.remove(videoUrl));
     }
   }

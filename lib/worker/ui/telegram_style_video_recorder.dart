@@ -572,63 +572,6 @@ class _TelegramStyleVideoRecorderState
                         16,
                   ),
 
-                  // Timer
-                  if (_isRecording)
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 16,
-                        vertical: 8,
-                      ),
-                      decoration: BoxDecoration(
-                        color: _isPaused ? Colors.orange : Colors.red,
-                        borderRadius: BorderRadius.circular(20),
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(
-                            _isPaused
-                                ? Icons.pause_circle_filled
-                                : Icons.fiber_manual_record,
-                            color: Colors.white,
-                            size: 12,
-                          ),
-                          const SizedBox(width: 8),
-                          Text(
-                            "${_recordedSeconds ~/ 60}:${(_recordedSeconds % 60).toString().padLeft(2, '0')}",
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 16,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-
-                  if (_isRecording && _videoSegments.isNotEmpty)
-                    Padding(
-                      padding: const EdgeInsets.only(top: 8),
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 12,
-                          vertical: 6,
-                        ),
-                        decoration: BoxDecoration(
-                          color: Colors.black.withOpacity(0.15),
-                          borderRadius: BorderRadius.circular(15),
-                        ),
-                        child: Text(
-                          'Qismlar: ${_videoSegments.length + 1}',
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 12,
-                            fontWeight: FontWeight.w500,
-                          ),
-                        ),
-                      ),
-                    ),
-
                   const Spacer(),
 
                   // ✅ ZOOM BUTTON — qizil tugmadan tepada

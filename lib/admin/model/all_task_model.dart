@@ -6,6 +6,7 @@ class TemplateTaskModel {
   final List<int> filialIds;
   final int orderIndex;
   final List<int>? days;
+  final String category;
   final String createdAt;
   final String? notificationTime;
 
@@ -18,6 +19,7 @@ class TemplateTaskModel {
     this.days,
     required this.createdAt,
     this.notificationTime,
+    required this.category,
   });
 
   factory TemplateTaskModel.fromJson(Map<String, dynamic> json) {
@@ -29,6 +31,7 @@ class TemplateTaskModel {
       filialIds: List<int>.from(json['filialIds'] ?? []),
       days: json['days'] != null ? List<int>.from(json['days']) : null,
       createdAt: json['createdAt'] ?? '',
+      category: json['category'],
       notificationTime: json['notificationTime'],
     );
   }

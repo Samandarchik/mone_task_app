@@ -472,6 +472,7 @@ class _TemplateTaskAdminUiState extends State<TemplateTaskAdminUi> {
                     task: CheckerCheckTaskModel(
                       taskId: template.templateId,
                       task: template.task,
+                      category: template.category,
                       type: template.type,
                       filialId: currentFilialId,
                       days: template.days,

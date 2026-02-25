@@ -38,7 +38,7 @@ class CheckerCheckTaskModel {
       status: json['status'],
       category: json['category'],
       videoUrl: json["videoUrl"],
-      notificationTime: json["notificationTime"] ?? "12:00",
+      notificationTime: json["notificationTime"],
       days: json["days"] != null ? List<int>.from(json["days"]) : null,
       submittedBy: json["submittedBy"],
       checkerAudioUrl: json["checkerAudioUrl"],
