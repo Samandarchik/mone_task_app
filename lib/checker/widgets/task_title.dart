@@ -346,7 +346,7 @@ class _TaskListItemState extends State<TaskListItem> {
       child: Material(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
         elevation: 2,
-        color: getStatusColor(task.status),
+        color: Colors.white70,
         child: InkWell(
           borderRadius: BorderRadius.circular(10),
           onLongPress: () async {

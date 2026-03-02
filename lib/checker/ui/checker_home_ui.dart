@@ -41,6 +41,7 @@ class _CheckerHomeUiState extends State<CheckerHomeUi> {
   /// Lekin taskId TaskListWidget ichida mavjud, shuning uchun
   /// u yerdan callback orqali uzatiladi (pastga qarang).
   void _showCircleVideoPlayer(
+    List<CheckerCheckTaskModel> title,
     List<String> videoPaths,
     int startIndex, {
     VoidCallback? onHalfWatched,
@@ -50,6 +51,7 @@ class _CheckerHomeUiState extends State<CheckerHomeUi> {
       context: context,
       barrierColor: Colors.black87,
       builder: (context) => CircleVideoPlayer(
+        title: title,
         videoUrls: videoPaths,
         initialIndex: startIndex,
         onHalfWatched: onHalfWatched,
@@ -263,7 +265,7 @@ class _CheckerHomeUiState extends State<CheckerHomeUi> {
                       // TaskListWidget ichidan List<String>, int, va
                       // onHalfWatched callback keladi
                       onShowVideoPlayer: (String videoPath) {
-                        _showCircleVideoPlayer([videoPath], 0);
+                        _showCircleVideoPlayer(allTasks, [videoPath], 0);
                       },
                     );
                   }).toList(),

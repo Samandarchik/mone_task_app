@@ -42,7 +42,11 @@ class _AdminTaskUiState extends State<AdminTaskUi> {
   }
 
   /// AdminTaskListWidget dan List<String> va startIndex keladi
-  void _showCircleVideoPlayer(List<String> videoPaths, int startIndex) {
+  void _showCircleVideoPlayer(
+    List<String> videoPaths,
+    int startIndex,
+    List<CheckerCheckTaskModel> tasks,
+  ) {
     if (videoPaths.isEmpty) return;
     showDialog(
       context: context,
@@ -53,6 +57,7 @@ class _AdminTaskUiState extends State<AdminTaskUi> {
         child: CircleVideoPlayer(
           videoUrls: videoPaths,
           initialIndex: startIndex,
+          title: tasks,
         ),
       ),
     );

@@ -12,7 +12,6 @@ import 'package:mone_task_app/core/context_extension.dart';
 import 'package:mone_task_app/core/data/local/token_storage.dart';
 import 'package:mone_task_app/core/di/di.dart';
 import 'package:mone_task_app/home/service/login_service.dart';
-import 'package:mone_task_app/utils/get_color.dart';
 import 'package:mone_task_app/worker/model/task_worker_model.dart';
 import 'package:mone_task_app/worker/model/response_task_model.dart';
 import 'package:mone_task_app/worker/model/user_model.dart';
@@ -272,7 +271,7 @@ class _TaskWorkerUiState extends State<TaskWorkerUi> {
                       horizontal: 8,
                     ),
                     decoration: BoxDecoration(
-                      color: getStatusColor(task.taskStatus),
+                      color: Colors.white70,
                       borderRadius: BorderRadius.circular(8),
                       border: Border.all(color: Colors.grey.shade300),
                     ),
