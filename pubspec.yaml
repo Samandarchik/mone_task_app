@@ -61,6 +61,7 @@ dependencies:
   flutter_sound: ^9.30.0
   audioplayers: ^6.5.1
   flutter_local_notifications: ^20.1.0
+  provider: ^6.1.5+1
   # video_compress: ^3.1.4
   # ffmpeg_kit_flutter_new: ^4.1.0
   # camera: ^0.10.5+5
