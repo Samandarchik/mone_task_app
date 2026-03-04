@@ -270,7 +270,7 @@ class _StatusFilterButton extends StatelessWidget {
     return GestureDetector(
       onTap: () => provider.toggleStatusFilter(status),
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 4),
+        padding: const EdgeInsets.symmetric(horizontal: 20),
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 200),
           width: 28,

@@ -12,6 +12,7 @@ class VideoPlayerProvider extends ChangeNotifier {
   final List<String> videoUrls;
   final List<CheckerCheckTaskModel> tasks;
   final VoidCallback? onHalfWatched;
+  final VoidCallback? onStatusChanged; // ✅ YANGI
 
   VideoPlayerController? _controller;
   int _currentIndex;
@@ -30,7 +31,6 @@ class VideoPlayerProvider extends ChangeNotifier {
 
   void consumeRecordingSignal() {
     _shouldStartRecording = false;
-    // notifyListeners() chaqirmaymiz — AudioTaskRow o'zi boshqaradi
   }
 
   static const List<double> speedOptions = [1.0, 1.5, 2.0];
@@ -40,6 +40,7 @@ class VideoPlayerProvider extends ChangeNotifier {
     required this.tasks,
     int initialIndex = 0,
     this.onHalfWatched,
+    this.onStatusChanged, // ✅ YANGI
   }) : _currentIndex = initialIndex {
     WakelockPlus.enable();
     initializeVideo();
@@ -105,6 +106,9 @@ class VideoPlayerProvider extends ChangeNotifier {
 
           notifyListeners();
         }
+
+        // ✅ YANGI — AdminTasksProvider ga xabar berish (backenddan qayta yuklash)
+        onStatusChanged?.call();
       }
       return success;
     } catch (e) {
