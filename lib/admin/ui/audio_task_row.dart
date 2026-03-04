@@ -3,18 +3,13 @@ import 'dart:io';
 
 import 'package:audioplayers/audioplayers.dart';
 import 'package:flutter/material.dart';
+import 'package:mone_task_app/admin/provider/video_player_provider.dart';
 import 'package:mone_task_app/checker/model/checker_check_task_model.dart';
 import 'package:mone_task_app/checker/service/task_worker_service.dart';
 import 'package:mone_task_app/core/constants/urls.dart';
 import 'package:path_provider/path_provider.dart';
+import 'package:provider/provider.dart';
 import 'package:record/record.dart';
-
-/// Bu widgetni AdminTaskListItem ichida ishlatish:
-///
-/// AudioTaskRow(
-///   task: task,
-///   selectedDate: widget.selectedDate,
-/// )
 
 class AudioTaskRow extends StatefulWidget {
   final CheckerCheckTaskModel task;
@@ -48,15 +43,12 @@ class _AudioTaskRowState extends State<AudioTaskRow>
   StreamSubscription? _playerStateSub;
   StreamSubscription? _positionSub;
   StreamSubscription? _durationSub;
+  bool _isCompleted = false;
 
-  // local override after re-send
   String? _localAudioUrl;
 
   String? get _audioUrl => _localAudioUrl ?? widget.task.checkerAudioUrl;
-
   bool get _hasAudio => _audioUrl != null && _audioUrl!.isNotEmpty;
-
-  // videoUrl BOR bo'lsagina audio yozish tugmasi ko'rsatiladi
   bool get _canRecord =>
       widget.task.videoUrl != null && widget.task.videoUrl!.isNotEmpty;
 
@@ -91,6 +83,36 @@ class _AudioTaskRowState extends State<AudioTaskRow>
   }
 
   @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _checkRecordingSignal();
+  }
+
+  /// Provider dan recording signalni tekshiradi
+  void _checkRecordingSignal() {
+    try {
+      final provider = context.read<VideoPlayerProvider>();
+      final currentTask = provider.currentTask;
+
+      // Faqat hozirgi task uchun va signal bor bo'lsa
+      if (provider.shouldStartRecording &&
+          currentTask != null &&
+          currentTask.taskId == widget.task.taskId &&
+          !_isRecording &&
+          !_isSending &&
+          _canRecord) {
+        provider.consumeRecordingSignal();
+        // Keyingi frame da recording boshlash (context to'liq tayyor bo'lishi uchun)
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) _startRecording();
+        });
+      }
+    } catch (_) {
+      // Provider topilmasa (masalan, player tashqarisida) — hech narsa qilmaymiz
+    }
+  }
+
+  @override
   void dispose() {
     _recorder.dispose();
     _player.dispose();
@@ -115,10 +137,8 @@ class _AudioTaskRowState extends State<AudioTaskRow>
     return '${AppUrls.baseUrl}/$url';
   }
 
-  // ── Player state ──────────────────────────────────────────────────────────
-  bool _isCompleted = false;
-
   // ── Player actions ────────────────────────────────────────────────────────
+
   Future<void> _togglePlay() async {
     if (_audioUrl == null) return;
 
@@ -134,13 +154,11 @@ class _AudioTaskRowState extends State<AudioTaskRow>
       });
     }
 
-    // Local file tekshiruvi (yangi yozilgan audio)
     if (_localAudioUrl != null && File(_localAudioUrl!).existsSync()) {
       await _player.play(DeviceFileSource(_localAudioUrl!));
       return;
     }
 
-    // Server URL
     final url = _fullAudioUrl(_audioUrl!);
     await _player.play(UrlSource(url));
   }
@@ -166,7 +184,6 @@ class _AudioTaskRowState extends State<AudioTaskRow>
 
     await _player.stop();
 
-    // ← OLDIN state ni o'zgartir, keyin record boshla
     if (mounted) setState(() => _isRecording = true);
 
     final dir = await getTemporaryDirectory();
@@ -214,8 +231,6 @@ class _AudioTaskRowState extends State<AudioTaskRow>
       );
 
       if (success) {
-        // URL ni local path bilan vaqtincha ko'rsatamiz
-        // (server URL ni keyinroq refresh dan oladi)
         if (mounted) setState(() => _localAudioUrl = path);
       }
 
@@ -250,8 +265,12 @@ class _AudioTaskRowState extends State<AudioTaskRow>
   @override
   Widget build(BuildContext context) {
     if (!_canRecord) return const SizedBox.shrink();
+
+    // Provider signalni har rebuild da tekshir
+    _checkRecordingSignal();
+
     if (_isSending) return _buildSending();
-    if (_isRecording) return _buildRecording(); // ← bu BIRINCHI bo'lishi kerak
+    if (_isRecording) return _buildRecording();
     if (_hasAudio) return _buildPlayer();
     return _buildMicButton();
   }
@@ -293,7 +312,6 @@ class _AudioTaskRowState extends State<AudioTaskRow>
       ),
       child: Row(
         children: [
-          // pulse dot
           AnimatedBuilder(
             animation: _pulseCtrl,
             builder: (_, __) => Container(
@@ -321,7 +339,6 @@ class _AudioTaskRowState extends State<AudioTaskRow>
               style: TextStyle(fontSize: 12, color: Colors.red),
             ),
           ),
-          // cancel
           GestureDetector(
             onTap: _cancelRecording,
             child: const Padding(
@@ -330,7 +347,6 @@ class _AudioTaskRowState extends State<AudioTaskRow>
             ),
           ),
           const SizedBox(width: 4),
-          // send
           GestureDetector(
             onTap: _stopAndSend,
             child: Container(
@@ -352,8 +368,8 @@ class _AudioTaskRowState extends State<AudioTaskRow>
   }
 
   Widget _buildSending() {
-    return Row(
-      children: const [
+    return const Row(
+      children: [
         SizedBox(
           width: 16,
           height: 16,
@@ -383,7 +399,6 @@ class _AudioTaskRowState extends State<AudioTaskRow>
       ),
       child: Row(
         children: [
-          // Play / Pause / Replay
           GestureDetector(
             onTap: _togglePlay,
             child: Container(
@@ -405,13 +420,10 @@ class _AudioTaskRowState extends State<AudioTaskRow>
             ),
           ),
           const SizedBox(width: 8),
-
-          // Waveform + progress
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // Slim slider
                 SliderTheme(
                   data: SliderThemeData(
                     trackHeight: 3,
@@ -458,8 +470,6 @@ class _AudioTaskRowState extends State<AudioTaskRow>
               ],
             ),
           ),
-
-          // Re-record button (agar video yo'q bo'lsa)
           if (_canRecord) ...[
             const SizedBox(width: 4),
             GestureDetector(

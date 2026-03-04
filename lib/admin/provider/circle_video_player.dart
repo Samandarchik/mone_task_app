@@ -2,8 +2,8 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:mone_task_app/admin/provider/video_player_provider.dart';
+import 'package:mone_task_app/admin/ui/audio_task_row.dart';
 import 'package:mone_task_app/checker/model/checker_check_task_model.dart';
-import 'package:mone_task_app/checker/service/task_worker_service.dart';
 import 'package:provider/provider.dart';
 import 'package:video_player/video_player.dart';
 
@@ -12,6 +12,7 @@ class CircleVideoPlayer extends StatelessWidget {
   final List<String> videoUrls;
   final int initialIndex;
   final VoidCallback? onHalfWatched;
+  final DateTime selectedDate;
 
   const CircleVideoPlayer({
     required this.title,
@@ -19,6 +20,7 @@ class CircleVideoPlayer extends StatelessWidget {
     required this.videoUrls,
     this.initialIndex = 0,
     this.onHalfWatched,
+    required this.selectedDate,
   });
 
   @override
@@ -26,18 +28,19 @@ class CircleVideoPlayer extends StatelessWidget {
     return ChangeNotifierProvider(
       create: (_) => VideoPlayerProvider(
         videoUrls: videoUrls,
+        tasks: title,
         initialIndex: initialIndex,
         onHalfWatched: onHalfWatched,
       ),
-      child: _CircleVideoPlayerBody(tasks: title),
+      child: _CircleVideoPlayerBody(selectedDate: selectedDate),
     );
   }
 }
 
 class _CircleVideoPlayerBody extends StatefulWidget {
-  final List<CheckerCheckTaskModel> tasks;
+  final DateTime selectedDate;
 
-  const _CircleVideoPlayerBody({required this.tasks});
+  const _CircleVideoPlayerBody({required this.selectedDate});
 
   @override
   State<_CircleVideoPlayerBody> createState() => _CircleVideoPlayerBodyState();
@@ -75,6 +78,8 @@ class _CircleVideoPlayerBodyState extends State<_CircleVideoPlayerBody>
     final double arcStroke = 6.0;
     final double arcBoxSize = (arcRadius + arcStroke) * 2;
 
+    final task = provider.currentTask;
+
     return Scaffold(
       backgroundColor: Colors.transparent,
       body: Stack(
@@ -85,9 +90,7 @@ class _CircleVideoPlayerBodyState extends State<_CircleVideoPlayerBody>
             left: 50,
             right: 50,
             child: Text(
-              widget.tasks.isNotEmpty
-                  ? widget.tasks[provider.currentIndex].task
-                  : "Видео",
+              task?.task ?? "Видео",
               style: const TextStyle(
                 color: Colors.black,
                 fontSize: 18,
@@ -121,6 +124,19 @@ class _CircleVideoPlayerBodyState extends State<_CircleVideoPlayerBody>
                 if (provider.isInitialized && !provider.hasError) ...[
                   const SizedBox(height: 16),
                   _buildControlPanel(provider, circleSize),
+
+                  // ── Audio row — doira ostida ─────────────────────────
+                  if (task != null) ...[
+                    const SizedBox(height: 12),
+                    SizedBox(
+                      width: circleSize,
+                      child: AudioTaskRow(
+                        key: ValueKey('audio_${task.taskId}'),
+                        task: task,
+                        selectedDate: widget.selectedDate,
+                      ),
+                    ),
+                  ],
                 ],
               ],
             ),
@@ -160,6 +176,8 @@ class _CircleVideoPlayerBodyState extends State<_CircleVideoPlayerBody>
     );
   }
 
+  // ── Video circle ──────────────────────────────────────────────────────────
+
   Widget _buildVideoCircle(
     BuildContext context,
     VideoPlayerProvider provider,
@@ -174,7 +192,6 @@ class _CircleVideoPlayerBodyState extends State<_CircleVideoPlayerBody>
       child: Stack(
         alignment: Alignment.center,
         children: [
-          // Background arc
           CustomPaint(
             size: Size(arcBoxSize, arcBoxSize),
             painter: _CircularProgressPainter(
@@ -184,7 +201,6 @@ class _CircleVideoPlayerBodyState extends State<_CircleVideoPlayerBody>
               radius: arcRadius,
             ),
           ),
-          // Progress arc
           CustomPaint(
             size: Size(arcBoxSize, arcBoxSize),
             painter: _CircularProgressPainter(
@@ -195,7 +211,6 @@ class _CircleVideoPlayerBodyState extends State<_CircleVideoPlayerBody>
               showDot: true,
             ),
           ),
-          // Seek gesture on arc
           GestureDetector(
             behavior: HitTestBehavior.translucent,
             onPanStart: provider.isInitialized
@@ -212,7 +227,6 @@ class _CircleVideoPlayerBodyState extends State<_CircleVideoPlayerBody>
                 : null,
             child: SizedBox(width: arcBoxSize, height: arcBoxSize),
           ),
-          // Video circle
           ScaleTransition(
             scale: Tween(begin: 0.8, end: 1.0).animate(
               CurvedAnimation(
@@ -318,6 +332,8 @@ class _CircleVideoPlayerBodyState extends State<_CircleVideoPlayerBody>
     );
   }
 
+  // ── Control panel ─────────────────────────────────────────────────────────
+
   Widget _buildControlPanel(VideoPlayerProvider provider, double circleSize) {
     return Container(
       width: circleSize,
@@ -338,21 +354,20 @@ class _CircleVideoPlayerBodyState extends State<_CircleVideoPlayerBody>
   }
 
   Widget _buildTimeRow(VideoPlayerProvider provider) {
-    final task = widget.tasks.isNotEmpty
-        ? widget.tasks[provider.currentIndex]
-        : null;
-
+    final task = provider.currentTask;
     return Row(
       children: [
         Text(
-          "${task?.date} ${task?.submittedAt?.toLocal().hour.toString().padLeft(2, '0') ?? '00'}:${task?.submittedAt?.toLocal().minute.toString().padLeft(2, '0') ?? '00'}",
+          "${task?.date ?? ''} "
+          "${task?.submittedAt?.toLocal().hour.toString().padLeft(2, '0') ?? '00'}:"
+          "${task?.submittedAt?.toLocal().minute.toString().padLeft(2, '0') ?? '00'}",
           style: const TextStyle(
             color: Colors.white,
             fontSize: 14,
             fontWeight: FontWeight.bold,
           ),
         ),
-        Spacer(),
+        const Spacer(),
         Text(
           provider.formatDuration(provider.duration),
           style: const TextStyle(color: Colors.white70, fontSize: 13),
@@ -362,10 +377,12 @@ class _CircleVideoPlayerBodyState extends State<_CircleVideoPlayerBody>
   }
 
   Widget _buildControls(VideoPlayerProvider provider) {
+    final task = provider.currentTask;
+
     return Row(
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
-        Spacer(),
+        const Spacer(),
         IconButton(
           onPressed: provider.hasPrev ? provider.goToPrev : null,
           icon: Icon(
@@ -415,49 +432,45 @@ class _CircleVideoPlayerBodyState extends State<_CircleVideoPlayerBody>
             ),
           ),
         ),
-        Spacer(),
-        buildStatusIndicator(
-          widget.tasks[provider.currentIndex].status,
-          widget.tasks[provider.currentIndex],
-        ),
+        const Spacer(),
+        if (task != null) _buildStatusIndicator(provider, task),
       ],
     );
   }
 
-  Widget buildStatusIndicator(int status, CheckerCheckTaskModel task) {
+  // ── Status indicator ──────────────────────────────────────────────────────
+
+  Widget _buildStatusIndicator(
+    VideoPlayerProvider provider,
+    CheckerCheckTaskModel task,
+  ) {
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        // _statusCircleButton(1, status, Colors.red, task.taskId, task.date!),
-        // const SizedBox(width: 25),
-        // _statusCircleButton(2, status, Colors.orange, task.taskId, task.date!),
-        // const SizedBox(width: 15),
-        // _statusCircleButton(3, status, Colors.green, task.taskId, task.date!),
+        _statusCircleButton(provider, task, 3, Colors.green),
+        const SizedBox(width: 25),
+        _statusCircleButton(provider, task, 2, Colors.orange),
+        const SizedBox(width: 25),
+        _statusCircleButton(provider, task, 1, Colors.red),
       ],
     );
   }
 
   Widget _statusCircleButton(
+    VideoPlayerProvider provider,
+    CheckerCheckTaskModel task,
     int level,
-    int currentStatus,
     Color activeColor,
-    int taskId,
-    String selectedDate,
   ) {
-    final bool isActive = currentStatus >= level;
+    final bool isActive = task.status >= level;
 
     return GestureDetector(
       onTap: () async {
-        if (currentStatus != level) {
-          final bool isSuccess = await AdminTaskService().updateTaskStatus(
-            taskId,
-            level,
-            null,
-            selectedDate,
-          );
-          if (isSuccess && mounted) {
-            // setState(() => task.status = level);
-          }
+        if (task.status != level) {
+          // Provider orqali status yangilanadi
+          // Agar level == 1 bo'lsa, provider _shouldStartRecording = true qiladi
+          // AudioTaskRow uni catch qilib, recording boshlaydi
+          await provider.updateTaskStatus(task.taskId, level, task.date);
         }
       },
       child: AnimatedContainer(

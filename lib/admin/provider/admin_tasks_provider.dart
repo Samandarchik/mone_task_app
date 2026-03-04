@@ -30,6 +30,28 @@ class AdminTasksProvider extends ChangeNotifier {
   DateTime _selectedDate = DateTime.now();
   DateTime get selectedDate => _selectedDate;
 
+  // ── Status filter ────────────────────────────────────────────────────────
+  /// Tanlangan statuslar to'plami. Bo'sh bo'lsa = hammasi ko'rinadi
+  Set<int> _selectedStatuses = {};
+  Set<int> get selectedStatuses => _selectedStatuses;
+
+  /// Filter faolmi
+  bool get isFilterActive => _selectedStatuses.isNotEmpty;
+
+  void toggleStatusFilter(int status) {
+    if (_selectedStatuses.contains(status)) {
+      _selectedStatuses.remove(status);
+    } else {
+      _selectedStatuses.add(status);
+    }
+    notifyListeners();
+  }
+
+  void clearStatusFilter() {
+    _selectedStatuses = {};
+    notifyListeners();
+  }
+
   void setSelectedDate(DateTime date) {
     _selectedDate = date;
     fetchTasks();
@@ -67,9 +89,15 @@ class AdminTasksProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  // ── Filter tasks by filial ──────────────────────────────────────────────
+  // ── Filter tasks by filial + status ─────────────────────────────────────
   List<CheckerCheckTaskModel> tasksForFilial(int filialId) {
-    return _tasks.where((t) => t.filialId == filialId).toList();
+    var filtered = _tasks.where((t) => t.filialId == filialId);
+
+    if (_selectedStatuses.isNotEmpty) {
+      filtered = filtered.where((t) => _selectedStatuses.contains(t.status));
+    }
+
+    return filtered.toList();
   }
 
   // ── Delete task ──────────────────────────────────────────────────────────
@@ -85,6 +113,8 @@ class AdminTasksProvider extends ChangeNotifier {
       return false;
     }
   }
+
+  // ── Update task status ──────────────────────────────────────────────────
 
   // ── Update task status ──────────────────────────────────────────────────
   Future<bool> updateTaskStatus(int taskId, int status, DateTime date) async {

@@ -50,6 +50,7 @@ class _AdminTaskUiState extends State<AdminTaskUi> {
           videoUrls: videoPaths,
           initialIndex: startIndex,
           title: tasks,
+          selectedDate: context.read<AdminTasksProvider>().selectedDate,
         ),
       ),
     );
@@ -135,21 +136,44 @@ class _AdminTaskUiState extends State<AdminTaskUi> {
     return DefaultTabController(
       length: categories.length,
       child: Scaffold(
-        // ── Drawer ──────────────────────────────────────────────────────────
         drawer: MyDrawer(
           categories: categories,
           user: _user,
           onLogout: _handleLogout,
         ),
-
-        // ── AppBar ───────────────────────────────────────────────────────
         appBar: AppBar(
           title: Text(_user?.username ?? ""),
           actions: [
+            // ── Status filter tugmalari ──────────────────────────────────
+            _StatusFilterButton(
+              status: 3,
+              color: Colors.green,
+              provider: tasksProvider,
+            ),
+            _StatusFilterButton(
+              status: 2,
+              color: Colors.orange,
+              provider: tasksProvider,
+            ),
+            _StatusFilterButton(
+              status: 1,
+              color: Colors.red,
+              provider: tasksProvider,
+            ),
+
+            // ── Filterni tozalash ────────────────────────────────────────
+            if (tasksProvider.isFilterActive)
+              IconButton(
+                onPressed: () => tasksProvider.clearStatusFilter(),
+                icon: const Icon(Icons.filter_alt_off, size: 20),
+                tooltip: 'Filterni tozalash',
+              ),
+
+            // ── Sana tanlash ─────────────────────────────────────────────
             GestureDetector(
               onTap: _handleDateSelection,
               child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 20),
+                padding: const EdgeInsets.symmetric(horizontal: 12),
                 child: Center(
                   child: Text(
                     tasksProvider.selectedDate.day == DateTime.now().day
@@ -208,15 +232,65 @@ class _AdminTaskUiState extends State<AdminTaskUi> {
 
     return TabBarView(
       children: categories.map((category) {
+        // ← tasksForFilial endi status filter ham qo'llaydi
+        final filteredTasks = tasksProvider.tasksForFilial(category.filialId);
+
         return AdminTaskListWidget(
           role: _user?.role ?? "",
-          tasks: tasksProvider.tasks,
+          tasks: filteredTasks,
           filialId: category.filialId,
           selectedDate: tasksProvider.selectedDate,
           onRefresh: () => tasksProvider.fetchTasks(),
           onShowVideoPlayer: _showCircleVideoPlayer,
         );
       }).toList(),
+    );
+  }
+}
+
+// ─── Status filter button ───────────────────────────────────────────────────
+
+class _StatusFilterButton extends StatelessWidget {
+  final int status;
+  final Color color;
+  final AdminTasksProvider provider;
+
+  const _StatusFilterButton({
+    required this.status,
+    required this.color,
+    required this.provider,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final bool isSelected = provider.selectedStatuses.contains(status);
+    // Filter faol emas = hammasi ko'rinadi, shuning uchun hech biri "active" emas
+    // Filter faol = faqat tanlanganlari active
+
+    return GestureDetector(
+      onTap: () => provider.toggleStatusFilter(status),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 4),
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 200),
+          width: 28,
+          height: 28,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            color: isSelected ? color : color.withOpacity(0.2),
+            border: Border.all(
+              color: isSelected ? color : color.withOpacity(0.4),
+              width: isSelected ? 2.5 : 1.5,
+            ),
+            boxShadow: isSelected
+                ? [BoxShadow(color: color.withOpacity(0.4), blurRadius: 6)]
+                : [],
+          ),
+          child: isSelected
+              ? const Icon(Icons.check, size: 16, color: Colors.white)
+              : null,
+        ),
+      ),
     );
   }
 }

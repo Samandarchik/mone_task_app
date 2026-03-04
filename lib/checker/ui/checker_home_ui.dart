@@ -55,6 +55,7 @@ class _CheckerHomeUiState extends State<CheckerHomeUi> {
         videoUrls: videoPaths,
         initialIndex: startIndex,
         onHalfWatched: onHalfWatched,
+        selectedDate: selectedDate,
       ),
     );
   }

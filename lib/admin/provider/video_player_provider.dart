@@ -1,13 +1,16 @@
 import 'dart:io';
 import 'dart:math' as math;
-import 'dart:ui';
 
 import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart';
+import 'package:mone_task_app/checker/model/checker_check_task_model.dart';
+import 'package:mone_task_app/checker/service/task_worker_service.dart';
 import 'package:video_player/video_player.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
 
 class VideoPlayerProvider extends ChangeNotifier {
   final List<String> videoUrls;
+  final List<CheckerCheckTaskModel> tasks;
   final VoidCallback? onHalfWatched;
 
   VideoPlayerController? _controller;
@@ -21,10 +24,20 @@ class VideoPlayerProvider extends ChangeNotifier {
   double _playbackSpeed = 1.0;
   bool _isLoading = false;
 
+  /// Status 1 bosilganda recording boshlash uchun signal
+  bool _shouldStartRecording = false;
+  bool get shouldStartRecording => _shouldStartRecording;
+
+  void consumeRecordingSignal() {
+    _shouldStartRecording = false;
+    // notifyListeners() chaqirmaymiz — AudioTaskRow o'zi boshqaradi
+  }
+
   static const List<double> speedOptions = [1.0, 1.5, 2.0];
 
   VideoPlayerProvider({
     required this.videoUrls,
+    required this.tasks,
     int initialIndex = 0,
     this.onHalfWatched,
   }) : _currentIndex = initialIndex {
@@ -46,6 +59,9 @@ class VideoPlayerProvider extends ChangeNotifier {
   bool get hasPrev => _currentIndex > 0;
   bool get hasNext => _currentIndex < videoUrls.length - 1;
 
+  CheckerCheckTaskModel? get currentTask =>
+      _currentIndex < tasks.length ? tasks[_currentIndex] : null;
+
   double get progress {
     if (!_isInitialized || _hasError || _controller == null) return 0.0;
     final total = _controller!.value.duration.inMilliseconds;
@@ -55,7 +71,6 @@ class VideoPlayerProvider extends ChangeNotifier {
   }
 
   Duration get duration => _controller?.value.duration ?? Duration.zero;
-
   Duration get position => _controller?.value.position ?? Duration.zero;
 
   String get speedLabel {
@@ -64,12 +79,44 @@ class VideoPlayerProvider extends ChangeNotifier {
     return 'x2';
   }
 
+  // ── Task status update ──────────────────────────────────────────────────
+  Future<bool> updateTaskStatus(
+    int taskId,
+    int newStatus,
+    String? selectedDate,
+  ) async {
+    try {
+      final success = await AdminTaskService().updateTaskStatus(
+        taskId,
+        newStatus,
+        null,
+        selectedDate,
+      );
+
+      if (success) {
+        final index = tasks.indexWhere((t) => t.taskId == taskId);
+        if (index != -1) {
+          tasks[index].status = newStatus;
+
+          // Status 1 bo'lsa → recording signalni yoqamiz
+          if (newStatus == 1) {
+            _shouldStartRecording = true;
+          }
+
+          notifyListeners();
+        }
+      }
+      return success;
+    } catch (e) {
+      return false;
+    }
+  }
+
   // ── Initialize video ────────────────────────────────────────────────────
   Future<void> initializeVideo() async {
     if (_isLoading) return;
     _isLoading = true;
 
-    // Dispose previous controller
     if (_isInitialized && _controller != null) {
       _controller!.removeListener(_onVideoListener);
       await _controller!.dispose();
@@ -84,7 +131,6 @@ class VideoPlayerProvider extends ChangeNotifier {
     try {
       String videoPath = videoUrls[_currentIndex];
 
-      // Fix local path extraction
       if (videoPath.contains('://') && videoPath.contains('/Users/')) {
         final m = RegExp(r'/Users/.*').firstMatch(videoPath);
         if (m != null) videoPath = m.group(0)!;
@@ -142,13 +188,11 @@ class VideoPlayerProvider extends ChangeNotifier {
     final total = value.duration.inMilliseconds;
     final current = value.position.inMilliseconds;
 
-    // Half watched callback
     if (!_halfWatchedFired && total > 0 && current >= total * 0.5) {
       _halfWatchedFired = true;
       onHalfWatched?.call();
     }
 
-    // Auto-advance to next video
     if (!value.isPlaying && current >= total - 200 && total > 0) {
       goToNext();
     }
@@ -196,7 +240,6 @@ class VideoPlayerProvider extends ChangeNotifier {
     initializeVideo();
   }
 
-  /// Seek from circular touch position
   void seekFromCircleTouch(Offset localPos, double circleSize) {
     if (_controller == null || !_isInitialized) return;
 
@@ -211,13 +254,11 @@ class VideoPlayerProvider extends ChangeNotifier {
     _controller!.seekTo(_controller!.value.duration * ratio);
   }
 
-  // ── Format helpers ──────────────────────────────────────────────────────
   String formatDuration(Duration d) {
     String two(int n) => n.toString().padLeft(2, '0');
     return '${two(d.inMinutes)}:${two(d.inSeconds % 60)}';
   }
 
-  // ── Dispose ──────────────────────────────────────────────────────────────
   @override
   void dispose() {
     WakelockPlus.disable();

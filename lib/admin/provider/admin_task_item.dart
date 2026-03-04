@@ -142,7 +142,7 @@ class _AdminTaskListItemState extends State<AdminTaskListItem>
       children: [
         Text(
           "${widget.index}. ${task.task}",
-          style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+          style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
         ),
         if (task.submittedBy != null)
           Text(
@@ -248,11 +248,11 @@ class _AdminTaskListItemState extends State<AdminTaskListItem>
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        _statusCircleButton(1, status, Colors.red),
-        const SizedBox(width: 6),
-        _statusCircleButton(2, status, Colors.orange),
-        const SizedBox(width: 6),
         _statusCircleButton(3, status, Colors.green),
+        const SizedBox(width: 30),
+        _statusCircleButton(2, status, Colors.orange),
+        const SizedBox(width: 30),
+        _statusCircleButton(1, status, Colors.red),
       ],
     );
   }
@@ -275,9 +275,9 @@ class _AdminTaskListItemState extends State<AdminTaskListItem>
         }
       },
       child: AnimatedContainer(
-        duration: const Duration(milliseconds: 200),
-        width: 26,
-        height: 26,
+        duration: const Duration(milliseconds: 100),
+        width: 40,
+        height: 40,
         decoration: BoxDecoration(
           shape: BoxShape.circle,
           color: isActive ? activeColor : Colors.grey.shade300,
@@ -290,7 +290,7 @@ class _AdminTaskListItemState extends State<AdminTaskListItem>
               : [],
         ),
         child: isActive
-            ? const Icon(Icons.check, size: 14, color: Colors.white)
+            ? const Icon(Icons.check, size: 20, color: Colors.white)
             : null,
       ),
     );
