@@ -162,7 +162,8 @@ class _AdminTaskListItemState extends State<AdminTaskListItem>
             if (showBadge && task.videoUrl != null && task.videoUrl!.isNotEmpty)
               _buildVideoStatusBadge(),
             const SizedBox(width: 8),
-            buildStatusIndicator(task.status),
+            if (task.videoUrl != null && task.videoUrl!.isNotEmpty)
+              buildStatusIndicator(task.status),
           ],
         ),
       ],

@@ -38,7 +38,6 @@ class CircleVideoPlayer extends StatelessWidget {
         tasks: title,
         initialIndex: initialIndex,
         onHalfWatched: onHalfWatched,
-        // ✅ Status o'zgarganda AdminTasksProvider backenddan qayta yuklaydi
         onStatusChanged: () {
           try {
             context.read<AdminTasksProvider>().fetchTasks();
@@ -129,6 +128,34 @@ class _CircleVideoPlayerBodyState extends State<_CircleVideoPlayerBody>
     _durationSub?.cancel();
     super.dispose();
   }
+
+  // ── Responsive helpers ────────────────────────────────────────────────────
+
+  bool get _isTablet => MediaQuery.of(context).size.shortestSide >= 600;
+
+  double get _iconSizeSmall => _isTablet ? 28.0 : 20.0;
+  double get _iconSizeMedium => _isTablet ? 40.0 : 30.0;
+  double get _iconSizeLarge => _isTablet ? 50.0 : 38.0;
+
+  double get _circleButtonSize => _isTablet ? 45.0 : 34.0;
+  double get _statusCircleSize => _isTablet ? 35.0 : 26.0;
+  double get _statusIconSize => _isTablet ? 20.0 : 15.0;
+
+  double get _audioPlayButtonSize => _isTablet ? 30.0 : 24.0;
+  double get _audioPlayIconSize => _isTablet ? 18.0 : 14.0;
+  double get _audioMicIconSize => _isTablet ? 16.0 : 12.0;
+  double get _audioTimeWidth => _isTablet ? 40.0 : 32.0;
+  double get _audioTimeFontSize => _isTablet ? 10.0 : 8.5;
+
+  double get _timeFontSize => _isTablet ? 14.0 : 11.0;
+  double get _speedFontSize => _isTablet ? 12.0 : 10.0;
+  double get _indexFontSize => _isTablet ? 12.0 : 10.0;
+
+  double get _statusGap => _isTablet ? 25.0 : 10.0;
+  double get _recordingFontSize => _isTablet ? 16.0 : 13.0;
+  double get _recordingSubFontSize => _isTablet ? 13.0 : 11.0;
+  double get _pulseDotSize => _isTablet ? 12.0 : 9.0;
+  double get _sendIconSize => _isTablet ? 18.0 : 14.0;
 
   // ── Audio helpers ─────────────────────────────────────────────────────────
 
@@ -328,7 +355,6 @@ class _CircleVideoPlayerBodyState extends State<_CircleVideoPlayerBody>
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                // ✅ Video doirasi (text yo'q ichida)
                 _buildVideoCircle(
                   context,
                   provider,
@@ -356,9 +382,9 @@ class _CircleVideoPlayerBodyState extends State<_CircleVideoPlayerBody>
                     ),
                     child: Text(
                       provider.currentTask!.task,
-                      style: const TextStyle(
+                      style: TextStyle(
                         color: Colors.black,
-                        fontSize: 18,
+                        fontSize: isTablet ? 18 : 14,
                         fontWeight: FontWeight.bold,
                       ),
                       textAlign: TextAlign.center,
@@ -369,7 +395,6 @@ class _CircleVideoPlayerBodyState extends State<_CircleVideoPlayerBody>
 
                 const SizedBox(height: 8),
 
-                // ✅ Control panel (player)
                 if (provider.isInitialized && !provider.hasError)
                   _buildControlPanel(provider, circleSize),
               ],
@@ -382,9 +407,14 @@ class _CircleVideoPlayerBodyState extends State<_CircleVideoPlayerBody>
             right: 16,
             child: GestureDetector(
               onTap: () => Navigator.pop(context),
-              child: const CircleAvatar(
+              child: CircleAvatar(
+                radius: isTablet ? 20 : 16,
                 backgroundColor: Colors.black54,
-                child: Icon(Icons.close, color: Colors.white),
+                child: Icon(
+                  Icons.close,
+                  color: Colors.white,
+                  size: isTablet ? 24 : 18,
+                ),
               ),
             ),
           ),
@@ -397,10 +427,12 @@ class _CircleVideoPlayerBodyState extends State<_CircleVideoPlayerBody>
               child: GestureDetector(
                 onTap: provider.toggleMute,
                 child: CircleAvatar(
+                  radius: isTablet ? 20 : 16,
                   backgroundColor: Colors.black54,
                   child: Icon(
                     provider.isMuted ? Icons.volume_off : Icons.volume_up,
                     color: Colors.white,
+                    size: isTablet ? 24 : 18,
                   ),
                 ),
               ),
@@ -426,7 +458,6 @@ class _CircleVideoPlayerBodyState extends State<_CircleVideoPlayerBody>
       child: Stack(
         alignment: Alignment.center,
         children: [
-          // Background arc
           CustomPaint(
             size: Size(arcBoxSize, arcBoxSize),
             painter: _CircularProgressPainter(
@@ -436,7 +467,6 @@ class _CircleVideoPlayerBodyState extends State<_CircleVideoPlayerBody>
               radius: arcRadius,
             ),
           ),
-          // Progress arc
           CustomPaint(
             size: Size(arcBoxSize, arcBoxSize),
             painter: _CircularProgressPainter(
@@ -448,7 +478,6 @@ class _CircleVideoPlayerBodyState extends State<_CircleVideoPlayerBody>
               dotRadius: arcStroke + 5,
             ),
           ),
-          // Seek gesture on arc
           GestureDetector(
             behavior: HitTestBehavior.translucent,
             onPanStart: provider.isInitialized
@@ -465,7 +494,6 @@ class _CircleVideoPlayerBodyState extends State<_CircleVideoPlayerBody>
                 : null,
             child: SizedBox(width: arcBoxSize, height: arcBoxSize),
           ),
-          // Video circle
           ScaleTransition(
             scale: Tween(begin: 0.8, end: 1.0).animate(
               CurvedAnimation(
@@ -516,7 +544,6 @@ class _CircleVideoPlayerBodyState extends State<_CircleVideoPlayerBody>
                         ),
                       if (provider.hasError)
                         _buildErrorOverlay(provider.errorMessage),
-                      // Pause overlay
                       if (provider.isInitialized && !provider.isPlaying)
                         Container(
                           color: Colors.black26,
@@ -530,9 +557,9 @@ class _CircleVideoPlayerBodyState extends State<_CircleVideoPlayerBody>
                                   color: Colors.black.withOpacity(0.5),
                                   shape: BoxShape.circle,
                                 ),
-                                child: const Icon(
+                                child: Icon(
                                   Icons.play_arrow_rounded,
-                                  size: 50,
+                                  size: _iconSizeLarge,
                                   color: Colors.white,
                                 ),
                               ),
@@ -589,16 +616,19 @@ class _CircleVideoPlayerBodyState extends State<_CircleVideoPlayerBody>
   Widget _buildControlPanel(VideoPlayerProvider provider, double circleSize) {
     return Container(
       width: circleSize,
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      padding: EdgeInsets.symmetric(
+        horizontal: _isTablet ? 12 : 8,
+        vertical: _isTablet ? 10 : 6,
+      ),
       decoration: BoxDecoration(
         color: Colors.black.withOpacity(0.6),
-        borderRadius: BorderRadius.circular(20),
+        borderRadius: BorderRadius.circular(_isTablet ? 20 : 14),
       ),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
           _buildTimeRow(provider),
-          const SizedBox(height: 4),
+          SizedBox(height: _isTablet ? 4 : 2),
           if (_isRecording)
             _buildRecordingRow(provider)
           else if (_isSending)
@@ -618,9 +648,9 @@ class _CircleVideoPlayerBodyState extends State<_CircleVideoPlayerBody>
           "${task?.date ?? ''} "
           "${task?.submittedAt?.toLocal().hour.toString().padLeft(2, '0') ?? '00'}:"
           "${task?.submittedAt?.toLocal().minute.toString().padLeft(2, '0') ?? '00'}",
-          style: const TextStyle(
+          style: TextStyle(
             color: Colors.white,
-            fontSize: 14,
+            fontSize: _timeFontSize,
             fontWeight: FontWeight.bold,
           ),
         ),
@@ -630,12 +660,12 @@ class _CircleVideoPlayerBodyState extends State<_CircleVideoPlayerBody>
             padding: const EdgeInsets.only(right: 8),
             child: Text(
               '${provider.currentIndex + 1}/${provider.videoUrls.length}',
-              style: const TextStyle(color: Colors.white54, fontSize: 12),
+              style: TextStyle(color: Colors.white54, fontSize: _indexFontSize),
             ),
           ),
         Text(
           provider.formatDuration(provider.duration),
-          style: const TextStyle(color: Colors.white70, fontSize: 13),
+          style: TextStyle(color: Colors.white70, fontSize: _timeFontSize),
         ),
       ],
     );
@@ -646,41 +676,59 @@ class _CircleVideoPlayerBodyState extends State<_CircleVideoPlayerBody>
 
     return Row(
       children: [
-        Spacer(),
+        const Spacer(),
         IconButton(
           visualDensity: VisualDensity.compact,
+          padding: EdgeInsets.zero,
+          constraints: BoxConstraints(
+            minWidth: _isTablet ? 40 : 28,
+            minHeight: _isTablet ? 40 : 28,
+          ),
           onPressed: provider.hasPrev ? provider.goToPrev : null,
           icon: Icon(
             Icons.skip_previous_rounded,
             color: provider.hasPrev ? Colors.white : Colors.white30,
-            size: 28,
+            size: _iconSizeSmall,
           ),
         ),
         IconButton(
           visualDensity: VisualDensity.compact,
+          padding: EdgeInsets.zero,
+          constraints: BoxConstraints(
+            minWidth: _isTablet ? 48 : 36,
+            minHeight: _isTablet ? 48 : 36,
+          ),
           onPressed: provider.togglePlayPause,
           icon: Icon(
             provider.isPlaying
                 ? Icons.pause_circle_filled_rounded
                 : Icons.play_circle_filled_rounded,
             color: Colors.white,
-            size: 40,
+            size: _iconSizeMedium,
           ),
         ),
         IconButton(
           visualDensity: VisualDensity.compact,
+          padding: EdgeInsets.zero,
+          constraints: BoxConstraints(
+            minWidth: _isTablet ? 40 : 28,
+            minHeight: _isTablet ? 40 : 28,
+          ),
           onPressed: provider.hasNext ? provider.goToNext : null,
           icon: Icon(
             Icons.skip_next_rounded,
             color: provider.hasNext ? Colors.white : Colors.white30,
-            size: 28,
+            size: _iconSizeSmall,
           ),
         ),
-        const SizedBox(width: 4),
+        SizedBox(width: _isTablet ? 4 : 2),
         GestureDetector(
           onTap: provider.cycleSpeed,
           child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+            padding: EdgeInsets.symmetric(
+              horizontal: _isTablet ? 8 : 5,
+              vertical: _isTablet ? 4 : 3,
+            ),
             decoration: BoxDecoration(
               color: provider.playbackSpeed != 1.0
                   ? Colors.blue.withOpacity(0.8)
@@ -689,9 +737,9 @@ class _CircleVideoPlayerBodyState extends State<_CircleVideoPlayerBody>
             ),
             child: Text(
               provider.speedLabel,
-              style: const TextStyle(
+              style: TextStyle(
                 color: Colors.white,
-                fontSize: 12,
+                fontSize: _speedFontSize,
                 fontWeight: FontWeight.bold,
               ),
             ),
@@ -706,21 +754,21 @@ class _CircleVideoPlayerBodyState extends State<_CircleVideoPlayerBody>
           GestureDetector(
             onTap: () => _startRecording(provider),
             child: Container(
-              width: 45,
-              height: 45,
+              width: _circleButtonSize,
+              height: _circleButtonSize,
               decoration: const BoxDecoration(
                 color: Colors.white24,
                 shape: BoxShape.circle,
               ),
-              child: const Icon(
+              child: Icon(
                 Icons.mic_rounded,
-                size: 25,
+                size: _isTablet ? 25 : 18,
                 color: Colors.white,
               ),
             ),
           ),
 
-        const SizedBox(width: 20),
+        SizedBox(width: _isTablet ? 20 : 10),
 
         if (task != null) _buildStatusIndicator(provider, task),
       ],
@@ -734,8 +782,8 @@ class _CircleVideoPlayerBodyState extends State<_CircleVideoPlayerBody>
         GestureDetector(
           onTap: () => _toggleAudioPlay(task),
           child: Container(
-            width: 30,
-            height: 30,
+            width: _audioPlayButtonSize,
+            height: _audioPlayButtonSize,
             decoration: const BoxDecoration(
               color: Color(0xFF2196F3),
               shape: BoxShape.circle,
@@ -747,26 +795,33 @@ class _CircleVideoPlayerBodyState extends State<_CircleVideoPlayerBody>
                         ? Icons.pause_rounded
                         : Icons.play_arrow_rounded),
               color: Colors.white,
-              size: 18,
+              size: _audioPlayIconSize,
             ),
           ),
         ),
-        const SizedBox(width: 6),
+        SizedBox(width: _isTablet ? 6 : 4),
         SizedBox(
-          width: 40,
+          width: _audioTimeWidth,
           child: Text(
             _isAudioPlaying || _audioPosition > Duration.zero
                 ? _fmt(_audioPosition)
                 : _fmt(_audioDuration),
-            style: const TextStyle(color: Colors.white70, fontSize: 10),
+            style: TextStyle(
+              color: Colors.white70,
+              fontSize: _audioTimeFontSize,
+            ),
           ),
         ),
         if (_canRecord(task))
           GestureDetector(
             onTap: () => _startRecording(context.read<VideoPlayerProvider>()),
-            child: const Padding(
-              padding: EdgeInsets.only(left: 4),
-              child: Icon(Icons.mic_rounded, size: 16, color: Colors.white54),
+            child: Padding(
+              padding: EdgeInsets.only(left: _isTablet ? 4 : 2),
+              child: Icon(
+                Icons.mic_rounded,
+                size: _audioMicIconSize,
+                color: Colors.white54,
+              ),
             ),
           ),
       ],
@@ -779,59 +834,62 @@ class _CircleVideoPlayerBodyState extends State<_CircleVideoPlayerBody>
         AnimatedBuilder(
           animation: _pulseCtrl,
           builder: (_, __) => Container(
-            width: 12,
-            height: 12,
+            width: _pulseDotSize,
+            height: _pulseDotSize,
             decoration: BoxDecoration(
               shape: BoxShape.circle,
               color: Colors.red.withOpacity(0.35 + 0.65 * _pulseCtrl.value),
             ),
           ),
         ),
-        const SizedBox(width: 8),
+        SizedBox(width: _isTablet ? 8 : 5),
         Text(
           _fmt(Duration(seconds: _recordSeconds)),
-          style: const TextStyle(
-            fontSize: 16,
+          style: TextStyle(
+            fontSize: _recordingFontSize,
             fontWeight: FontWeight.w600,
             color: Colors.red,
           ),
         ),
-        const SizedBox(width: 8),
-        const Expanded(
+        SizedBox(width: _isTablet ? 8 : 5),
+        Expanded(
           child: Text(
             'Yozilmoqda...',
-            style: TextStyle(fontSize: 13, color: Colors.white70),
+            style: TextStyle(
+              fontSize: _recordingSubFontSize,
+              color: Colors.white70,
+            ),
           ),
         ),
         GestureDetector(
           onTap: _cancelRecording,
           child: Container(
-            width: 45,
-            height: 45,
-            decoration: BoxDecoration(
+            width: _circleButtonSize,
+            height: _circleButtonSize,
+            decoration: const BoxDecoration(
               color: Colors.white24,
               shape: BoxShape.circle,
             ),
-            child: const Icon(
+            child: Icon(
               Icons.delete_outline,
-              size: 25,
+              size: _isTablet ? 25 : 18,
               color: Colors.white70,
             ),
           ),
         ),
-        const SizedBox(width: 32),
+        SizedBox(width: _isTablet ? 32 : 12),
         GestureDetector(
           onTap: () => _stopAndSend(provider),
           child: Container(
-            width: 45,
-            height: 45,
+            width: _circleButtonSize,
+            height: _circleButtonSize,
             decoration: const BoxDecoration(
               color: Color(0xFF4CAF50),
               shape: BoxShape.circle,
             ),
-            child: const Icon(
+            child: Icon(
               Icons.send_rounded,
-              size: 18,
+              size: _sendIconSize,
               color: Colors.white,
             ),
           ),
@@ -841,18 +899,24 @@ class _CircleVideoPlayerBodyState extends State<_CircleVideoPlayerBody>
   }
 
   Widget _buildSendingRow() {
-    return const Row(
+    return Row(
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
         SizedBox(
-          width: 18,
-          height: 18,
-          child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+          width: _isTablet ? 18 : 14,
+          height: _isTablet ? 18 : 14,
+          child: const CircularProgressIndicator(
+            strokeWidth: 2,
+            color: Colors.white,
+          ),
         ),
-        SizedBox(width: 10),
+        const SizedBox(width: 10),
         Text(
           'Yuborilmoqda...',
-          style: TextStyle(fontSize: 13, color: Colors.white70),
+          style: TextStyle(
+            fontSize: _recordingSubFontSize,
+            color: Colors.white70,
+          ),
         ),
       ],
     );
@@ -866,9 +930,9 @@ class _CircleVideoPlayerBodyState extends State<_CircleVideoPlayerBody>
       mainAxisSize: MainAxisSize.min,
       children: [
         _statusCircleButton(provider, task, 3, Colors.green),
-        const SizedBox(width: 25),
+        SizedBox(width: _statusGap),
         _statusCircleButton(provider, task, 2, Colors.orange),
-        const SizedBox(width: 25),
+        SizedBox(width: _statusGap),
         _statusCircleButton(provider, task, 1, Colors.red),
       ],
     );
@@ -890,8 +954,8 @@ class _CircleVideoPlayerBodyState extends State<_CircleVideoPlayerBody>
       },
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 150),
-        width: 35,
-        height: 35,
+        width: _statusCircleSize,
+        height: _statusCircleSize,
         decoration: BoxDecoration(
           shape: BoxShape.circle,
           color: isActive ? activeColor : Colors.grey.shade300,
@@ -904,7 +968,7 @@ class _CircleVideoPlayerBodyState extends State<_CircleVideoPlayerBody>
               : [],
         ),
         child: isActive
-            ? const Icon(Icons.check, size: 20, color: Colors.white)
+            ? Icon(Icons.check, size: _statusIconSize, color: Colors.white)
             : null,
       ),
     );
