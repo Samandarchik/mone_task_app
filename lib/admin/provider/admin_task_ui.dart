@@ -1,15 +1,10 @@
 import 'dart:ui';
-
-import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:mone_task_app/admin/model/filial_model.dart';
+import 'package:mone_task_app/admin/provider/admin_task_list_widget.dart';
 import 'package:mone_task_app/admin/provider/admin_tasks_provider.dart';
 import 'package:mone_task_app/admin/provider/circle_video_player.dart';
-import 'package:mone_task_app/admin/service/get_excel_ui.dart';
-import 'package:mone_task_app/admin/ui/admin_list.dart';
-import 'package:mone_task_app/admin/ui/all_task_ui.dart';
-import 'package:mone_task_app/admin/ui/user_list_page.dart';
-import 'package:mone_task_app/admin/ui/video_cache_manager_page.dart';
+import 'package:mone_task_app/admin/provider/my_drawer.dart';
 import 'package:mone_task_app/checker/model/checker_check_task_model.dart';
 import 'package:mone_task_app/core/context_extension.dart';
 import 'package:mone_task_app/core/data/local/token_storage.dart';
@@ -35,7 +30,6 @@ class _AdminTaskUiState extends State<AdminTaskUi> {
     super.initState();
     _user = _tokenStorage.getUserData();
 
-    // Init providers after first frame
     WidgetsBinding.instance.addPostFrameCallback((_) {
       context.read<AdminTasksProvider>().init();
     });
@@ -65,7 +59,7 @@ class _AdminTaskUiState extends State<AdminTaskUi> {
     final provider = context.read<AdminTasksProvider>();
     final DateTime? picked = await showDatePicker(
       context: context,
-      firstDate: DateTime.now().subtract(const Duration(days: 6)),
+      firstDate: DateTime.now().subtract(const Duration(days: 30)),
       initialDate: provider.selectedDate,
       lastDate: DateTime.now(),
     );
@@ -85,7 +79,7 @@ class _AdminTaskUiState extends State<AdminTaskUi> {
   Widget build(BuildContext context) {
     final tasksProvider = context.watch<AdminTasksProvider>();
 
-    // ── Loading state ────────────────────────────────────────────────────
+    // ── Loading state ─────────────────────────────────────────────────────
     if (tasksProvider.filialsState == LoadingState.loading) {
       return Scaffold(
         appBar: AppBar(title: Text(_user?.username ?? "")),
@@ -93,7 +87,7 @@ class _AdminTaskUiState extends State<AdminTaskUi> {
       );
     }
 
-    // ── Filials error ────────────────────────────────────────────────────
+    // ── Filials error ─────────────────────────────────────────────────────
     if (tasksProvider.filialsState == LoadingState.error) {
       return Scaffold(
         appBar: AppBar(
@@ -128,7 +122,7 @@ class _AdminTaskUiState extends State<AdminTaskUi> {
       );
     }
 
-    // ── Empty filials ────────────────────────────────────────────────────
+    // ── Empty filials ─────────────────────────────────────────────────────
     if (tasksProvider.filials.isEmpty) {
       return Scaffold(
         appBar: AppBar(title: Text(_user?.username ?? "")),
@@ -141,8 +135,12 @@ class _AdminTaskUiState extends State<AdminTaskUi> {
     return DefaultTabController(
       length: categories.length,
       child: Scaffold(
-        // ── Drawer ───────────────────────────────────────────────────────
-        drawer: _buildDrawer(categories),
+        // ── Drawer ──────────────────────────────────────────────────────────
+        drawer: MyDrawer(
+          categories: categories,
+          user: _user,
+          onLogout: _handleLogout,
+        ),
 
         // ── AppBar ───────────────────────────────────────────────────────
         appBar: AppBar(
@@ -151,12 +149,12 @@ class _AdminTaskUiState extends State<AdminTaskUi> {
             GestureDetector(
               onTap: _handleDateSelection,
               child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 12),
+                padding: const EdgeInsets.symmetric(horizontal: 20),
                 child: Center(
                   child: Text(
                     tasksProvider.selectedDate.day == DateTime.now().day
                         ? "Сегодня"
-                        : "${tasksProvider.selectedDate.day}/${tasksProvider.selectedDate.month.toString().padLeft(2, '0')}",
+                        : "${tasksProvider.selectedDate.day}/${tasksProvider.selectedDate.month.toString().padLeft(2, '0')}/${tasksProvider.selectedDate.year}",
                     style: const TextStyle(fontSize: 14),
                   ),
                 ),
@@ -219,60 +217,6 @@ class _AdminTaskUiState extends State<AdminTaskUi> {
           onShowVideoPlayer: _showCircleVideoPlayer,
         );
       }).toList(),
-    );
-  }
-
-  Widget _buildDrawer(List<FilialModel> categories) {
-    return Drawer(
-      child: SafeArea(
-        child: Column(
-          children: [
-            ListTile(
-              onTap: () {
-                Navigator.pop(context);
-                context.push(UsersPage(filialModel: categories));
-              },
-              leading: const Icon(CupertinoIcons.person_2),
-              title: const Text("Все пользователи"),
-            ),
-            ListTile(
-              onTap: () {
-                Navigator.pop(context);
-                context.push(
-                  TemplateTaskAdminUi(
-                    name: _user?.username ?? "",
-                    category: categories,
-                  ),
-                );
-              },
-              leading: const Icon(CupertinoIcons.list_bullet),
-              title: const Text("Все задачи"),
-            ),
-            ListTile(
-              onTap: () {
-                Navigator.pop(context);
-                context.push(VideoCacheManagerPage());
-              },
-              leading: const Icon(CupertinoIcons.videocam_fill),
-              title: const Text("Кэш видео"),
-            ),
-            ListTile(
-              onTap: () {
-                Navigator.pop(context);
-                context.push(ExcelReportPage(filials: categories));
-              },
-              leading: const Icon(CupertinoIcons.doc_plaintext),
-              title: const Text("Отчеты"),
-            ),
-            const Divider(),
-            ListTile(
-              onTap: _handleLogout,
-              leading: const Icon(Icons.logout, color: Colors.red),
-              title: const Text("Выйти", style: TextStyle(color: Colors.red)),
-            ),
-          ],
-        ),
-      ),
     );
   }
 }

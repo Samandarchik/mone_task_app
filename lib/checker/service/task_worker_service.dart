@@ -79,10 +79,19 @@ class AdminTaskService {
     String? dateString,
   ) async {
     try {
+      String? formattedDate;
+
+      if (date != null) {
+        formattedDate =
+            "${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}";
+      } else if (dateString != null && dateString.isNotEmpty) {
+        formattedDate = dateString;
+      } else {
+        return false; // ikkalasi ham null bo‘lsa
+      }
+
       final response = await _dio.post(
-        date == null
-            ? "${AppUrls.tasks}/$taskId/check/${date!.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}"
-            : "${AppUrls.tasks}/$taskId/check/$dateString",
+        "${AppUrls.tasks}/$taskId/check/$formattedDate",
         data: {"status": status},
       );
 

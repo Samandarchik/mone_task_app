@@ -428,11 +428,11 @@ class _CircleVideoPlayerBodyState extends State<_CircleVideoPlayerBody>
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        _statusCircleButton(1, status, Colors.red, task.taskId, task.date!),
-        const SizedBox(width: 15),
-        _statusCircleButton(2, status, Colors.orange, task.taskId, task.date!),
-        const SizedBox(width: 15),
-        _statusCircleButton(3, status, Colors.green, task.taskId, task.date!),
+        // _statusCircleButton(1, status, Colors.red, task.taskId, task.date!),
+        // const SizedBox(width: 25),
+        // _statusCircleButton(2, status, Colors.orange, task.taskId, task.date!),
+        // const SizedBox(width: 15),
+        // _statusCircleButton(3, status, Colors.green, task.taskId, task.date!),
       ],
     );
   }
