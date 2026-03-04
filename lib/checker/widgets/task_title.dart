@@ -355,6 +355,7 @@ class _TaskListItemState extends State<TaskListItem> {
               task.taskId,
               1,
               widget.selectedDate,
+              null,
             );
             if (isDelete) widget.onRefresh();
           },
@@ -379,6 +380,7 @@ class _TaskListItemState extends State<TaskListItem> {
                             task.taskId,
                             3,
                             widget.selectedDate,
+                            null,
                           );
                       if (isSuccess && mounted) {
                         setState(() => task.status = 3);

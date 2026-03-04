@@ -550,6 +550,8 @@ class _AdminTaskListItemState extends State<AdminTaskListItem>
             ),
             if (showBadge && task.videoUrl != null && task.videoUrl!.isNotEmpty)
               _buildVideoStatusBadge(),
+            if (task.videoUrl != null && task.videoUrl!.isNotEmpty)
+              buildStatusIndicator(task.status),
           ],
         ),
       ],
@@ -569,65 +571,42 @@ class _AdminTaskListItemState extends State<AdminTaskListItem>
   Widget _buildVideoStatusBadge() {
     if (widget.isVideoCached) {
       // ✅ To'liq — yashil + 100%
-      return Container(
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-        decoration: BoxDecoration(
-          color: Colors.green,
-          borderRadius: BorderRadius.circular(12),
-        ),
-        child: const Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(Icons.check_circle, size: 14, color: Colors.white),
-            SizedBox(width: 4),
-            Text(
-              '100%',
-              style: TextStyle(
-                fontSize: 11,
-                color: Colors.white,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-          ],
+      return Text(
+        '',
+        style: TextStyle(
+          fontSize: 16,
+          color: Colors.black,
+          fontWeight: FontWeight.bold,
         ),
       );
     }
 
     if (widget.isDownloading) {
-      // ⬇ Yuklanmoqda — to'q sariq + foiz
       final percent = (widget.downloadProgress * 100).toInt();
-      return Container(
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-        decoration: BoxDecoration(
-          color: Colors.orange,
-          borderRadius: BorderRadius.circular(12),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            SizedBox(
-              width: 14,
-              height: 14,
-              child: CircularProgressIndicator(
-                value: widget.downloadProgress > 0
-                    ? widget.downloadProgress
-                    : null,
-                strokeWidth: 2,
-                valueColor: const AlwaysStoppedAnimation<Color>(Colors.white),
-                backgroundColor: Colors.white30,
-              ),
+      return Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          SizedBox(
+            width: 14,
+            height: 14,
+            child: CircularProgressIndicator(
+              value: widget.downloadProgress > 0
+                  ? widget.downloadProgress
+                  : null,
+              strokeWidth: 2,
+              backgroundColor: Colors.black12,
             ),
-            const SizedBox(width: 5),
-            Text(
-              '$percent%',
-              style: const TextStyle(
-                fontSize: 11,
-                color: Colors.white,
-                fontWeight: FontWeight.bold,
-              ),
+          ),
+          const SizedBox(width: 5),
+          Text(
+            '$percent%  ',
+            style: const TextStyle(
+              fontSize: 11,
+              color: Colors.black,
+              fontWeight: FontWeight.bold,
             ),
-          ],
-        ),
+          ),
+        ],
       );
     }
 
@@ -658,17 +637,59 @@ class _AdminTaskListItemState extends State<AdminTaskListItem>
 
   Future<void> _handleTap() async {
     if (widget.videoPath != null) {
-      if (task.status != 3) {
-        final bool isSuccess = await AdminTaskService().updateTaskStatus(
-          task.taskId,
-          3,
-          widget.selectedDate,
-        );
-        if (isSuccess && mounted) {
-          setState(() => task.status = 3);
-        }
-      }
       widget.onShowVideoPlayer(widget.videoPath!);
     }
+  }
+
+  Widget buildStatusIndicator(int status) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        _statusCircleButton(1, status, Colors.red),
+        const SizedBox(width: 6),
+        _statusCircleButton(2, status, Colors.orange),
+        const SizedBox(width: 6),
+        _statusCircleButton(3, status, Colors.green),
+      ],
+    );
+  }
+
+  Widget _statusCircleButton(int level, int currentStatus, Color activeColor) {
+    final bool isActive = currentStatus >= level;
+
+    return GestureDetector(
+      onTap: () async {
+        if (currentStatus != level) {
+          final bool isSuccess = await AdminTaskService().updateTaskStatus(
+            task.taskId,
+            level,
+            widget.selectedDate,
+            null,
+          );
+          if (isSuccess && mounted) {
+            setState(() => task.status = level);
+          }
+        }
+      },
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 10),
+        width: 26,
+        height: 26,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          color: isActive ? activeColor : Colors.grey.shade300,
+          border: Border.all(
+            color: isActive ? activeColor : Colors.grey,
+            width: 2,
+          ),
+          boxShadow: isActive
+              ? [BoxShadow(color: activeColor.withOpacity(0.4), blurRadius: 4)]
+              : [],
+        ),
+        child: isActive
+            ? const Icon(Icons.check, size: 14, color: Colors.white)
+            : null,
+      ),
+    );
   }
 }

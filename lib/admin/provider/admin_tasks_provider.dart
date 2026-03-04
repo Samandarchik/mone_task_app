@@ -87,13 +87,14 @@ class AdminTasksProvider extends ChangeNotifier {
   }
 
   // ── Update task status ──────────────────────────────────────────────────
-  Future<bool> updateTaskStatus(
-    int taskId,
-    int status,
-    DateTime date,
-  ) async {
+  Future<bool> updateTaskStatus(int taskId, int status, DateTime date) async {
     try {
-      final success = await _service.updateTaskStatus(taskId, status, date);
+      final success = await _service.updateTaskStatus(
+        taskId,
+        status,
+        date,
+        null,
+      );
       if (success) {
         final index = _tasks.indexWhere((t) => t.taskId == taskId);
         if (index != -1) {

@@ -1,14 +1,14 @@
 import 'package:flutter/material.dart';
 
 /// 🔥 STATUS COLOR
-Icon getStatusColor(int status) {
+Color getStatusColor(int status) {
   switch (status) {
     case 3:
-      return Icon(Icons.check_circle, color: Colors.green.shade100);
+      return Colors.green;
     case 2:
-      return Icon(Icons.warning, color: Colors.orange.shade100);
+      return Colors.orange;
     default:
-      return Icon(Icons.error, color: Colors.red.shade100);
+      return Colors.red;
   }
 }
 

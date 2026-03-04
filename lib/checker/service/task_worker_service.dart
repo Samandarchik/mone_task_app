@@ -72,10 +72,17 @@ class AdminTaskService {
     }
   }
 
-  Future<bool> updateTaskStatus(int taskId, int status, DateTime date) async {
+  Future<bool> updateTaskStatus(
+    int taskId,
+    int status,
+    DateTime? date,
+    String? dateString,
+  ) async {
     try {
       final response = await _dio.post(
-        "${AppUrls.tasks}/$taskId/check/${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}",
+        date == null
+            ? "${AppUrls.tasks}/$taskId/check/${date!.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}"
+            : "${AppUrls.tasks}/$taskId/check/$dateString",
         data: {"status": status},
       );
 

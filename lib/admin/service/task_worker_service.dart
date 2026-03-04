@@ -196,4 +196,17 @@ class AdminTaskService {
       return false;
     }
   }
+
+  Future<bool> putStatus(int id, int status) async {
+    try {
+      final response = await _dio.post(
+        // /api/tasks/1/check
+        "${AppUrls.tasks}/$id/check",
+        data: {"status": status},
+      );
+      return response.statusCode == 200 || response.statusCode == 201;
+    } catch (e) {
+      return false;
+    }
+  }
 }

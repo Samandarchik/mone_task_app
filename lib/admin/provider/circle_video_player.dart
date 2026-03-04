@@ -3,6 +3,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:mone_task_app/admin/provider/video_player_provider.dart';
 import 'package:mone_task_app/checker/model/checker_check_task_model.dart';
+import 'package:mone_task_app/checker/service/task_worker_service.dart';
 import 'package:provider/provider.dart';
 import 'package:video_player/video_player.dart';
 
@@ -344,7 +345,7 @@ class _CircleVideoPlayerBodyState extends State<_CircleVideoPlayerBody>
     return Row(
       children: [
         Text(
-          "${task?.date} ${task?.submittedAt?.toLocal().hour.toString().padLeft(2, '0') ?? '00'}:${task?.submittedAt?.toLocal().minute.toString().padLeft(2, '0') ?? '00'} ||",
+          "${task?.date} ${task?.submittedAt?.toLocal().hour.toString().padLeft(2, '0') ?? '00'}:${task?.submittedAt?.toLocal().minute.toString().padLeft(2, '0') ?? '00'}",
           style: const TextStyle(
             color: Colors.white,
             fontSize: 14,
@@ -352,11 +353,6 @@ class _CircleVideoPlayerBodyState extends State<_CircleVideoPlayerBody>
           ),
         ),
         Spacer(),
-        if (provider.videoUrls.length > 1)
-          Text(
-            '${provider.currentIndex + 1} / ${provider.videoUrls.length}',
-            style: const TextStyle(color: Colors.white70, fontSize: 12),
-          ),
         Text(
           provider.formatDuration(provider.duration),
           style: const TextStyle(color: Colors.white70, fontSize: 13),
@@ -369,6 +365,7 @@ class _CircleVideoPlayerBodyState extends State<_CircleVideoPlayerBody>
     return Row(
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
+        Spacer(),
         IconButton(
           onPressed: provider.hasPrev ? provider.goToPrev : null,
           icon: Icon(
@@ -418,7 +415,70 @@ class _CircleVideoPlayerBodyState extends State<_CircleVideoPlayerBody>
             ),
           ),
         ),
+        Spacer(),
+        buildStatusIndicator(
+          widget.tasks[provider.currentIndex].status,
+          widget.tasks[provider.currentIndex],
+        ),
       ],
+    );
+  }
+
+  Widget buildStatusIndicator(int status, CheckerCheckTaskModel task) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        _statusCircleButton(1, status, Colors.red, task.taskId, task.date!),
+        const SizedBox(width: 15),
+        _statusCircleButton(2, status, Colors.orange, task.taskId, task.date!),
+        const SizedBox(width: 15),
+        _statusCircleButton(3, status, Colors.green, task.taskId, task.date!),
+      ],
+    );
+  }
+
+  Widget _statusCircleButton(
+    int level,
+    int currentStatus,
+    Color activeColor,
+    int taskId,
+    String selectedDate,
+  ) {
+    final bool isActive = currentStatus >= level;
+
+    return GestureDetector(
+      onTap: () async {
+        if (currentStatus != level) {
+          final bool isSuccess = await AdminTaskService().updateTaskStatus(
+            taskId,
+            level,
+            null,
+            selectedDate,
+          );
+          if (isSuccess && mounted) {
+            // setState(() => task.status = level);
+          }
+        }
+      },
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 10),
+        width: 26,
+        height: 26,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          color: isActive ? activeColor : Colors.grey.shade300,
+          border: Border.all(
+            color: isActive ? activeColor : Colors.grey,
+            width: 2,
+          ),
+          boxShadow: isActive
+              ? [BoxShadow(color: activeColor.withOpacity(0.4), blurRadius: 4)]
+              : [],
+        ),
+        child: isActive
+            ? const Icon(Icons.check, size: 14, color: Colors.white)
+            : null,
+      ),
     );
   }
 }
