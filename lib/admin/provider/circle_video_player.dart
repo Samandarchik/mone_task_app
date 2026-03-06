@@ -12,6 +12,7 @@ import 'package:mone_task_app/core/constants/urls.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:provider/provider.dart';
 import 'package:record/record.dart';
+import 'package:share_plus/share_plus.dart';
 import 'package:video_player/video_player.dart';
 
 class CircleVideoPlayer extends StatelessWidget {
@@ -133,10 +134,7 @@ class _CircleVideoPlayerBodyState extends State<_CircleVideoPlayerBody>
 
   bool get _isTablet => MediaQuery.of(context).size.shortestSide >= 600;
 
-  double get _iconSizeSmall => _isTablet ? 28.0 : 20.0;
-  double get _iconSizeMedium => _isTablet ? 40.0 : 30.0;
   double get _iconSizeLarge => _isTablet ? 50.0 : 38.0;
-
   double get _circleButtonSize => _isTablet ? 45.0 : 34.0;
   double get _statusCircleSize => _isTablet ? 35.0 : 26.0;
   double get _statusIconSize => _isTablet ? 20.0 : 15.0;
@@ -148,7 +146,7 @@ class _CircleVideoPlayerBodyState extends State<_CircleVideoPlayerBody>
   double get _audioTimeFontSize => _isTablet ? 10.0 : 8.5;
 
   double get _timeFontSize => _isTablet ? 14.0 : 11.0;
-  double get _speedFontSize => _isTablet ? 12.0 : 10.0;
+  double get _speedFontSize => _isTablet ? 40.0 : 10.0;
   double get _indexFontSize => _isTablet ? 12.0 : 10.0;
 
   double get _statusGap => _isTablet ? 25.0 : 10.0;
@@ -156,6 +154,32 @@ class _CircleVideoPlayerBodyState extends State<_CircleVideoPlayerBody>
   double get _recordingSubFontSize => _isTablet ? 13.0 : 11.0;
   double get _pulseDotSize => _isTablet ? 12.0 : 9.0;
   double get _sendIconSize => _isTablet ? 18.0 : 14.0;
+
+  double get _sideNavButtonSize => _isTablet ? 72.0 : 56.0;
+  double get _sideNavIconSize => _isTablet ? 40.0 : 30.0;
+
+  double get _bottomButtonRadius => _isTablet ? 40.0 : 16.0;
+  double get _bottomIconSize => _isTablet ? 48.0 : 18.0;
+
+  // ── Share link ────────────────────────────────────────────────────────────
+
+  void _shareTaskLink(BuildContext context, CheckerCheckTaskModel? task) {
+    if (task == null) return;
+
+    final link = 'https://monebakeryuz.uz/${task.date}/${task.taskId}';
+
+    // iPad uchun share popup pozitsiyasi kerak
+    final box = context.findRenderObject() as RenderBox?;
+    final sharePosition = box != null
+        ? box.localToGlobal(Offset.zero) & box.size
+        : Rect.fromLTWH(0, 0, MediaQuery.of(context).size.width, 100);
+
+    Share.share(
+      '$link\n\n${task.task}',
+      subject: task.task,
+      sharePositionOrigin: sharePosition,
+    );
+  }
 
   // ── Audio helpers ─────────────────────────────────────────────────────────
 
@@ -195,10 +219,7 @@ class _CircleVideoPlayerBodyState extends State<_CircleVideoPlayerBody>
       return;
     }
 
-    if (provider.isPlaying) {
-      provider.togglePlayPause();
-    }
-
+    if (provider.isPlaying) provider.togglePlayPause();
     await _audioPlayer.stop();
 
     final task = provider.currentTask;
@@ -252,11 +273,7 @@ class _CircleVideoPlayerBodyState extends State<_CircleVideoPlayerBody>
         file,
         widget.selectedDate,
       );
-
-      if (success && mounted) {
-        setState(() => _localAudioUrl = path);
-      }
-
+      if (success && mounted) setState(() => _localAudioUrl = path);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -283,8 +300,6 @@ class _CircleVideoPlayerBodyState extends State<_CircleVideoPlayerBody>
     if (mounted) setState(() => _isRecording = false);
   }
 
-  // ── Audio playback ────────────────────────────────────────────────────────
-
   Future<void> _toggleAudioPlay(CheckerCheckTaskModel? task) async {
     final audioUrl = _getAudioUrl(task);
     if (audioUrl == null) return;
@@ -305,13 +320,12 @@ class _CircleVideoPlayerBodyState extends State<_CircleVideoPlayerBody>
       await _audioPlayer.play(DeviceFileSource(_localAudioUrl!));
       return;
     }
-
     await _audioPlayer.play(UrlSource(_fullAudioUrl(audioUrl)));
   }
 
-  // ── Recording signal check ────────────────────────────────────────────────
-
   void _checkRecordingSignal(VideoPlayerProvider provider) {
+    // Endi long press to'g'ridan-to'g'ri boshqaradi
+    // Signal faqat tashqi (mic button) uchun qoldi
     if (provider.shouldStartRecording &&
         !_isRecording &&
         !_isSending &&
@@ -322,6 +336,8 @@ class _CircleVideoPlayerBodyState extends State<_CircleVideoPlayerBody>
       });
     }
   }
+
+  // ── BUILD ─────────────────────────────────────────────────────────────────
 
   @override
   Widget build(BuildContext context) {
@@ -342,13 +358,7 @@ class _CircleVideoPlayerBodyState extends State<_CircleVideoPlayerBody>
       backgroundColor: Colors.transparent,
       body: Stack(
         children: [
-          // ── Background tap to close ────────────────────────────────────
-          Positioned.fill(
-            child: GestureDetector(
-              onTap: () => Navigator.pop(context),
-              child: Container(color: Colors.transparent),
-            ),
-          ),
+          Positioned.fill(child: Container(color: Colors.transparent)),
 
           // ── Main content ───────────────────────────────────────────────
           Center(
@@ -363,9 +373,7 @@ class _CircleVideoPlayerBodyState extends State<_CircleVideoPlayerBody>
                   arcStroke,
                   circleSize,
                 ),
-
                 const SizedBox(height: 1),
-
                 if (provider.currentTask?.task != null)
                   Container(
                     decoration: BoxDecoration(
@@ -377,7 +385,7 @@ class _CircleVideoPlayerBodyState extends State<_CircleVideoPlayerBody>
                       vertical: 8,
                     ),
                     margin: EdgeInsets.symmetric(
-                      horizontal: MediaQuery.of(context).size.width * 0.1,
+                      horizontal: size.width * 0.1,
                       vertical: 10,
                     ),
                     child: Text(
@@ -392,51 +400,85 @@ class _CircleVideoPlayerBodyState extends State<_CircleVideoPlayerBody>
                       overflow: TextOverflow.ellipsis,
                     ),
                   ),
-
                 const SizedBox(height: 8),
-
                 if (provider.isInitialized && !provider.hasError)
                   _buildControlPanel(provider, circleSize),
               ],
             ),
           ),
 
-          // ── Close button ───────────────────────────────────────────────
+          // ── Bottom: mute + speed (left) | share + close (right) ───────
           Positioned(
-            top: MediaQuery.of(context).padding.top + 16,
+            bottom: MediaQuery.of(context).padding.bottom + 16,
+            left: 16,
             right: 16,
-            child: GestureDetector(
-              onTap: () => Navigator.pop(context),
-              child: CircleAvatar(
-                radius: isTablet ? 20 : 16,
-                backgroundColor: Colors.black54,
-                child: Icon(
-                  Icons.close,
-                  color: Colors.white,
-                  size: isTablet ? 24 : 18,
-                ),
-              ),
-            ),
-          ),
+            child: Row(
+              children: [
+                // Left side
+                if (provider.isInitialized && !provider.hasError) ...[
+                  GestureDetector(
+                    onTap: provider.toggleMute,
+                    child: CircleAvatar(
+                      radius: _bottomButtonRadius,
+                      backgroundColor: Colors.black54,
+                      child: Icon(
+                        provider.isMuted ? Icons.volume_off : Icons.volume_up,
+                        color: Colors.white,
+                        size: _bottomIconSize,
+                      ),
+                    ),
+                  ),
+                  SizedBox(width: _isTablet ? 20 : 10),
+                  GestureDetector(
+                    onTap: provider.cycleSpeed,
+                    child: CircleAvatar(
+                      radius: _bottomButtonRadius,
+                      backgroundColor: provider.playbackSpeed != 1.0
+                          ? Colors.blue.withOpacity(0.8)
+                          : Colors.black54,
+                      child: Text(
+                        provider.speedLabel,
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: _isTablet ? 16 : 10,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
 
-          // ── Mute button ────────────────────────────────────────────────
-          if (provider.isInitialized && !provider.hasError)
-            Positioned(
-              top: MediaQuery.of(context).padding.top + 16,
-              left: 16,
-              child: GestureDetector(
-                onTap: provider.toggleMute,
-                child: CircleAvatar(
-                  radius: isTablet ? 20 : 16,
-                  backgroundColor: Colors.black54,
-                  child: Icon(
-                    provider.isMuted ? Icons.volume_off : Icons.volume_up,
-                    color: Colors.white,
-                    size: isTablet ? 24 : 18,
+                const Spacer(),
+
+                // Right side: share link + close
+                GestureDetector(
+                  onTap: () => _shareTaskLink(context, provider.currentTask),
+                  child: CircleAvatar(
+                    radius: _bottomButtonRadius,
+                    backgroundColor: Colors.black54,
+                    child: Icon(
+                      Icons.share_rounded,
+                      color: Colors.white,
+                      size: _bottomIconSize,
+                    ),
                   ),
                 ),
-              ),
+                SizedBox(width: _isTablet ? 20 : 10),
+                GestureDetector(
+                  onTap: () => Navigator.pop(context),
+                  child: CircleAvatar(
+                    radius: _bottomButtonRadius,
+                    backgroundColor: Colors.black54,
+                    child: Icon(
+                      Icons.close,
+                      color: Colors.white,
+                      size: _bottomIconSize,
+                    ),
+                  ),
+                ),
+              ],
             ),
+          ),
         ],
       ),
     );
@@ -548,25 +590,63 @@ class _CircleVideoPlayerBodyState extends State<_CircleVideoPlayerBody>
                         Container(
                           color: Colors.black26,
                           child: Center(
-                            child: AnimatedOpacity(
-                              opacity: provider.isPlaying ? 0.0 : 1.0,
-                              duration: const Duration(milliseconds: 200),
-                              child: Container(
-                                padding: const EdgeInsets.all(16),
-                                decoration: BoxDecoration(
-                                  color: Colors.black.withOpacity(0.5),
-                                  shape: BoxShape.circle,
-                                ),
-                                child: Icon(
-                                  Icons.play_arrow_rounded,
-                                  size: _iconSizeLarge,
-                                  color: Colors.white,
-                                ),
+                            child: Container(
+                              padding: const EdgeInsets.all(16),
+                              decoration: BoxDecoration(
+                                color: Colors.black.withOpacity(0.5),
+                                shape: BoxShape.circle,
+                              ),
+                              child: Icon(
+                                Icons.play_arrow_rounded,
+                                size: _iconSizeLarge,
+                                color: Colors.white,
                               ),
                             ),
                           ),
                         ),
                     ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+          // Prev
+          Positioned(
+            left: 0,
+            bottom: arcBoxSize * 0.02,
+            child: GestureDetector(
+              onTap: provider.hasPrev ? provider.goToPrev : null,
+              child: AnimatedOpacity(
+                opacity: provider.hasPrev ? 1.0 : 0.25,
+                duration: const Duration(milliseconds: 200),
+                child: CircleAvatar(
+                  radius: _bottomButtonRadius,
+                  backgroundColor: Colors.black.withOpacity(0.75),
+                  child: Icon(
+                    Icons.arrow_back_ios_new_rounded,
+                    color: Colors.white,
+                    size: _bottomIconSize,
+                  ),
+                ),
+              ),
+            ),
+          ),
+          // Next
+          Positioned(
+            right: 0,
+            bottom: arcBoxSize * 0.02,
+            child: GestureDetector(
+              onTap: provider.hasNext ? provider.goToNext : null,
+              child: AnimatedOpacity(
+                opacity: provider.hasNext ? 1.0 : 0.25,
+                duration: const Duration(milliseconds: 200),
+                child: CircleAvatar(
+                  radius: _bottomButtonRadius,
+                  backgroundColor: Colors.black.withOpacity(0.75),
+                  child: Icon(
+                    Icons.arrow_forward_ios_rounded,
+                    color: Colors.white,
+                    size: _bottomIconSize,
                   ),
                 ),
               ),
@@ -673,81 +753,9 @@ class _CircleVideoPlayerBodyState extends State<_CircleVideoPlayerBody>
 
   Widget _buildControlsRow(VideoPlayerProvider provider) {
     final task = provider.currentTask;
-
     return Row(
       children: [
         const Spacer(),
-        IconButton(
-          visualDensity: VisualDensity.compact,
-          padding: EdgeInsets.zero,
-          constraints: BoxConstraints(
-            minWidth: _isTablet ? 40 : 28,
-            minHeight: _isTablet ? 40 : 28,
-          ),
-          onPressed: provider.hasPrev ? provider.goToPrev : null,
-          icon: Icon(
-            Icons.skip_previous_rounded,
-            color: provider.hasPrev ? Colors.white : Colors.white30,
-            size: _iconSizeSmall,
-          ),
-        ),
-        IconButton(
-          visualDensity: VisualDensity.compact,
-          padding: EdgeInsets.zero,
-          constraints: BoxConstraints(
-            minWidth: _isTablet ? 48 : 36,
-            minHeight: _isTablet ? 48 : 36,
-          ),
-          onPressed: provider.togglePlayPause,
-          icon: Icon(
-            provider.isPlaying
-                ? Icons.pause_circle_filled_rounded
-                : Icons.play_circle_filled_rounded,
-            color: Colors.white,
-            size: _iconSizeMedium,
-          ),
-        ),
-        IconButton(
-          visualDensity: VisualDensity.compact,
-          padding: EdgeInsets.zero,
-          constraints: BoxConstraints(
-            minWidth: _isTablet ? 40 : 28,
-            minHeight: _isTablet ? 40 : 28,
-          ),
-          onPressed: provider.hasNext ? provider.goToNext : null,
-          icon: Icon(
-            Icons.skip_next_rounded,
-            color: provider.hasNext ? Colors.white : Colors.white30,
-            size: _iconSizeSmall,
-          ),
-        ),
-        SizedBox(width: _isTablet ? 4 : 2),
-        GestureDetector(
-          onTap: provider.cycleSpeed,
-          child: Container(
-            padding: EdgeInsets.symmetric(
-              horizontal: _isTablet ? 8 : 5,
-              vertical: _isTablet ? 4 : 3,
-            ),
-            decoration: BoxDecoration(
-              color: provider.playbackSpeed != 1.0
-                  ? Colors.blue.withOpacity(0.8)
-                  : Colors.white24,
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: Text(
-              provider.speedLabel,
-              style: TextStyle(
-                color: Colors.white,
-                fontSize: _speedFontSize,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-          ),
-        ),
-
-        const Spacer(),
-
         if (_hasAudio(task))
           _buildMiniAudioPlayer(task)
         else if (_canRecord(task))
@@ -767,9 +775,7 @@ class _CircleVideoPlayerBodyState extends State<_CircleVideoPlayerBody>
               ),
             ),
           ),
-
         SizedBox(width: _isTablet ? 20 : 10),
-
         if (task != null) _buildStatusIndicator(provider, task),
       ],
     );
@@ -828,6 +834,120 @@ class _CircleVideoPlayerBodyState extends State<_CircleVideoPlayerBody>
     );
   }
 
+  // ── Telegram-style: bosib ushlab gapirish, qo'yib yuborish ────────────
+
+  int? _longPressLevel; // qaysi status button ushlab turilgan
+  double _dragStartY = 0; // swipe up cancel uchun
+  bool _isCancelledBySwipe = false;
+
+  Future<void> _onStatusLongPressStart(
+    VideoPlayerProvider provider,
+    CheckerCheckTaskModel task,
+    int level,
+  ) async {
+    if (task.status == level) return;
+
+    _longPressLevel = level;
+    _isCancelledBySwipe = false;
+
+    // Avval statusni o'zgartir
+    await provider.updateTaskStatus(task.taskId, level, task.date);
+
+    // Keyin recording boshlash (1 va 2 uchun)
+    if ((level == 1 || level == 2) && !_isRecording && !_isSending) {
+      provider.consumeRecordingSignal();
+      await _startRecording(provider);
+    }
+  }
+
+  void _onStatusLongPressMove(LongPressMoveUpdateDetails details) {
+    if (!_isRecording) return;
+
+    // Tepaga 80px dan ko'p surasa → cancel ko'rsatish
+    final dy = _dragStartY - details.globalPosition.dy;
+    if (dy > 80 && !_isCancelledBySwipe) {
+      _isCancelledBySwipe = true;
+      setState(() {}); // UI yangilash — "Bekor qilish ↑" ko'rsatish
+    } else if (dy <= 80 && _isCancelledBySwipe) {
+      _isCancelledBySwipe = false;
+      setState(() {});
+    }
+  }
+
+  Future<void> _onStatusLongPressEnd(VideoPlayerProvider provider) async {
+    _longPressLevel = null;
+
+    if (!_isRecording) return;
+
+    if (_isCancelledBySwipe) {
+      // Tepaga surilgan — bekor qilish
+      _isCancelledBySwipe = false;
+      await _cancelRecording();
+    } else {
+      // Normal qo'yib yuborish — yuborish + keyingi video
+      await _stopSendAndNext(provider);
+    }
+  }
+
+  /// Yuborish va keyingi videoga o'tish
+  Future<void> _stopSendAndNext(VideoPlayerProvider provider) async {
+    if (!_isRecording) return;
+    _recordTimer?.cancel();
+    _recordTimer = null;
+
+    final path = await _recorder.stop();
+    setState(() => _isRecording = false);
+
+    if (path == null || _recordSeconds < 1) {
+      if (path != null) {
+        try {
+          File(path).deleteSync();
+        } catch (_) {}
+      }
+      return;
+    }
+
+    final file = File(path);
+    if (!await file.exists()) return;
+
+    final task = provider.currentTask;
+    if (task == null) return;
+
+    setState(() => _isSending = true);
+
+    try {
+      final success = await AdminTaskService().pushAudio(
+        task.taskId,
+        file,
+        widget.selectedDate,
+      );
+      if (success && mounted) setState(() => _localAudioUrl = path);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(success ? 'Audio yuborildi ✓' : 'Xato yuz berdi'),
+            backgroundColor: success ? Colors.green : Colors.red,
+            duration: const Duration(milliseconds: 800),
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Xato: $e'), backgroundColor: Colors.red),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isSending = false);
+    }
+
+    // Keyingi videoga o'tish
+    if (provider.hasNext) {
+      _localAudioUrl = null;
+      provider.goToNext();
+    }
+  }
+
   Widget _buildRecordingRow(VideoPlayerProvider provider) {
     return Row(
       children: [
@@ -854,43 +974,13 @@ class _CircleVideoPlayerBodyState extends State<_CircleVideoPlayerBody>
         SizedBox(width: _isTablet ? 8 : 5),
         Expanded(
           child: Text(
-            'Yozilmoqda...',
+            _isCancelledBySwipe ? '↑ Bekor qilish' : 'Qo\'yib yuboring →',
             style: TextStyle(
               fontSize: _recordingSubFontSize,
-              color: Colors.white70,
-            ),
-          ),
-        ),
-        GestureDetector(
-          onTap: _cancelRecording,
-          child: Container(
-            width: _circleButtonSize,
-            height: _circleButtonSize,
-            decoration: const BoxDecoration(
-              color: Colors.white24,
-              shape: BoxShape.circle,
-            ),
-            child: Icon(
-              Icons.delete_outline,
-              size: _isTablet ? 25 : 18,
-              color: Colors.white70,
-            ),
-          ),
-        ),
-        SizedBox(width: _isTablet ? 32 : 12),
-        GestureDetector(
-          onTap: () => _stopAndSend(provider),
-          child: Container(
-            width: _circleButtonSize,
-            height: _circleButtonSize,
-            decoration: const BoxDecoration(
-              color: Color(0xFF4CAF50),
-              shape: BoxShape.circle,
-            ),
-            child: Icon(
-              Icons.send_rounded,
-              size: _sendIconSize,
-              color: Colors.white,
+              color: _isCancelledBySwipe ? Colors.red : Colors.white70,
+              fontWeight: _isCancelledBySwipe
+                  ? FontWeight.bold
+                  : FontWeight.normal,
             ),
           ),
         ),
@@ -944,32 +1034,58 @@ class _CircleVideoPlayerBodyState extends State<_CircleVideoPlayerBody>
     int level,
     Color activeColor,
   ) {
-    final bool isActive = task.status >= level;
+    final bool isActive = task.status == level;
+    final bool isHolding = _longPressLevel == level && _isRecording;
 
     return GestureDetector(
+      // Oddiy tap — faqat status o'zgartirish (yashil uchun va recording kerak bo'lmaganda)
       onTap: () async {
-        if (task.status != level) {
+        if (task.status != level && level == 3) {
           await provider.updateTaskStatus(task.taskId, level, task.date);
         }
       },
+      // Long press — status + recording (qizil va sariq uchun)
+      onLongPressStart: (level == 1 || level == 2)
+          ? (details) {
+              _dragStartY = details.globalPosition.dy;
+              _onStatusLongPressStart(provider, task, level);
+            }
+          : null,
+      onLongPressMoveUpdate: (level == 1 || level == 2)
+          ? _onStatusLongPressMove
+          : null,
+      onLongPressEnd: (level == 1 || level == 2)
+          ? (_) => _onStatusLongPressEnd(provider)
+          : null,
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 150),
-        width: _statusCircleSize,
-        height: _statusCircleSize,
+        width: isHolding ? _statusCircleSize + 6 : _statusCircleSize,
+        height: isHolding ? _statusCircleSize + 6 : _statusCircleSize,
         decoration: BoxDecoration(
           shape: BoxShape.circle,
-          color: isActive ? activeColor : Colors.grey.shade300,
+          color: isActive || isHolding ? activeColor : Colors.grey.shade300,
           border: Border.all(
-            color: isActive ? activeColor : Colors.grey,
-            width: 2,
+            color: isActive || isHolding ? activeColor : Colors.grey,
+            width: isHolding ? 3 : 2,
           ),
-          boxShadow: isActive
-              ? [BoxShadow(color: activeColor.withOpacity(0.4), blurRadius: 4)]
+          boxShadow: isActive || isHolding
+              ? [
+                  BoxShadow(
+                    color: activeColor.withOpacity(0.4),
+                    blurRadius: isHolding ? 8 : 4,
+                  ),
+                ]
               : [],
         ),
         child: isActive
             ? Icon(Icons.check, size: _statusIconSize, color: Colors.white)
-            : null,
+            : (level != 3
+                  ? Icon(
+                      Icons.mic_rounded,
+                      size: _statusIconSize - 2,
+                      color: Colors.white70,
+                    )
+                  : null),
       ),
     );
   }
@@ -997,7 +1113,6 @@ class _CircularProgressPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     final center = Offset(size.width / 2, size.height / 2);
-
     final paint = Paint()
       ..color = color
       ..strokeWidth = strokeWidth
@@ -1019,7 +1134,6 @@ class _CircularProgressPainter extends CustomPainter {
       final dotAngle = startAngle + sweepAngle;
       final dotX = center.dx + radius * math.cos(dotAngle);
       final dotY = center.dy + radius * math.sin(dotAngle);
-
       canvas.drawCircle(
         Offset(dotX, dotY),
         dotRadius,

@@ -100,7 +100,7 @@ class VideoPlayerProvider extends ChangeNotifier {
           tasks[index].status = newStatus;
 
           // Status 1 bo'lsa → recording signalni yoqamiz
-          if (newStatus == 1) {
+          if (newStatus == 1 || newStatus == 2) {
             _shouldStartRecording = true;
           }
 

@@ -1,12 +1,13 @@
 import 'dart:io';
+
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:mone_task_app/admin/provider/admin_task_item.dart';
 import 'package:mone_task_app/admin/provider/video_download_provider.dart';
 import 'package:mone_task_app/checker/model/checker_check_task_model.dart';
-import 'package:path_provider/path_provider.dart';
 import 'package:provider/provider.dart';
 import 'package:share_plus/share_plus.dart';
+import 'package:path_provider/path_provider.dart';
 
 class AdminTaskListWidget extends StatefulWidget {
   final List<CheckerCheckTaskModel> tasks;
@@ -39,7 +40,6 @@ class _AdminTaskListWidgetState extends State<AdminTaskListWidget> {
   @override
   void initState() {
     super.initState();
-    // Start downloads via provider (replaces global static cache)
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final downloadProvider = context.read<VideoDownloadProvider>();
       downloadProvider.startDownloadsForTasks(widget.tasks, widget.filialId);
@@ -54,6 +54,27 @@ class _AdminTaskListWidgetState extends State<AdminTaskListWidget> {
       final downloadProvider = context.read<VideoDownloadProvider>();
       downloadProvider.startDownloadsForTasks(widget.tasks, widget.filialId);
     }
+  }
+
+  /// Faqat videoli tasklar ro'yxati
+  List<CheckerCheckTaskModel> _getVideoTasks() {
+    return widget.tasks
+        .where((t) => t.videoUrl != null && t.videoUrl!.isNotEmpty)
+        .toList();
+  }
+
+  /// Faqat videoli tasklar uchun resolved path'lar
+  List<String> _getVideoPaths(VideoDownloadProvider downloadProvider) {
+    return _getVideoTasks().map((t) {
+      final fullUrl = downloadProvider.getFullUrl(t.videoUrl!);
+      return downloadProvider.resolvedPath(fullUrl);
+    }).toList();
+  }
+
+  /// Berilgan task videoli tasklar ichida nechanchi index da turganini topish
+  int _getVideoIndex(CheckerCheckTaskModel task) {
+    final videoTasks = _getVideoTasks();
+    return videoTasks.indexWhere((t) => t.taskId == task.taskId);
   }
 
   Future<void> _shareVideo(
@@ -87,7 +108,6 @@ class _AdminTaskListWidgetState extends State<AdminTaskListWidget> {
       if (downloadProvider.isCached(fullUrl)) {
         localPath = downloadProvider.getLocalPath(fullUrl)!;
       } else {
-        // Download directly for sharing
         final directory = await getApplicationDocumentsDirectory();
         final fileName = fullUrl
             .split('/')
@@ -127,9 +147,8 @@ class _AdminTaskListWidgetState extends State<AdminTaskListWidget> {
   Widget build(BuildContext context) {
     final downloadProvider = context.watch<VideoDownloadProvider>();
 
-    final filtered = widget.tasks
-        .where((task) => task.filialId == widget.filialId)
-        .toList();
+    // tasks allaqachon filial + status bo'yicha filterlangan
+    final filtered = widget.tasks;
 
     if (filtered.isEmpty) {
       return const Center(child: Text("Ushbu filial uchun task yo'q"));
@@ -157,13 +176,6 @@ class _AdminTaskListWidgetState extends State<AdminTaskListWidget> {
             videoPath = downloadProvider.resolvedPath(fullVideoUrl);
           }
 
-          final videoTasksInOrder = filtered
-              .where((t) => t.videoUrl != null && t.videoUrl!.isNotEmpty)
-              .toList();
-          final videoIndex = videoTasksInOrder.indexWhere(
-            (t) => t.taskId == task.taskId,
-          );
-
           return AdminTaskListItem(
             index: i + 1,
             task: task,
@@ -174,12 +186,22 @@ class _AdminTaskListWidgetState extends State<AdminTaskListWidget> {
             selectedDate: widget.selectedDate,
             onRefresh: widget.onRefresh,
             onShowVideoPlayer: (path) {
-              final allPaths = downloadProvider.getAllVideoPaths(
-                widget.tasks,
-                widget.filialId,
+              // ── MUHIM: faqat videoli tasklar va to'g'ri index ──────────
+              final hasVideo =
+                  task.videoUrl != null && task.videoUrl!.isNotEmpty;
+              if (!hasVideo) return; // videosiz task — hech narsa qilmaymiz
+
+              final allVideoPaths = _getVideoPaths(downloadProvider);
+              final videoTasks = _getVideoTasks();
+              final startIndex = _getVideoIndex(task);
+
+              if (startIndex < 0 || allVideoPaths.isEmpty) return;
+
+              widget.onShowVideoPlayer(
+                allVideoPaths,
+                startIndex,
+                videoTasks, // ← faqat videoli tasklar
               );
-              final startIndex = videoIndex >= 0 ? videoIndex : 0;
-              widget.onShowVideoPlayer(allPaths, startIndex, filtered);
             },
             onShareVideo: () => _shareVideo(task, downloadProvider),
           );

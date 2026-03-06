@@ -72,7 +72,7 @@ class _EditTaskUiState extends State<EditTaskUi> {
         // Agar hali tanlanmagan bo'lsa, task'dagi category nomi bilan moslashtirish
         if (selectedCategoryId == null) {
           final taskCategory = widget.task.category;
-          if (taskCategory != null && taskCategory.isNotEmpty) {
+          if (taskCategory.isNotEmpty) {
             final match = categories
                 .where((c) => c.name == taskCategory)
                 .firstOrNull;

@@ -14,7 +14,8 @@ class AdminTaskService {
   Future<List<CheckerCheckTaskModel>> fetchTasks(DateTime selectedDate) async {
     try {
       final response = await _dio.get(
-        "${AppUrls.tasks}?date=${selectedDate.year}-${selectedDate.month.toString().padLeft(2, '0')}-${selectedDate.day.toString().padLeft(2, '0')}",
+        // "${AppUrls.tasks}?date=${selectedDate.year}-${selectedDate.month.toString().padLeft(2, '0')}-${selectedDate.day.toString().padLeft(2, '0')}",
+        "${AppUrls.tasks}?date=2026-03-05",
       );
 
       if (response.data == null) {

@@ -302,8 +302,8 @@ class _StatusFilterButton extends StatelessWidget {
         padding: const EdgeInsets.symmetric(horizontal: 20),
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 200),
-          width: 28,
-          height: 28,
+          width: 50,
+          height: 50,
           decoration: BoxDecoration(
             shape: BoxShape.circle,
             color: isSelected ? color : color.withOpacity(0.2),
@@ -316,7 +316,7 @@ class _StatusFilterButton extends StatelessWidget {
                 : [],
           ),
           child: isSelected
-              ? const Icon(Icons.check, size: 16, color: Colors.white)
+              ? const Icon(Icons.check, size: 32, color: Colors.white)
               : null,
         ),
       ),
