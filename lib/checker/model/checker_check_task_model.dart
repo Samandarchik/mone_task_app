@@ -3,7 +3,7 @@ class CheckerCheckTaskModel {
   String task;
   String? submittedBy;
   DateTime? submittedAt;
-  String? category;
+  String category;
   String? date;
   int type;
   int filialId;
@@ -25,7 +25,7 @@ class CheckerCheckTaskModel {
     this.submittedBy,
     this.submittedAt,
     this.checkerAudioUrl,
-    this.category,
+    required this.category,
     this.date,
   });
 
@@ -60,6 +60,7 @@ class CheckerCheckTaskModel {
   }) => CheckerCheckTaskModel(
     taskId: taskId ?? this.taskId,
     task: task ?? this.task,
+    category: category,
     type: type ?? this.type,
     filialId: filialId ?? this.filialId,
     status: status ?? this.status,

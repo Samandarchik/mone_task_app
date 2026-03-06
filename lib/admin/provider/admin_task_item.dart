@@ -2,10 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:mone_task_app/admin/provider/admin_tasks_provider.dart';
 import 'package:mone_task_app/admin/provider/video_download_provider.dart';
-import 'package:mone_task_app/admin/ui/dialog.dart';
-import 'package:mone_task_app/admin/ui/edit_task_ui.dart';
+import 'package:mone_task_app/admin/ui/audio_task_row.dart';
 import 'package:mone_task_app/checker/model/checker_check_task_model.dart';
-import 'package:mone_task_app/core/context_extension.dart';
 import 'package:mone_task_app/utils/get_color.dart';
 import 'package:provider/provider.dart';
 
@@ -88,8 +86,6 @@ class _AdminTaskListItemState extends State<AdminTaskListItem>
       elevation: 2,
       color: Colors.white70,
       child: InkWell(
-        onLongPress: _handleLongPress,
-        onDoubleTap: _handleDoubleTap,
         onTap: _handleTap,
         child: Padding(
           padding: const EdgeInsets.all(12),
@@ -111,8 +107,6 @@ class _AdminTaskListItemState extends State<AdminTaskListItem>
       elevation: 2,
       color: Colors.white70,
       child: InkWell(
-        onLongPress: _handleLongPress,
-        onDoubleTap: _handleDoubleTap,
         onTap: _handleTap,
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
@@ -166,6 +160,9 @@ class _AdminTaskListItemState extends State<AdminTaskListItem>
               buildStatusIndicator(task.status),
           ],
         ),
+        // ── AudioTaskRow ──────────────────────────────────────────────────
+        const SizedBox(height: 8),
+        AudioTaskRow(task: task, selectedDate: widget.selectedDate),
       ],
     );
   }
@@ -297,22 +294,9 @@ class _AdminTaskListItemState extends State<AdminTaskListItem>
     );
   }
 
-  // ── Handlers ──────────────────────────────────────────────────────────────
-
-  Future<void> _handleLongPress() async {
-    final isDelete = await NativeDialog.showDeleteDialog();
-    if (isDelete) {
-      final tasksProvider = context.read<AdminTasksProvider>();
-      await tasksProvider.deleteTask(task.taskId);
-      widget.onRefresh();
-    }
-  }
-
-  Future<void> _handleDoubleTap() async {
-    context.push(EditTaskUi(task: task));
-  }
-
   Future<void> _handleTap() async {
-    widget.onShowVideoPlayer(widget.videoPath!);
+    if (task.videoUrl != null && task.videoUrl!.isNotEmpty) {
+      widget.onShowVideoPlayer(task.videoUrl!);
+    }
   }
 }

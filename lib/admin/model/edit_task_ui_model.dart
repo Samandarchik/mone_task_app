@@ -6,7 +6,7 @@ class EditTaskUiModel {
   final List<int>? days;
   final int? hour;
   final int? minute;
-  final String? category;
+  final String category;
 
   EditTaskUiModel({
     required this.taskId,
@@ -16,7 +16,7 @@ class EditTaskUiModel {
     this.days,
     this.hour,
     this.minute,
-    this.category,
+    required this.category,
   });
 
   Map<String, dynamic> toJson() {

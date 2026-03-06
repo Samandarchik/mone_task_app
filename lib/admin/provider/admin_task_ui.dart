@@ -21,9 +21,15 @@ class AdminTaskUi extends StatefulWidget {
   State<AdminTaskUi> createState() => _AdminTaskUiState();
 }
 
-class _AdminTaskUiState extends State<AdminTaskUi> {
+class _AdminTaskUiState extends State<AdminTaskUi>
+    with SingleTickerProviderStateMixin {
   final TokenStorage _tokenStorage = sl<TokenStorage>();
   UserModel? _user;
+  TabController? _tabController;
+  int _lastCategoryLength = 0;
+
+  // _selectedDate ni providerdan olamiz, bu yerda saqlamaymiz
+  DateTime get _selectedDate => context.read<AdminTasksProvider>().selectedDate;
 
   @override
   void initState() {
@@ -31,8 +37,23 @@ class _AdminTaskUiState extends State<AdminTaskUi> {
     _user = _tokenStorage.getUserData();
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      context.read<AdminTasksProvider>().init();
+      final provider = context.read<AdminTasksProvider>();
+      provider.init();
     });
+  }
+
+  @override
+  void dispose() {
+    _tabController?.dispose();
+    super.dispose();
+  }
+
+  void _initTabController(int length) {
+    if (_tabController == null || _lastCategoryLength != length) {
+      _tabController?.dispose();
+      _tabController = TabController(length: length, vsync: this);
+      _lastCategoryLength = length;
+    }
   }
 
   void _showCircleVideoPlayer(
@@ -50,21 +71,28 @@ class _AdminTaskUiState extends State<AdminTaskUi> {
           videoUrls: videoPaths,
           initialIndex: startIndex,
           title: tasks,
-          selectedDate: context.read<AdminTasksProvider>().selectedDate,
+          selectedDate: _selectedDate,
         ),
       ),
     );
   }
 
   Future<void> _handleDateSelection() async {
+    // Provider dan olamiz — setState ishlatmaymiz
     final provider = context.read<AdminTasksProvider>();
+    final currentDate = provider.selectedDate;
+
+    // showDatePicker ni await qilamiz — bu paytda widget rebuild bo'lmaydi
     final DateTime? picked = await showDatePicker(
       context: context,
       firstDate: DateTime.now().subtract(const Duration(days: 30)),
-      initialDate: provider.selectedDate,
+      initialDate: currentDate,
       lastDate: DateTime.now(),
     );
-    if (picked != null) {
+
+    // Dialog to'liq yopilgandan KEYIN provider yangilanadi
+    // setState ISHLATMAYMIZ — shu bug ning sababi edi
+    if (picked != null && mounted) {
       provider.setSelectedDate(picked);
     }
   }
@@ -80,7 +108,10 @@ class _AdminTaskUiState extends State<AdminTaskUi> {
   Widget build(BuildContext context) {
     final tasksProvider = context.watch<AdminTasksProvider>();
 
-    // ── Loading state ─────────────────────────────────────────────────────
+    // selectedDate ni har doim providerdan olamiz
+    final selectedDate = tasksProvider.selectedDate;
+
+    // ── Loading state ────────────────────────────────────────────────────
     if (tasksProvider.filialsState == LoadingState.loading) {
       return Scaffold(
         appBar: AppBar(title: Text(_user?.username ?? "")),
@@ -88,7 +119,7 @@ class _AdminTaskUiState extends State<AdminTaskUi> {
       );
     }
 
-    // ── Filials error ─────────────────────────────────────────────────────
+    // ── Filials error ────────────────────────────────────────────────────
     if (tasksProvider.filialsState == LoadingState.error) {
       return Scaffold(
         appBar: AppBar(
@@ -123,7 +154,7 @@ class _AdminTaskUiState extends State<AdminTaskUi> {
       );
     }
 
-    // ── Empty filials ─────────────────────────────────────────────────────
+    // ── Empty filials ────────────────────────────────────────────────────
     if (tasksProvider.filials.isEmpty) {
       return Scaffold(
         appBar: AppBar(title: Text(_user?.username ?? "")),
@@ -132,74 +163,74 @@ class _AdminTaskUiState extends State<AdminTaskUi> {
     }
 
     final categories = tasksProvider.filials;
+    _initTabController(categories.length);
 
-    return DefaultTabController(
-      length: categories.length,
-      child: Scaffold(
-        drawer: MyDrawer(
-          categories: categories,
-          user: _user,
-          onLogout: _handleLogout,
-        ),
-        appBar: AppBar(
-          title: Text(_user?.username ?? ""),
-          actions: [
-            // ── Status filter tugmalari ──────────────────────────────────
-            _StatusFilterButton(
-              status: 3,
-              color: Colors.green,
-              provider: tasksProvider,
-            ),
-            _StatusFilterButton(
-              status: 2,
-              color: Colors.orange,
-              provider: tasksProvider,
-            ),
-            _StatusFilterButton(
-              status: 1,
-              color: Colors.red,
-              provider: tasksProvider,
+    return Scaffold(
+      drawer: MyDrawer(
+        categories: categories,
+        user: _user,
+        onLogout: _handleLogout,
+      ),
+      appBar: AppBar(
+        title: Text(_user?.username ?? ""),
+        actions: [
+          // ── Status filter tugmalari ────────────────────────────────────
+          _StatusFilterButton(
+            status: 3,
+            color: Colors.green,
+            provider: tasksProvider,
+          ),
+          _StatusFilterButton(
+            status: 2,
+            color: Colors.orange,
+            provider: tasksProvider,
+          ),
+          _StatusFilterButton(
+            status: 1,
+            color: Colors.red,
+            provider: tasksProvider,
+          ),
+
+          // ── Filterni tozalash ──────────────────────────────────────────
+          if (tasksProvider.isFilterActive)
+            IconButton(
+              onPressed: () => tasksProvider.clearStatusFilter(),
+              icon: const Icon(Icons.filter_alt_off, size: 20),
+              tooltip: 'Filterni tozalash',
             ),
 
-            // ── Filterni tozalash ────────────────────────────────────────
-            if (tasksProvider.isFilterActive)
-              IconButton(
-                onPressed: () => tasksProvider.clearStatusFilter(),
-                icon: const Icon(Icons.filter_alt_off, size: 20),
-                tooltip: 'Filterni tozalash',
-              ),
-
-            // ── Sana tanlash ─────────────────────────────────────────────
-            GestureDetector(
-              onTap: _handleDateSelection,
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 12),
-                child: Center(
-                  child: Text(
-                    tasksProvider.selectedDate.day == DateTime.now().day
-                        ? "Сегодня"
-                        : "${tasksProvider.selectedDate.day}/${tasksProvider.selectedDate.month.toString().padLeft(2, '0')}/${tasksProvider.selectedDate.year}",
-                    style: const TextStyle(fontSize: 14),
-                  ),
+          // ── Sana tanlash ───────────────────────────────────────────────
+          GestureDetector(
+            onTap: _handleDateSelection,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12),
+              child: Center(
+                child: Text(
+                  selectedDate.day == DateTime.now().day
+                      ? "Сегодня"
+                      : "${selectedDate.day}/${selectedDate.month.toString().padLeft(2, '0')}/${selectedDate.year}",
+                  style: const TextStyle(fontSize: 14),
                 ),
               ),
             ),
-          ],
-          bottom: TabBar(
-            padding: EdgeInsets.zero,
-            isScrollable: true,
-            tabAlignment: TabAlignment.start,
-            tabs: categories.map((c) => Tab(text: c.name)).toList(),
           ),
+        ],
+        bottom: TabBar(
+          controller: _tabController,
+          padding: EdgeInsets.zero,
+          isScrollable: true,
+          tabAlignment: TabAlignment.start,
+          tabs: categories.map((c) => Tab(text: c.name)).toList(),
         ),
-        body: _buildBody(tasksProvider, categories),
       ),
+      body: _buildBody(tasksProvider, categories, selectedDate),
     );
   }
 
   Widget _buildBody(
     AdminTasksProvider tasksProvider,
     List<FilialModel> categories,
+    DateTime selectedDate,
   ) {
     if (tasksProvider.tasksState == LoadingState.loading) {
       return const Center(child: CircularProgressIndicator.adaptive());
@@ -231,15 +262,15 @@ class _AdminTaskUiState extends State<AdminTaskUi> {
     }
 
     return TabBarView(
+      controller: _tabController,
       children: categories.map((category) {
-        // ← tasksForFilial endi status filter ham qo'llaydi
         final filteredTasks = tasksProvider.tasksForFilial(category.filialId);
 
         return AdminTaskListWidget(
           role: _user?.role ?? "",
           tasks: filteredTasks,
           filialId: category.filialId,
-          selectedDate: tasksProvider.selectedDate,
+          selectedDate: selectedDate,
           onRefresh: () => tasksProvider.fetchTasks(),
           onShowVideoPlayer: _showCircleVideoPlayer,
         );
@@ -248,7 +279,7 @@ class _AdminTaskUiState extends State<AdminTaskUi> {
   }
 }
 
-// ─── Status filter button ───────────────────────────────────────────────────
+// ─── Status filter button ────────────────────────────────────────────────────
 
 class _StatusFilterButton extends StatelessWidget {
   final int status;
@@ -264,8 +295,6 @@ class _StatusFilterButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final bool isSelected = provider.selectedStatuses.contains(status);
-    // Filter faol emas = hammasi ko'rinadi, shuning uchun hech biri "active" emas
-    // Filter faol = faqat tanlanganlari active
 
     return GestureDetector(
       onTap: () => provider.toggleStatusFilter(status),

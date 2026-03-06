@@ -38,7 +38,7 @@ class _EditTaskUiState extends State<EditTaskUi> {
   @override
   void initState() {
     super.initState();
-    print(widget.task.notificationTime);
+    print("task: ${widget.task.category}");
     controller = TextEditingController(text: widget.task.task);
     selectedType = widget.task.type == 0 ? 1 : widget.task.type;
     selectedFilials = [widget.task.filialId];

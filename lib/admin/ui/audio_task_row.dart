@@ -88,13 +88,11 @@ class _AudioTaskRowState extends State<AudioTaskRow>
     _checkRecordingSignal();
   }
 
-  /// Provider dan recording signalni tekshiradi
   void _checkRecordingSignal() {
     try {
       final provider = context.read<VideoPlayerProvider>();
       final currentTask = provider.currentTask;
 
-      // Faqat hozirgi task uchun va signal bor bo'lsa
       if (provider.shouldStartRecording &&
           currentTask != null &&
           currentTask.taskId == widget.task.taskId &&
@@ -102,14 +100,11 @@ class _AudioTaskRowState extends State<AudioTaskRow>
           !_isSending &&
           _canRecord) {
         provider.consumeRecordingSignal();
-        // Keyingi frame da recording boshlash (context to'liq tayyor bo'lishi uchun)
         WidgetsBinding.instance.addPostFrameCallback((_) {
           if (mounted) _startRecording();
         });
       }
-    } catch (_) {
-      // Provider topilmasa (masalan, player tashqarisida) — hech narsa qilmaymiz
-    }
+    } catch (_) {}
   }
 
   @override
@@ -173,7 +168,14 @@ class _AudioTaskRowState extends State<AudioTaskRow>
   // ── Recorder actions ──────────────────────────────────────────────────────
 
   Future<void> _startRecording() async {
+    // Allaqachon yozilmoqda bo'lsa qaytamiz
+    if (_isRecording) return;
+
+    // MUHIM: darhol true qilamiz — onLongPressEnd race condition oldini olish uchun
+    if (mounted) setState(() => _isRecording = true);
+
     if (!await _recorder.hasPermission()) {
+      if (mounted) setState(() => _isRecording = false);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Mikrofon ruxsati berilmagan')),
@@ -182,9 +184,8 @@ class _AudioTaskRowState extends State<AudioTaskRow>
       return;
     }
 
+    // Playerni to'xtatamiz
     await _player.stop();
-
-    if (mounted) setState(() => _isRecording = true);
 
     final dir = await getTemporaryDirectory();
     final path =
@@ -266,7 +267,6 @@ class _AudioTaskRowState extends State<AudioTaskRow>
   Widget build(BuildContext context) {
     if (!_canRecord) return const SizedBox.shrink();
 
-    // Provider signalni har rebuild da tekshir
     _checkRecordingSignal();
 
     if (_isSending) return _buildSending();
@@ -342,11 +342,11 @@ class _AudioTaskRowState extends State<AudioTaskRow>
           GestureDetector(
             onTap: _cancelRecording,
             child: const Padding(
-              padding: EdgeInsets.all(4),
-              child: Icon(Icons.delete_outline, size: 20, color: Colors.grey),
+              padding: EdgeInsets.all(12),
+              child: Icon(Icons.delete_outline, size: 30, color: Colors.grey),
             ),
           ),
-          const SizedBox(width: 4),
+          const SizedBox(width: 35),
           GestureDetector(
             onTap: _stopAndSend,
             child: Container(
@@ -472,23 +472,21 @@ class _AudioTaskRowState extends State<AudioTaskRow>
           ),
           if (_canRecord) ...[
             const SizedBox(width: 4),
+            // ── Qayta yozib olish tugmasi ─────────────────────────────────
             GestureDetector(
               onLongPressStart: (_) => _startRecording(),
               onLongPressEnd: (_) => _stopAndSend(),
-              child: Tooltip(
-                message: 'Bosib ushlab qayta yuboring',
-                child: Container(
-                  width: 32,
-                  height: 32,
-                  decoration: BoxDecoration(
-                    color: Colors.black.withOpacity(0.07),
-                    shape: BoxShape.circle,
-                  ),
-                  child: const Icon(
-                    Icons.mic_none_rounded,
-                    size: 17,
-                    color: Colors.black54,
-                  ),
+              child: Container(
+                width: 32,
+                height: 32,
+                decoration: BoxDecoration(
+                  color: Colors.black.withOpacity(0.07),
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(
+                  Icons.mic_none_rounded,
+                  size: 17,
+                  color: Colors.black54,
                 ),
               ),
             ),

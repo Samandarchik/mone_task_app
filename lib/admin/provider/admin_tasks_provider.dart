@@ -31,11 +31,8 @@ class AdminTasksProvider extends ChangeNotifier {
   DateTime get selectedDate => _selectedDate;
 
   // ── Status filter ────────────────────────────────────────────────────────
-  /// Tanlangan statuslar to'plami. Bo'sh bo'lsa = hammasi ko'rinadi
   Set<int> _selectedStatuses = {};
   Set<int> get selectedStatuses => _selectedStatuses;
-
-  /// Filter faolmi
   bool get isFilterActive => _selectedStatuses.isNotEmpty;
 
   void toggleStatusFilter(int status) {
@@ -52,16 +49,20 @@ class AdminTasksProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  // ── MUHIM: setSelectedDate faqat date ni saqlaydi ─────────────────────
+  // notifyListeners CHAQIRMAYMIZ — UI o'zi fetchTasks ni kutadi
+  // Sana o'zgarganda faqat fetchTasks chaqiriladi, u tugagach UI yangilanadi
   void setSelectedDate(DateTime date) {
     _selectedDate = date;
     fetchTasks();
+    // notifyListeners YO'Q — fetchTasks tugaganda o'zi chaqiradi
   }
 
   // ── Fetch filials ────────────────────────────────────────────────────────
   Future<void> fetchFilials() async {
     _filialsState = LoadingState.loading;
     _filialsError = null;
-    notifyListeners();
+    notifyListeners(); // Bu init paytida chaqiriladi — muammo yo'q
 
     try {
       _filials = await _service.fetchFilials();
@@ -75,9 +76,14 @@ class AdminTasksProvider extends ChangeNotifier {
 
   // ── Fetch tasks ──────────────────────────────────────────────────────────
   Future<void> fetchTasks() async {
+    // ❌ OLDIN: _tasksState = LoadingState.loading + notifyListeners()
+    //    Bu sana tanlanganda darhol rebuild → dialog yopilardi
+    //
+    // ✅ ENDI: loading state ni silent o'zgartirамiz,
+    //    notifyListeners faqat fetch TUGAGACH chaqiriladi
     _tasksState = LoadingState.loading;
     _tasksError = null;
-    notifyListeners();
+    // notifyListeners() — BU YERDA CHAQIRMAYMIZ
 
     try {
       _tasks = await _service.fetchTasks(_selectedDate);
@@ -86,6 +92,8 @@ class AdminTasksProvider extends ChangeNotifier {
       _tasksError = e.toString();
       _tasksState = LoadingState.error;
     }
+
+    // Faqat tugagach bir marta notify — bu paytda dialog allaqachon yopilgan
     notifyListeners();
   }
 
@@ -114,9 +122,7 @@ class AdminTasksProvider extends ChangeNotifier {
     }
   }
 
-  // ── Update task status ──────────────────────────────────────────────────
-
-  // ── Update task status ──────────────────────────────────────────────────
+  // ── Update task status ───────────────────────────────────────────────────
   Future<bool> updateTaskStatus(int taskId, int status, DateTime date) async {
     try {
       final success = await _service.updateTaskStatus(
@@ -138,7 +144,7 @@ class AdminTasksProvider extends ChangeNotifier {
     }
   }
 
-  // ── Initial load ────────────────────────────────────────────────────────
+  // ── Initial load ─────────────────────────────────────────────────────────
   Future<void> init() async {
     await Future.wait([fetchFilials(), fetchTasks()]);
   }
