@@ -145,8 +145,7 @@ class _CircleVideoPlayerBodyState extends State<_CircleVideoPlayerBody>
   double get _audioTimeWidth => _isTablet ? 40.0 : 32.0;
   double get _audioTimeFontSize => _isTablet ? 10.0 : 8.5;
 
-  double get _timeFontSize => _isTablet ? 14.0 : 11.0;
-  double get _speedFontSize => _isTablet ? 40.0 : 10.0;
+  double get _timeFontSize => _isTablet ? 30.0 : 11.0;
   double get _indexFontSize => _isTablet ? 12.0 : 10.0;
 
   double get _statusGap => _isTablet ? 25.0 : 10.0;
@@ -155,27 +154,51 @@ class _CircleVideoPlayerBodyState extends State<_CircleVideoPlayerBody>
   double get _pulseDotSize => _isTablet ? 12.0 : 9.0;
   double get _sendIconSize => _isTablet ? 18.0 : 14.0;
 
-  double get _sideNavButtonSize => _isTablet ? 72.0 : 56.0;
-  double get _sideNavIconSize => _isTablet ? 40.0 : 30.0;
-
   double get _bottomButtonRadius => _isTablet ? 40.0 : 16.0;
   double get _bottomIconSize => _isTablet ? 48.0 : 18.0;
 
   // ── Share link ────────────────────────────────────────────────────────────
 
-  void _shareTaskLink(BuildContext context, CheckerCheckTaskModel? task) {
+  final GlobalKey _shareButtonKey = GlobalKey();
+
+  void _shareTaskLink(
+    BuildContext context,
+    VideoPlayerProvider provider,
+    CheckerCheckTaskModel? task,
+  ) {
     if (task == null) return;
+
+    // Video ni pause qilish
+    if (provider.isPlaying) {
+      provider.togglePlayPause();
+    }
 
     final link = 'https://monebakeryuz.uz/${task.date}/${task.taskId}';
 
-    // iPad uchun share popup pozitsiyasi kerak
-    final box = context.findRenderObject() as RenderBox?;
-    final sharePosition = box != null
-        ? box.localToGlobal(Offset.zero) & box.size
-        : Rect.fromLTWH(0, 0, MediaQuery.of(context).size.width, 100);
+    // Share dialog share button oldida ochilsin
+    final box =
+        _shareButtonKey.currentContext?.findRenderObject() as RenderBox?;
+    final Rect sharePosition;
+    if (box != null) {
+      final pos = box.localToGlobal(Offset.zero);
+      sharePosition = Rect.fromLTWH(
+        pos.dx,
+        pos.dy,
+        box.size.width,
+        box.size.height,
+      );
+    } else {
+      final size = MediaQuery.of(context).size;
+      sharePosition = Rect.fromLTWH(
+        size.width - 100,
+        size.height - 100,
+        100,
+        100,
+      );
+    }
 
     Share.share(
-      '$link\n\n${task.task}',
+      '[${task.task}]($link)',
       subject: task.task,
       sharePositionOrigin: sharePosition,
     );
@@ -250,17 +273,15 @@ class _CircleVideoPlayerBodyState extends State<_CircleVideoPlayerBody>
     final path = await _recorder.stop();
     setState(() => _isRecording = false);
 
-    if (path == null || _recordSeconds < 1) {
-      if (path != null) {
-        try {
-          File(path).deleteSync();
-        } catch (_) {}
-      }
-      return;
-    }
+    if (path == null) return;
 
     final file = File(path);
-    if (!await file.exists()) return;
+    if (!await file.exists() || await file.length() < 100) {
+      try {
+        file.deleteSync();
+      } catch (_) {}
+      return;
+    }
 
     final task = provider.currentTask;
     if (task == null) return;
@@ -358,13 +379,12 @@ class _CircleVideoPlayerBodyState extends State<_CircleVideoPlayerBody>
       backgroundColor: Colors.transparent,
       body: Stack(
         children: [
-          Positioned.fill(child: Container(color: Colors.transparent)),
-
           // ── Main content ───────────────────────────────────────────────
           Center(
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
+                _buildTimeRow(provider),
                 _buildVideoCircle(
                   context,
                   provider,
@@ -373,7 +393,6 @@ class _CircleVideoPlayerBodyState extends State<_CircleVideoPlayerBody>
                   arcStroke,
                   circleSize,
                 ),
-                const SizedBox(height: 1),
                 if (provider.currentTask?.task != null)
                   Container(
                     decoration: BoxDecoration(
@@ -452,7 +471,9 @@ class _CircleVideoPlayerBodyState extends State<_CircleVideoPlayerBody>
 
                 // Right side: share link + close
                 GestureDetector(
-                  onTap: () => _shareTaskLink(context, provider.currentTask),
+                  key: _shareButtonKey,
+                  onTap: () =>
+                      _shareTaskLink(context, provider, provider.currentTask),
                   child: CircleAvatar(
                     radius: _bottomButtonRadius,
                     backgroundColor: Colors.black54,
@@ -504,7 +525,7 @@ class _CircleVideoPlayerBodyState extends State<_CircleVideoPlayerBody>
             size: Size(arcBoxSize, arcBoxSize),
             painter: _CircularProgressPainter(
               progress: 1.0,
-              color: Colors.white24,
+              color: Colors.grey.shade300,
               strokeWidth: arcStroke,
               radius: arcRadius,
             ),
@@ -517,7 +538,7 @@ class _CircleVideoPlayerBodyState extends State<_CircleVideoPlayerBody>
               strokeWidth: arcStroke,
               radius: arcRadius,
               showDot: true,
-              dotRadius: arcStroke + 5,
+              dotRadius: arcStroke + 10,
             ),
           ),
           GestureDetector(
@@ -612,7 +633,7 @@ class _CircleVideoPlayerBodyState extends State<_CircleVideoPlayerBody>
           ),
           // Prev
           Positioned(
-            left: 0,
+            left: -10,
             bottom: arcBoxSize * 0.02,
             child: GestureDetector(
               onTap: provider.hasPrev ? provider.goToPrev : null,
@@ -707,7 +728,7 @@ class _CircleVideoPlayerBodyState extends State<_CircleVideoPlayerBody>
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          _buildTimeRow(provider),
+          // _buildTimeRow(provider), time
           SizedBox(height: _isTablet ? 4 : 2),
           if (_isRecording)
             _buildRecordingRow(provider)
@@ -725,16 +746,15 @@ class _CircleVideoPlayerBodyState extends State<_CircleVideoPlayerBody>
     return Row(
       children: [
         Text(
-          "${task?.date ?? ''} "
-          "${task?.submittedAt?.toLocal().hour.toString().padLeft(2, '0') ?? '00'}:"
-          "${task?.submittedAt?.toLocal().minute.toString().padLeft(2, '0') ?? '00'}",
+          "   ${task?.submittedAt?.toLocal().hour.toString().padLeft(2, '0') ?? '00'}:"
+          "${task?.submittedAt?.toLocal().minute.toString().padLeft(2, '0') ?? '00'}   "
+          "${task?.date ?? ''}",
           style: TextStyle(
-            color: Colors.white,
+            color: Colors.black,
             fontSize: _timeFontSize,
             fontWeight: FontWeight.bold,
           ),
         ),
-        const Spacer(),
         if (provider.videoUrls.length > 1)
           Padding(
             padding: const EdgeInsets.only(right: 8),
@@ -834,59 +854,117 @@ class _CircleVideoPlayerBodyState extends State<_CircleVideoPlayerBody>
     );
   }
 
-  // ── Telegram-style: bosib ushlab gapirish, qo'yib yuborish ────────────
+  // ── Listener-based status + recording ──────────────────────────────────
+  // Status 1: button ichida bosib qo'yib yuborish → auto yuborish
+  // Status 2: buttondan tepaga chiqish → recording davom, send/delete chiqadi
+  // Status 3: pointer up
 
-  int? _longPressLevel; // qaysi status button ushlab turilgan
-  double _dragStartY = 0; // swipe up cancel uchun
-  bool _isCancelledBySwipe = false;
+  int _pointerStatus = 0; // 0=idle, 1=inside, 2=outside(recording continues)
+  int? _activeLevel; // qaysi button bosilgan
+  bool _recorderReady = false;
+  bool _pendingSend = false;
 
-  Future<void> _onStatusLongPressStart(
+  final Map<int, GlobalKey> _statusKeys = {
+    1: GlobalKey(),
+    2: GlobalKey(),
+    3: GlobalKey(),
+  };
+
+  bool _isInsideButton(int level, Offset globalPos) {
+    final key = _statusKeys[level];
+    final box = key?.currentContext?.findRenderObject() as RenderBox?;
+    if (box == null) return false;
+    final local = box.globalToLocal(globalPos);
+    return local.dx >= 0 &&
+        local.dy >= 0 &&
+        local.dx <= box.size.width &&
+        local.dy <= box.size.height;
+  }
+
+  Future<void> _onPointerDown(
+    PointerDownEvent event,
     VideoPlayerProvider provider,
     CheckerCheckTaskModel task,
-    int level,
   ) async {
-    if (task.status == level) return;
+    // Qaysi button bosilganini topish
+    for (final level in [1, 2, 3]) {
+      if (_isInsideButton(level, event.position)) {
+        if (task.status == level) return; // allaqachon tanlangan
 
-    _longPressLevel = level;
-    _isCancelledBySwipe = false;
+        _activeLevel = level;
+        _pointerStatus = 1; // inside
+        _recorderReady = false;
+        _pendingSend = false;
+        setState(() {});
 
-    // Avval statusni o'zgartir
-    await provider.updateTaskStatus(task.taskId, level, task.date);
+        // Statusni o'zgartir
+        provider.updateTaskStatus(task.taskId, level, task.date);
 
-    // Keyin recording boshlash (1 va 2 uchun)
-    if ((level == 1 || level == 2) && !_isRecording && !_isSending) {
-      provider.consumeRecordingSignal();
-      await _startRecording(provider);
+        // Yashil (3) uchun recording yo'q
+        if (level == 3) return;
+
+        // Qizil/sariq — recording boshlash
+        if (!_isRecording && !_isSending) {
+          provider.consumeRecordingSignal();
+          await _startRecording(provider);
+          _recorderReady = true;
+
+          // Agar pointer allaqachon ko'tarilgan bo'lsa
+          if (_pendingSend) {
+            _pendingSend = false;
+            if (_pointerStatus == 1) {
+              // Button ichida qo'yib yuborilgan — auto send
+              await Future.delayed(const Duration(milliseconds: 500));
+              await _stopSendAndNext(provider);
+            }
+            // Status 2 (tashqarida) bo'lsa — recording davom etadi
+          }
+        }
+        return;
+      }
     }
   }
 
-  void _onStatusLongPressMove(LongPressMoveUpdateDetails details) {
-    if (!_isRecording) return;
+  void _onPointerMove(PointerMoveEvent event, CheckerCheckTaskModel task) {
+    if (_activeLevel == null || _activeLevel == 3) return;
 
-    // Tepaga 80px dan ko'p surasa → cancel ko'rsatish
-    final dy = _dragStartY - details.globalPosition.dy;
-    if (dy > 80 && !_isCancelledBySwipe) {
-      _isCancelledBySwipe = true;
-      setState(() {}); // UI yangilash — "Bekor qilish ↑" ko'rsatish
-    } else if (dy <= 80 && _isCancelledBySwipe) {
-      _isCancelledBySwipe = false;
+    final inside = _isInsideButton(_activeLevel!, event.position);
+
+    if (inside && _pointerStatus != 1) {
+      _pointerStatus = 1;
+      setState(() {});
+    } else if (!inside && _pointerStatus != 2) {
+      _pointerStatus = 2; // tashqariga chiqdi — recording davom etadi
       setState(() {});
     }
   }
 
-  Future<void> _onStatusLongPressEnd(VideoPlayerProvider provider) async {
-    _longPressLevel = null;
+  Future<void> _onPointerUp(
+    PointerUpEvent event,
+    VideoPlayerProvider provider,
+  ) async {
+    final level = _activeLevel;
+    final status = _pointerStatus;
 
-    if (!_isRecording) return;
+    _activeLevel = null;
+    _pointerStatus = 0;
+    setState(() {});
 
-    if (_isCancelledBySwipe) {
-      // Tepaga surilgan — bekor qilish
-      _isCancelledBySwipe = false;
-      await _cancelRecording();
-    } else {
-      // Normal qo'yib yuborish — yuborish + keyingi video
+    if (level == null || level == 3) return;
+    if (!_isRecording) {
+      // Recorder hali tayyor bo'lmasa
+      if (_recorderReady == false) {
+        _pendingSend = true;
+      }
+      return;
+    }
+
+    if (status == 1) {
+      // ── Button ichida qo'yib yuborildi → auto yuborish + keyingi ────
       await _stopSendAndNext(provider);
     }
+    // Status 2 — tashqariga chiqqan, recording davom etadi
+    // Foydalanuvchi send/delete tugmalardan foydalanadi
   }
 
   /// Yuborish va keyingi videoga o'tish
@@ -896,19 +974,18 @@ class _CircleVideoPlayerBodyState extends State<_CircleVideoPlayerBody>
     _recordTimer = null;
 
     final path = await _recorder.stop();
+    _recorderReady = false;
     setState(() => _isRecording = false);
 
-    if (path == null || _recordSeconds < 1) {
-      if (path != null) {
-        try {
-          File(path).deleteSync();
-        } catch (_) {}
-      }
-      return;
-    }
+    if (path == null) return;
 
     final file = File(path);
-    if (!await file.exists()) return;
+    if (!await file.exists() || await file.length() < 100) {
+      try {
+        file.deleteSync();
+      } catch (_) {}
+      return;
+    }
 
     final task = provider.currentTask;
     if (task == null) return;
@@ -949,6 +1026,9 @@ class _CircleVideoPlayerBodyState extends State<_CircleVideoPlayerBody>
   }
 
   Widget _buildRecordingRow(VideoPlayerProvider provider) {
+    // Status 2: tashqariga chiqqan — send/delete ko'rsatish
+    final bool showManualControls = _pointerStatus == 0 && _isRecording;
+
     return Row(
       children: [
         AnimatedBuilder(
@@ -972,18 +1052,57 @@ class _CircleVideoPlayerBodyState extends State<_CircleVideoPlayerBody>
           ),
         ),
         SizedBox(width: _isTablet ? 8 : 5),
-        Expanded(
-          child: Text(
-            _isCancelledBySwipe ? '↑ Bekor qilish' : 'Qo\'yib yuboring →',
-            style: TextStyle(
-              fontSize: _recordingSubFontSize,
-              color: _isCancelledBySwipe ? Colors.red : Colors.white70,
-              fontWeight: _isCancelledBySwipe
-                  ? FontWeight.bold
-                  : FontWeight.normal,
+
+        if (showManualControls) ...[
+          // Tashqariga chiqilgan — send/delete tugmalar
+          const Spacer(),
+          GestureDetector(
+            onTap: _cancelRecording,
+            child: Container(
+              width: _circleButtonSize,
+              height: _circleButtonSize,
+              decoration: const BoxDecoration(
+                color: Colors.white24,
+                shape: BoxShape.circle,
+              ),
+              child: Icon(
+                Icons.delete_outline,
+                size: _isTablet ? 25 : 18,
+                color: Colors.white70,
+              ),
             ),
           ),
-        ),
+          SizedBox(width: _isTablet ? 32 : 12),
+          GestureDetector(
+            onTap: () => _stopSendAndNext(provider),
+            child: Container(
+              width: _circleButtonSize,
+              height: _circleButtonSize,
+              decoration: const BoxDecoration(
+                color: Color(0xFF4CAF50),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(
+                Icons.send_rounded,
+                size: _sendIconSize,
+                color: Colors.white,
+              ),
+            ),
+          ),
+        ] else ...[
+          // Bosib turilmoqda — hint
+          Expanded(
+            child: Text(
+              _pointerStatus == 2
+                  ? '↑ Tepaga — davom etadi'
+                  : 'Qo\'yib yuboring →',
+              style: TextStyle(
+                fontSize: _recordingSubFontSize,
+                color: _pointerStatus == 2 ? Colors.orange : Colors.white70,
+              ),
+            ),
+          ),
+        ],
       ],
     );
   }
@@ -1016,77 +1135,60 @@ class _CircleVideoPlayerBodyState extends State<_CircleVideoPlayerBody>
     VideoPlayerProvider provider,
     CheckerCheckTaskModel task,
   ) {
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        _statusCircleButton(provider, task, 3, Colors.green),
-        SizedBox(width: _statusGap),
-        _statusCircleButton(provider, task, 2, Colors.orange),
-        SizedBox(width: _statusGap),
-        _statusCircleButton(provider, task, 1, Colors.red),
-      ],
+    return Listener(
+      onPointerDown: (e) => _onPointerDown(e, provider, task),
+      onPointerMove: (e) => _onPointerMove(e, task),
+      onPointerUp: (e) => _onPointerUp(e, provider),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          _statusCircle(task, 3, Colors.green),
+          SizedBox(width: _statusGap),
+          _statusCircle(task, 2, Colors.orange),
+          SizedBox(width: _statusGap),
+          _statusCircle(task, 1, Colors.red),
+        ],
+      ),
     );
   }
 
-  Widget _statusCircleButton(
-    VideoPlayerProvider provider,
+  Widget _statusCircle(
     CheckerCheckTaskModel task,
     int level,
     Color activeColor,
   ) {
     final bool isActive = task.status == level;
-    final bool isHolding = _longPressLevel == level && _isRecording;
+    final bool isHolding = _activeLevel == level && _pointerStatus > 0;
 
-    return GestureDetector(
-      // Oddiy tap — faqat status o'zgartirish (yashil uchun va recording kerak bo'lmaganda)
-      onTap: () async {
-        if (task.status != level && level == 3) {
-          await provider.updateTaskStatus(task.taskId, level, task.date);
-        }
-      },
-      // Long press — status + recording (qizil va sariq uchun)
-      onLongPressStart: (level == 1 || level == 2)
-          ? (details) {
-              _dragStartY = details.globalPosition.dy;
-              _onStatusLongPressStart(provider, task, level);
-            }
-          : null,
-      onLongPressMoveUpdate: (level == 1 || level == 2)
-          ? _onStatusLongPressMove
-          : null,
-      onLongPressEnd: (level == 1 || level == 2)
-          ? (_) => _onStatusLongPressEnd(provider)
-          : null,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 150),
-        width: isHolding ? _statusCircleSize + 6 : _statusCircleSize,
-        height: isHolding ? _statusCircleSize + 6 : _statusCircleSize,
-        decoration: BoxDecoration(
-          shape: BoxShape.circle,
-          color: isActive || isHolding ? activeColor : Colors.grey.shade300,
-          border: Border.all(
-            color: isActive || isHolding ? activeColor : Colors.grey,
-            width: isHolding ? 3 : 2,
-          ),
-          boxShadow: isActive || isHolding
-              ? [
-                  BoxShadow(
-                    color: activeColor.withOpacity(0.4),
-                    blurRadius: isHolding ? 8 : 4,
-                  ),
-                ]
-              : [],
+    return Container(
+      key: _statusKeys[level],
+      width: isHolding ? _statusCircleSize + 6 : _statusCircleSize,
+      height: isHolding ? _statusCircleSize + 6 : _statusCircleSize,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        color: isActive || isHolding ? activeColor : Colors.grey.shade300,
+        border: Border.all(
+          color: isActive || isHolding ? activeColor : Colors.grey,
+          width: isHolding ? 3 : 2,
         ),
-        child: isActive
-            ? Icon(Icons.check, size: _statusIconSize, color: Colors.white)
-            : (level != 3
-                  ? Icon(
-                      Icons.mic_rounded,
-                      size: _statusIconSize - 2,
-                      color: Colors.white70,
-                    )
-                  : null),
+        boxShadow: isActive || isHolding
+            ? [
+                BoxShadow(
+                  color: activeColor.withOpacity(0.4),
+                  blurRadius: isHolding ? 8 : 4,
+                ),
+              ]
+            : [],
       ),
+      child: isActive
+          ? Icon(Icons.check, size: _statusIconSize, color: Colors.white)
+          : (level != 3
+                ? Icon(
+                    Icons.mic_rounded,
+                    size: _statusIconSize - 2,
+                    color: Colors.black,
+                  )
+                : null),
     );
   }
 }

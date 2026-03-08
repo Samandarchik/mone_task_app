@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:mone_task_app/admin/provider/admin_tasks_provider.dart';
@@ -6,6 +7,8 @@ import 'package:mone_task_app/admin/ui/audio_task_row.dart';
 import 'package:mone_task_app/checker/model/checker_check_task_model.dart';
 import 'package:mone_task_app/utils/get_color.dart';
 import 'package:provider/provider.dart';
+import 'package:record/record.dart';
+import 'package:path_provider/path_provider.dart';
 
 class AdminTaskListItem extends StatefulWidget {
   final int index;
@@ -42,6 +45,11 @@ class _AdminTaskListItemState extends State<AdminTaskListItem>
   late CheckerCheckTaskModel task;
   late AnimationController _pulseController;
 
+  // ── Audio recording ───────────────────────────────────────────────────────
+  final AudioRecorder _recorder = AudioRecorder();
+  bool _isRecording = false;
+  String? _recordedPath;
+
   @override
   void initState() {
     super.initState();
@@ -63,6 +71,7 @@ class _AdminTaskListItemState extends State<AdminTaskListItem>
   @override
   void dispose() {
     _pulseController.dispose();
+    _recorder.dispose();
     super.dispose();
   }
 
@@ -156,8 +165,10 @@ class _AdminTaskListItemState extends State<AdminTaskListItem>
             if (showBadge && task.videoUrl != null && task.videoUrl!.isNotEmpty)
               _buildVideoStatusBadge(),
             const SizedBox(width: 8),
-            if (task.videoUrl != null && task.videoUrl!.isNotEmpty)
-              buildStatusIndicator(task.status),
+            buildStatusIndicator(
+              task.status,
+              hasVideo: task.videoUrl != null && task.videoUrl!.isNotEmpty,
+            ),
           ],
         ),
         // ── AudioTaskRow ──────────────────────────────────────────────────
@@ -242,43 +253,127 @@ class _AdminTaskListItemState extends State<AdminTaskListItem>
 
   // ── Status indicator ──────────────────────────────────────────────────────
 
-  Widget buildStatusIndicator(int status) {
+  Widget buildStatusIndicator(int? status, {bool hasVideo = true}) {
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        _statusCircleButton(3, status, Colors.green),
+        _statusCircleButton(3, status, Colors.green, enabled: hasVideo),
         const SizedBox(width: 30),
-        _statusCircleButton(2, status, Colors.orange),
+        _statusCircleButton(2, status, Colors.orange, enabled: hasVideo),
         const SizedBox(width: 30),
-        _statusCircleButton(1, status, Colors.red),
+        _statusCircleButton(1, status, Colors.red, enabled: hasVideo),
+        const SizedBox(width: 30),
+        _buildRecordButton(),
       ],
     );
   }
 
-  Widget _statusCircleButton(int level, int currentStatus, Color activeColor) {
-    final bool isActive = currentStatus >= level;
+  // ── Audio record button ───────────────────────────────────────────────────
 
+  Widget _buildRecordButton() {
     return GestureDetector(
-      onTap: () async {
-        if (currentStatus != level) {
-          final tasksProvider = context.read<AdminTasksProvider>();
-          final bool isSuccess = await tasksProvider.updateTaskStatus(
-            task.taskId,
-            level,
-            widget.selectedDate,
-          );
-          if (isSuccess && mounted) {
-            setState(() => task.status = level);
-          }
-        }
-      },
+      onTap: _toggleRecording,
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 100),
         width: 40,
         height: 40,
         decoration: BoxDecoration(
           shape: BoxShape.circle,
-          color: isActive ? activeColor : Colors.grey.shade300,
+          color: _isRecording ? Colors.red : Colors.transparent,
+          border: Border.all(
+            color: _isRecording ? Colors.red : Colors.grey,
+            width: 2,
+          ),
+          boxShadow: _isRecording
+              ? [BoxShadow(color: Colors.red.withOpacity(0.4), blurRadius: 4)]
+              : [],
+        ),
+        child: Icon(
+          _isRecording ? Icons.stop : Icons.mic,
+          size: 20,
+          color: _isRecording ? Colors.white : Colors.grey,
+        ),
+      ),
+    );
+  }
+
+  Future<void> _toggleRecording() async {
+    if (_isRecording) {
+      // ── To'xtatish ────────────────────────────────────────────────────────
+      final path = await _recorder.stop();
+      if (mounted) {
+        setState(() {
+          _isRecording = false;
+          _recordedPath = path;
+        });
+      }
+      if (path != null) {
+        _onRecordingDone(path);
+      }
+    } else {
+      // ── Boshlash ──────────────────────────────────────────────────────────
+      final hasPermission = await _recorder.hasPermission();
+      if (!hasPermission) return;
+
+      final dir = await getTemporaryDirectory();
+      final filePath =
+          '${dir.path}/audio_${task.taskId}_${DateTime.now().millisecondsSinceEpoch}.m4a';
+
+      await _recorder.start(
+        const RecordConfig(encoder: AudioEncoder.aacLc, bitRate: 128000),
+        path: filePath,
+      );
+
+      if (mounted) {
+        setState(() => _isRecording = true);
+      }
+    }
+  }
+
+  /// Yozib olingan audio bilan nima qilishni shu yerda belgilang.
+  /// Masalan: serverga yuklash yoki providerga uzatish.
+  void _onRecordingDone(String path) {
+    // TODO: audio faylini serverga yuklash
+    // context.read<AdminTasksProvider>().uploadAudio(task.taskId, path, widget.selectedDate);
+    debugPrint('Audio yozildi: $path');
+  }
+
+  Widget _statusCircleButton(
+    int level,
+    int? currentStatus,
+    Color activeColor, {
+    bool enabled = true,
+  }) {
+    final bool isActive = currentStatus == level;
+    final bool isNull = currentStatus == null;
+
+    return GestureDetector(
+      onTap: enabled
+          ? () async {
+              if (currentStatus != level) {
+                final tasksProvider = context.read<AdminTasksProvider>();
+                final bool isSuccess = await tasksProvider.updateTaskStatus(
+                  task.taskId,
+                  level,
+                  widget.selectedDate,
+                );
+                if (isSuccess && mounted) {
+                  setState(() => task.status = level);
+                }
+              }
+            }
+          : null,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 100),
+        width: 40,
+        height: 40,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          color: isActive
+              ? activeColor
+              : isNull
+              ? Colors.transparent
+              : Colors.grey.shade300,
           border: Border.all(
             color: isActive ? activeColor : Colors.grey,
             width: 2,
@@ -287,8 +382,10 @@ class _AdminTaskListItemState extends State<AdminTaskListItem>
               ? [BoxShadow(color: activeColor.withOpacity(0.4), blurRadius: 4)]
               : [],
         ),
-        child: isActive
+        child: isActive && enabled
             ? const Icon(Icons.check, size: 20, color: Colors.white)
+            : isNull && enabled
+            ? const Icon(Icons.check, size: 20, color: Colors.grey)
             : null,
       ),
     );

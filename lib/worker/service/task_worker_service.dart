@@ -19,8 +19,8 @@ class TaskWorkerService {
       ).format(date ?? DateTime.now());
       final response = await _dio.get(
         AppUrls.tasks,
-        // queryParameters: {'date': dateStr},
-        queryParameters: {'date': "2026-03-05"},
+        queryParameters: {'date': dateStr},
+        // queryParameters: {'date': "2026-03-05"},
       );
 
       if (response.data == null) {

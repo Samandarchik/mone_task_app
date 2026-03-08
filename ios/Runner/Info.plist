@@ -2,20 +2,39 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
+	<!-- Firebase: proxy o'chirilgan (Manuel AppDelegate ishlatilganda) -->
 	<key>FirebaseAppDelegateProxyEnabled</key>
-	<true/>
+	<false/>
+	<!-- Push notification uchun background mode -->
 	<key>UIBackgroundModes</key>
 	<array>
 		<string>remote-notification</string>
 	</array>
+
+	<!-- Kamera va mikrofon ruxsatlari -->
 	<key>NSCameraUsageDescription</key>
 	<string>Камера необходима для записи видео с выполнением заданий, которое отправляется проверяющему</string>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>Микрофон необходим для записи звукового видео с выполнением заданий, которое отправляется проверяющему</string>
+	<!-- ProMotion display (120fps) -->
 	<key>CADisableMinimumFrameDurationOnPhone</key>
 	<true/>
-	<key>FirebaseAppDelegateProxyEnabled</key>
-	<false/>
+	<!-- Deep link: Custom URL Scheme (fallback) -->
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleTypeRole</key>
+			<string>Editor</string>
+			<key>CFBundleURLName</key>
+			<string>com.monebakery.taskApp</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>monetask</string>
+			</array>
+		</dict>
+	</array>
+
+	<!-- Bundle info -->
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
 	<key>CFBundleDisplayName</key>
@@ -36,6 +55,8 @@
 	<string>????</string>
 	<key>CFBundleVersion</key>
 	<string>$(FLUTTER_BUILD_NUMBER)</string>
+
+	<!-- iOS requirements -->
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
 	<key>UIApplicationSupportsIndirectInputEvents</key>
@@ -44,6 +65,8 @@
 	<string>LaunchScreen</string>
 	<key>UIMainStoryboardFile</key>
 	<string>Main</string>
+
+	<!-- Orientation -->
 	<key>UISupportedInterfaceOrientations</key>
 	<array>
 		<string>UIInterfaceOrientationPortrait</string>

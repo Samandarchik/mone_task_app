@@ -3,12 +3,10 @@ import 'dart:io';
 
 import 'package:audioplayers/audioplayers.dart';
 import 'package:flutter/material.dart';
-import 'package:mone_task_app/admin/provider/video_player_provider.dart';
 import 'package:mone_task_app/checker/model/checker_check_task_model.dart';
 import 'package:mone_task_app/checker/service/task_worker_service.dart';
 import 'package:mone_task_app/core/constants/urls.dart';
 import 'package:path_provider/path_provider.dart';
-import 'package:provider/provider.dart';
 import 'package:record/record.dart';
 
 class AudioTaskRow extends StatefulWidget {
@@ -34,6 +32,14 @@ class _AudioTaskRowState extends State<AudioTaskRow>
   int _recordSeconds = 0;
   Timer? _recordTimer;
   late AnimationController _pulseCtrl;
+
+  // long press tugaganda recording tayyor bo'lmagan bo'lsa kutish
+  bool _pendingSend = false;
+  bool _recorderReady = false; // recorder haqiqatan yozayaptimi
+
+  // Telegram style swipe up cancel
+  double _dragStartY = 0;
+  bool _isCancelledBySwipe = false;
 
   // ── Player ────────────────────────────────────────────────────────────────
   final AudioPlayer _player = AudioPlayer();
@@ -80,31 +86,6 @@ class _AudioTaskRowState extends State<AudioTaskRow>
     _durationSub = _player.onDurationChanged.listen((d) {
       if (mounted) setState(() => _duration = d);
     });
-  }
-
-  @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    _checkRecordingSignal();
-  }
-
-  void _checkRecordingSignal() {
-    try {
-      final provider = context.read<VideoPlayerProvider>();
-      final currentTask = provider.currentTask;
-
-      if (provider.shouldStartRecording &&
-          currentTask != null &&
-          currentTask.taskId == widget.task.taskId &&
-          !_isRecording &&
-          !_isSending &&
-          _canRecord) {
-        provider.consumeRecordingSignal();
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (mounted) _startRecording();
-        });
-      }
-    } catch (_) {}
   }
 
   @override
@@ -165,18 +146,21 @@ class _AudioTaskRowState extends State<AudioTaskRow>
     await _player.seek(pos);
   }
 
-  // ── Recorder actions ──────────────────────────────────────────────────────
+  // ── Recording — Telegram style ────────────────────────────────────────────
 
-  Future<void> _startRecording() async {
-    // Allaqachon yozilmoqda bo'lsa qaytamiz
-    if (_isRecording) return;
+  Future<void> _onLongPressStart(LongPressStartDetails details) async {
+    _dragStartY = details.globalPosition.dy;
+    _isCancelledBySwipe = false;
+    _pendingSend = false;
+    _recorderReady = false;
 
-    // MUHIM: darhol true qilamiz — onLongPressEnd race condition oldini olish uchun
-    if (mounted) setState(() => _isRecording = true);
+    // UI ni darhol yangilaymiz
+    setState(() => _isRecording = true);
 
+    // Permission tekshirish
     if (!await _recorder.hasPermission()) {
-      if (mounted) setState(() => _isRecording = false);
       if (mounted) {
+        setState(() => _isRecording = false);
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Mikrofon ruxsati berilmagan')),
         );
@@ -184,7 +168,6 @@ class _AudioTaskRowState extends State<AudioTaskRow>
       return;
     }
 
-    // Playerni to'xtatamiz
     await _player.stop();
 
     final dir = await getTemporaryDirectory();
@@ -196,10 +179,49 @@ class _AudioTaskRowState extends State<AudioTaskRow>
       path: path,
     );
 
+    _recorderReady = true;
     _recordSeconds = 0;
     _recordTimer = Timer.periodic(const Duration(seconds: 1), (_) {
       if (mounted) setState(() => _recordSeconds++);
     });
+
+    // Agar long press allaqachon tugagan bo'lsa (juda tez qo'yib yuborilgan)
+    if (_pendingSend) {
+      _pendingSend = false;
+      if (_isCancelledBySwipe) {
+        await _cancelRecording();
+      } else {
+        await _stopAndSend();
+      }
+    }
+  }
+
+  void _onLongPressMoveUpdate(LongPressMoveUpdateDetails details) {
+    if (!_isRecording) return;
+
+    final dy = _dragStartY - details.globalPosition.dy;
+    if (dy > 80 && !_isCancelledBySwipe) {
+      _isCancelledBySwipe = true;
+      setState(() {});
+    } else if (dy <= 80 && _isCancelledBySwipe) {
+      _isCancelledBySwipe = false;
+      setState(() {});
+    }
+  }
+
+  Future<void> _onLongPressEnd(LongPressEndDetails details) async {
+    // Recorder hali tayyor bo'lmasa — kutamiz
+    if (!_recorderReady) {
+      _pendingSend = true;
+      return;
+    }
+
+    if (_isCancelledBySwipe) {
+      _isCancelledBySwipe = false;
+      await _cancelRecording();
+    } else {
+      await _stopAndSend();
+    }
   }
 
   Future<void> _stopAndSend() async {
@@ -208,6 +230,7 @@ class _AudioTaskRowState extends State<AudioTaskRow>
     _recordTimer = null;
 
     final path = await _recorder.stop();
+    _recorderReady = false;
     if (mounted) setState(() => _isRecording = false);
 
     if (path == null || _recordSeconds < 1) {
@@ -231,8 +254,8 @@ class _AudioTaskRowState extends State<AudioTaskRow>
         widget.selectedDate,
       );
 
-      if (success) {
-        if (mounted) setState(() => _localAudioUrl = path);
+      if (success && mounted) {
+        setState(() => _localAudioUrl = path);
       }
 
       if (mounted) {
@@ -240,6 +263,7 @@ class _AudioTaskRowState extends State<AudioTaskRow>
           SnackBar(
             content: Text(success ? 'Audio yuborildi ✓' : 'Xato yuz berdi'),
             backgroundColor: success ? Colors.green : Colors.red,
+            duration: const Duration(milliseconds: 800),
           ),
         );
       }
@@ -258,6 +282,7 @@ class _AudioTaskRowState extends State<AudioTaskRow>
     _recordTimer?.cancel();
     _recordTimer = null;
     await _recorder.stop();
+    _recorderReady = false;
     if (mounted) setState(() => _isRecording = false);
   }
 
@@ -266,8 +291,6 @@ class _AudioTaskRowState extends State<AudioTaskRow>
   @override
   Widget build(BuildContext context) {
     if (!_canRecord) return const SizedBox.shrink();
-
-    _checkRecordingSignal();
 
     if (_isSending) return _buildSending();
     if (_isRecording) return _buildRecording();
@@ -279,8 +302,9 @@ class _AudioTaskRowState extends State<AudioTaskRow>
 
   Widget _buildMicButton() {
     return GestureDetector(
-      onLongPressStart: (_) => _startRecording(),
-      onLongPressEnd: (_) => _stopAndSend(),
+      onLongPressStart: _onLongPressStart,
+      onLongPressMoveUpdate: _onLongPressMoveUpdate,
+      onLongPressEnd: _onLongPressEnd,
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
         decoration: BoxDecoration(
@@ -333,32 +357,15 @@ class _AudioTaskRowState extends State<AudioTaskRow>
             ),
           ),
           const SizedBox(width: 6),
-          const Expanded(
+          Expanded(
             child: Text(
-              'Yozilmoqda...',
-              style: TextStyle(fontSize: 12, color: Colors.red),
-            ),
-          ),
-          GestureDetector(
-            onTap: _cancelRecording,
-            child: const Padding(
-              padding: EdgeInsets.all(12),
-              child: Icon(Icons.delete_outline, size: 30, color: Colors.grey),
-            ),
-          ),
-          const SizedBox(width: 35),
-          GestureDetector(
-            onTap: _stopAndSend,
-            child: Container(
-              padding: const EdgeInsets.all(6),
-              decoration: const BoxDecoration(
-                color: Color(0xFF4CAF50),
-                shape: BoxShape.circle,
-              ),
-              child: const Icon(
-                Icons.send_rounded,
-                size: 16,
-                color: Colors.white,
+              _isCancelledBySwipe ? '↑ Bekor qilish' : 'Qo\'yib yuboring →',
+              style: TextStyle(
+                fontSize: 12,
+                color: _isCancelledBySwipe ? Colors.red : Colors.black54,
+                fontWeight: _isCancelledBySwipe
+                    ? FontWeight.bold
+                    : FontWeight.normal,
               ),
             ),
           ),
@@ -472,10 +479,10 @@ class _AudioTaskRowState extends State<AudioTaskRow>
           ),
           if (_canRecord) ...[
             const SizedBox(width: 4),
-            // ── Qayta yozib olish tugmasi ─────────────────────────────────
             GestureDetector(
-              onLongPressStart: (_) => _startRecording(),
-              onLongPressEnd: (_) => _stopAndSend(),
+              onLongPressStart: _onLongPressStart,
+              onLongPressMoveUpdate: _onLongPressMoveUpdate,
+              onLongPressEnd: _onLongPressEnd,
               child: Container(
                 width: 32,
                 height: 32,

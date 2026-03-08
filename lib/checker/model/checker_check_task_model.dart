@@ -7,7 +7,7 @@ class CheckerCheckTaskModel {
   String? date;
   int type;
   int filialId;
-  int status;
+  int? status;
   String? notificationTime;
   String? videoUrl;
   String? checkerAudioUrl;
@@ -18,7 +18,7 @@ class CheckerCheckTaskModel {
     required this.task,
     required this.type,
     required this.filialId,
-    required this.status,
+    this.status,
     this.notificationTime,
     this.videoUrl,
     this.days,

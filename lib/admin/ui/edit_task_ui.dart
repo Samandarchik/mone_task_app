@@ -282,7 +282,12 @@ class _EditTaskUiState extends State<EditTaskUi> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text("Задачи редактирования")),
+      appBar: AppBar(
+        title: const Text("Задачи редактирования"),
+        actions: [
+          IconButton(onPressed: () {}, icon: Icon(Icons.delete_outline)),
+        ],
+      ),
       body: SingleChildScrollView(
         child: Padding(
           padding: const EdgeInsets.all(16.0),
