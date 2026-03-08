@@ -52,7 +52,6 @@ class CircleVideoPlayer extends StatelessWidget {
 
 class _CircleVideoPlayerBody extends StatefulWidget {
   final DateTime selectedDate;
-
   const _CircleVideoPlayerBody({required this.selectedDate});
 
   @override
@@ -83,9 +82,20 @@ class _CircleVideoPlayerBodyState extends State<_CircleVideoPlayerBody>
 
   String? _localAudioUrl;
 
+  // ── Status button Listener ────────────────────────────────────────────────
+  int? _pressedLevel;
+  bool _pressedInside = true;
+
+  final Map<int, GlobalKey> _statusKeys = {
+    1: GlobalKey(),
+    2: GlobalKey(),
+    3: GlobalKey(),
+  };
+
   @override
   void initState() {
     super.initState();
+
     _animationController = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 300),
@@ -97,17 +107,16 @@ class _CircleVideoPlayerBodyState extends State<_CircleVideoPlayerBody>
     )..repeat(reverse: true);
 
     _playerStateSub = _audioPlayer.onPlayerStateChanged.listen((s) {
-      if (mounted) {
-        setState(() {
-          _isAudioPlaying = s == PlayerState.playing;
-          if (s == PlayerState.completed) {
-            _isAudioCompleted = true;
-            _audioPosition = Duration.zero;
-          } else if (s == PlayerState.playing) {
-            _isAudioCompleted = false;
-          }
-        });
-      }
+      if (!mounted) return;
+      setState(() {
+        _isAudioPlaying = s == PlayerState.playing;
+        if (s == PlayerState.completed) {
+          _isAudioCompleted = true;
+          _audioPosition = Duration.zero;
+        } else if (s == PlayerState.playing) {
+          _isAudioCompleted = false;
+        }
+      });
     });
     _positionSub = _audioPlayer.onPositionChanged.listen((p) {
       if (mounted) setState(() => _audioPosition = p);
@@ -130,34 +139,29 @@ class _CircleVideoPlayerBodyState extends State<_CircleVideoPlayerBody>
     super.dispose();
   }
 
-  // ── Responsive helpers ────────────────────────────────────────────────────
+  // ── Responsive ────────────────────────────────────────────────────────────
 
   bool get _isTablet => MediaQuery.of(context).size.shortestSide >= 600;
-
   double get _iconSizeLarge => _isTablet ? 50.0 : 38.0;
   double get _circleButtonSize => _isTablet ? 45.0 : 34.0;
-  double get _statusCircleSize => _isTablet ? 35.0 : 26.0;
+  double get _statusCircleSize => _isTablet ? 55.0 : 26.0;
   double get _statusIconSize => _isTablet ? 20.0 : 15.0;
-
   double get _audioPlayButtonSize => _isTablet ? 30.0 : 24.0;
   double get _audioPlayIconSize => _isTablet ? 18.0 : 14.0;
   double get _audioMicIconSize => _isTablet ? 16.0 : 12.0;
   double get _audioTimeWidth => _isTablet ? 40.0 : 32.0;
   double get _audioTimeFontSize => _isTablet ? 10.0 : 8.5;
-
   double get _timeFontSize => _isTablet ? 30.0 : 11.0;
   double get _indexFontSize => _isTablet ? 12.0 : 10.0;
-
   double get _statusGap => _isTablet ? 25.0 : 10.0;
   double get _recordingFontSize => _isTablet ? 16.0 : 13.0;
   double get _recordingSubFontSize => _isTablet ? 13.0 : 11.0;
   double get _pulseDotSize => _isTablet ? 12.0 : 9.0;
   double get _sendIconSize => _isTablet ? 18.0 : 14.0;
-
   double get _bottomButtonRadius => _isTablet ? 40.0 : 16.0;
   double get _bottomIconSize => _isTablet ? 48.0 : 18.0;
 
-  // ── Share link ────────────────────────────────────────────────────────────
+  // ── Share ─────────────────────────────────────────────────────────────────
 
   final GlobalKey _shareButtonKey = GlobalKey();
 
@@ -167,15 +171,9 @@ class _CircleVideoPlayerBodyState extends State<_CircleVideoPlayerBody>
     CheckerCheckTaskModel? task,
   ) {
     if (task == null) return;
-
-    // Video ni pause qilish
-    if (provider.isPlaying) {
-      provider.togglePlayPause();
-    }
+    if (provider.isPlaying) provider.togglePlayPause();
 
     final link = 'https://monebakeryuz.uz/${task.date}/${task.taskId}';
-
-    // Share dialog share button oldida ochilsin
     final box =
         _shareButtonKey.currentContext?.findRenderObject() as RenderBox?;
     final Rect sharePosition;
@@ -196,7 +194,6 @@ class _CircleVideoPlayerBodyState extends State<_CircleVideoPlayerBody>
         100,
       );
     }
-
     Share.share(
       '[${task.task}]($link)',
       subject: task.task,
@@ -206,18 +203,16 @@ class _CircleVideoPlayerBodyState extends State<_CircleVideoPlayerBody>
 
   // ── Audio helpers ─────────────────────────────────────────────────────────
 
-  String? _getAudioUrl(CheckerCheckTaskModel? task) {
-    return _localAudioUrl ?? task?.checkerAudioUrl;
-  }
+  String? _getAudioUrl(CheckerCheckTaskModel? task) =>
+      _localAudioUrl ?? task?.checkerAudioUrl;
 
   bool _hasAudio(CheckerCheckTaskModel? task) {
     final url = _getAudioUrl(task);
     return url != null && url.isNotEmpty;
   }
 
-  bool _canRecord(CheckerCheckTaskModel? task) {
-    return task?.videoUrl != null && task!.videoUrl!.isNotEmpty;
-  }
+  bool _canRecord(CheckerCheckTaskModel? task) =>
+      task?.videoUrl != null && task!.videoUrl!.isNotEmpty;
 
   String _fullAudioUrl(String url) {
     if (url.startsWith('http://') || url.startsWith('https://')) return url;
@@ -232,23 +227,23 @@ class _CircleVideoPlayerBodyState extends State<_CircleVideoPlayerBody>
 
   // ── Recording actions ─────────────────────────────────────────────────────
 
-  Future<void> _startRecording(VideoPlayerProvider provider) async {
+  Future<bool> _startRecording(VideoPlayerProvider provider) async {
+    if (_isRecording || _isSending) return false;
+
     if (!await _recorder.hasPermission()) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Mikrofon ruxsati berilmagan')),
         );
       }
-      return;
+      return false;
     }
+
+    final task = provider.currentTask;
+    if (task == null) return false;
 
     if (provider.isPlaying) provider.togglePlayPause();
     await _audioPlayer.stop();
-
-    final task = provider.currentTask;
-    if (task == null) return;
-
-    setState(() => _isRecording = true);
 
     final dir = await getTemporaryDirectory();
     final path =
@@ -263,15 +258,22 @@ class _CircleVideoPlayerBodyState extends State<_CircleVideoPlayerBody>
     _recordTimer = Timer.periodic(const Duration(seconds: 1), (_) {
       if (mounted) setState(() => _recordSeconds++);
     });
+
+    if (mounted) setState(() => _isRecording = true);
+    return true;
   }
 
-  Future<void> _stopAndSend(VideoPlayerProvider provider) async {
+  Future<void> _stopAndSend(
+    VideoPlayerProvider provider, {
+    bool goNext = false,
+  }) async {
     if (!_isRecording) return;
+
     _recordTimer?.cancel();
     _recordTimer = null;
 
     final path = await _recorder.stop();
-    setState(() => _isRecording = false);
+    if (mounted) setState(() => _isRecording = false);
 
     if (path == null) return;
 
@@ -286,7 +288,7 @@ class _CircleVideoPlayerBodyState extends State<_CircleVideoPlayerBody>
     final task = provider.currentTask;
     if (task == null) return;
 
-    setState(() => _isSending = true);
+    if (mounted) setState(() => _isSending = true);
 
     try {
       final success = await AdminTaskService().pushAudio(
@@ -300,6 +302,7 @@ class _CircleVideoPlayerBodyState extends State<_CircleVideoPlayerBody>
           SnackBar(
             content: Text(success ? 'Audio yuborildi ✓' : 'Xato yuz berdi'),
             backgroundColor: success ? Colors.green : Colors.red,
+            duration: const Duration(milliseconds: 800),
           ),
         );
       }
@@ -312,9 +315,15 @@ class _CircleVideoPlayerBodyState extends State<_CircleVideoPlayerBody>
     } finally {
       if (mounted) setState(() => _isSending = false);
     }
+
+    if (goNext && provider.hasNext && mounted) {
+      _localAudioUrl = null;
+      provider.goToNext();
+    }
   }
 
   Future<void> _cancelRecording() async {
+    if (!_isRecording) return;
     _recordTimer?.cancel();
     _recordTimer = null;
     await _recorder.stop();
@@ -344,18 +353,72 @@ class _CircleVideoPlayerBodyState extends State<_CircleVideoPlayerBody>
     await _audioPlayer.play(UrlSource(_fullAudioUrl(audioUrl)));
   }
 
-  void _checkRecordingSignal(VideoPlayerProvider provider) {
-    // Endi long press to'g'ridan-to'g'ri boshqaradi
-    // Signal faqat tashqi (mic button) uchun qoldi
-    if (provider.shouldStartRecording &&
-        !_isRecording &&
-        !_isSending &&
-        _canRecord(provider.currentTask)) {
-      provider.consumeRecordingSignal();
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) _startRecording(provider);
-      });
+  // ── Status Listener callbacks ─────────────────────────────────────────────
+
+  bool _isInsideButton(int level, Offset globalPos) {
+    final box =
+        _statusKeys[level]?.currentContext?.findRenderObject() as RenderBox?;
+    if (box == null) return false;
+    final local = box.globalToLocal(globalPos);
+    return local.dx >= 0 &&
+        local.dy >= 0 &&
+        local.dx <= box.size.width &&
+        local.dy <= box.size.height;
+  }
+
+  Future<void> _onStatusPointerDown(
+    PointerDownEvent event,
+    VideoPlayerProvider provider,
+    CheckerCheckTaskModel task,
+  ) async {
+    int? tappedLevel;
+    for (final level in [1, 2, 3]) {
+      if (_isInsideButton(level, event.position)) {
+        tappedLevel = level;
+        break;
+      }
     }
+    if (tappedLevel == null) return;
+
+    provider.updateTaskStatus(task.taskId, tappedLevel, task.date);
+    setState(() {
+      _pressedLevel = tappedLevel;
+      _pressedInside = true;
+    });
+
+    if (tappedLevel == 3) return;
+
+    if (!_isRecording && !_isSending) {
+      await _startRecording(provider);
+    }
+  }
+
+  void _onStatusPointerMove(PointerMoveEvent event) {
+    if (_pressedLevel == null || _pressedLevel == 3) return;
+    final inside = _isInsideButton(_pressedLevel!, event.position);
+    if (inside != _pressedInside) {
+      setState(() => _pressedInside = inside);
+    }
+  }
+
+  Future<void> _onStatusPointerUp(
+    PointerUpEvent event,
+    VideoPlayerProvider provider,
+  ) async {
+    final level = _pressedLevel;
+    final inside = _pressedInside;
+    setState(() {
+      _pressedLevel = null;
+      _pressedInside = true;
+    });
+
+    if (level == null || level == 3) return;
+    if (!_isRecording) return;
+
+    if (inside) {
+      await _stopAndSend(provider, goNext: false);
+    }
+    // Tashqarida qo'yildi → manual send/delete ko'rinadi
   }
 
   // ── BUILD ─────────────────────────────────────────────────────────────────
@@ -365,25 +428,67 @@ class _CircleVideoPlayerBodyState extends State<_CircleVideoPlayerBody>
     final provider = context.watch<VideoPlayerProvider>();
     final size = MediaQuery.of(context).size;
     final bool isTablet = size.shortestSide >= 600;
+
     final double circleSize = isTablet
         ? size.shortestSide * 0.7
         : size.width * 0.85;
-
     final double arcRadius = circleSize / 2 + 20;
     final double arcStroke = 8.0;
     final double arcBoxSize = (arcRadius + arcStroke) * 2;
-
-    _checkRecordingSignal(provider);
 
     return Scaffold(
       backgroundColor: Colors.transparent,
       body: Stack(
         children: [
-          // ── Main content ───────────────────────────────────────────────
+          // ── Prev ──────────────────────────────────────────────────────
+          Positioned(
+            right: arcBoxSize * 0.25,
+            bottom: arcBoxSize * 0.25,
+            child: GestureDetector(
+              onTap: provider.hasPrev ? provider.goToPrev : null,
+              child: AnimatedOpacity(
+                opacity: provider.hasPrev ? 1.0 : 0.25,
+                duration: const Duration(milliseconds: 200),
+                child: CircleAvatar(
+                  radius: _bottomButtonRadius,
+                  backgroundColor: Colors.black.withOpacity(0.75),
+                  child: Icon(
+                    Icons.arrow_back_ios_new_rounded,
+                    color: Colors.white,
+                    size: _bottomIconSize,
+                  ),
+                ),
+              ),
+            ),
+          ),
+          // ── Next ──────────────────────────────────────────────────────
+          Positioned(
+            right: arcBoxSize * 0.05,
+            bottom: arcBoxSize * 0.25,
+            child: GestureDetector(
+              onTap: provider.hasNext ? provider.goToNext : null,
+              child: AnimatedOpacity(
+                opacity: provider.hasNext ? 1.0 : 0.25,
+                duration: const Duration(milliseconds: 200),
+                child: CircleAvatar(
+                  radius: _bottomButtonRadius,
+                  backgroundColor: Colors.black.withOpacity(0.75),
+                  child: Icon(
+                    Icons.arrow_forward_ios_rounded,
+                    color: Colors.white,
+                    size: _bottomIconSize,
+                  ),
+                ),
+              ),
+            ),
+          ),
+
+          // ── Markaziy kontent ──────────────────────────────────────────
           Center(
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
+                // Vaqt qatori — recording paytida ko'rsatilmaydi
                 _buildTimeRow(provider),
                 _buildVideoCircle(
                   context,
@@ -396,7 +501,7 @@ class _CircleVideoPlayerBodyState extends State<_CircleVideoPlayerBody>
                 if (provider.currentTask?.task != null)
                   Container(
                     decoration: BoxDecoration(
-                      color: Colors.white.withOpacity(0.8),
+                      color: Colors.white,
                       borderRadius: BorderRadius.circular(12),
                     ),
                     padding: const EdgeInsets.symmetric(
@@ -415,25 +520,29 @@ class _CircleVideoPlayerBodyState extends State<_CircleVideoPlayerBody>
                         fontWeight: FontWeight.bold,
                       ),
                       textAlign: TextAlign.center,
-                      maxLines: 2,
                       overflow: TextOverflow.ellipsis,
                     ),
                   ),
-                const SizedBox(height: 8),
-                if (provider.isInitialized && !provider.hasError)
-                  _buildControlPanel(provider, circleSize),
               ],
             ),
           ),
 
-          // ── Bottom: mute + speed (left) | share + close (right) ───────
+          // ── Boshqaruv paneli (audio + status) — video ustida ──────────
+          if (provider.isInitialized && !provider.hasError)
+            Positioned(
+              right: 20,
+              top: 200,
+              bottom: 0,
+              child: Center(child: _buildControlPanel(provider)),
+            ),
+
+          // ── Quyi qator ────────────────────────────────────────────────
           Positioned(
             bottom: MediaQuery.of(context).padding.bottom + 16,
             left: 16,
             right: 16,
             child: Row(
               children: [
-                // Left side
                 if (provider.isInitialized && !provider.hasError) ...[
                   GestureDetector(
                     onTap: provider.toggleMute,
@@ -466,10 +575,7 @@ class _CircleVideoPlayerBodyState extends State<_CircleVideoPlayerBody>
                     ),
                   ),
                 ],
-
                 const Spacer(),
-
-                // Right side: share link + close
                 GestureDetector(
                   key: _shareButtonKey,
                   onTap: () =>
@@ -502,6 +608,324 @@ class _CircleVideoPlayerBodyState extends State<_CircleVideoPlayerBody>
           ),
         ],
       ),
+    );
+  }
+
+  // ── Time row — recording/sending paytida yashiriladi ─────────────────────
+
+  Widget _buildTimeRow(VideoPlayerProvider provider) {
+    if (_isRecording || _isSending) return const SizedBox.shrink();
+
+    final task = provider.currentTask;
+    return Row(
+      children: [
+        Text(
+          '   ${task?.submittedAt?.toLocal().hour.toString().padLeft(2, '0') ?? '00'}:'
+          '${task?.submittedAt?.toLocal().minute.toString().padLeft(2, '0') ?? '00'}   '
+          '${task?.date ?? ''}',
+          style: TextStyle(
+            color: Colors.black,
+            fontSize: _timeFontSize,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+        if (provider.videoUrls.length > 1)
+          Padding(
+            padding: const EdgeInsets.only(right: 8),
+            child: Text(
+              '${provider.currentIndex + 1}/${provider.videoUrls.length}',
+              style: TextStyle(color: Colors.white54, fontSize: _indexFontSize),
+            ),
+          ),
+        Text(
+          provider.formatDuration(provider.duration),
+          style: TextStyle(color: Colors.white70, fontSize: _timeFontSize),
+        ),
+      ],
+    );
+  }
+
+  // ── Control panel: audio TEPADA, status PASTDA, qora fon ─────────────────
+
+  Widget _buildControlPanel(VideoPlayerProvider provider) {
+    final task = provider.currentTask;
+    if (task == null) return const SizedBox.shrink();
+
+    return Container(
+      padding: EdgeInsets.symmetric(
+        horizontal: _isTablet ? 16 : 12,
+        vertical: _isTablet ? 10 : 8,
+      ),
+      decoration: BoxDecoration(
+        color: Colors.black.withOpacity(0.60),
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.end,
+        children: [
+          // ── Yuqori: audio / mic / recording / sending ─────────────────
+          if (_isRecording)
+            _buildRecordingRow(provider)
+          else if (_isSending)
+            _buildSendingRow()
+          else if (_hasAudio(task))
+            _buildMiniAudioPlayer(task, provider)
+          else if (_canRecord(task))
+            GestureDetector(
+              onTap: () => _startRecording(provider),
+              child: Container(
+                width: _circleButtonSize,
+                height: _circleButtonSize,
+                decoration: const BoxDecoration(
+                  color: Colors.white24,
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(
+                  Icons.mic_rounded,
+                  size: _isTablet ? 30 : 18,
+                  color: Colors.white,
+                ),
+              ),
+            ),
+
+          // ── Bo'shliq ─────────────────────────────────────────────────
+          if (!_isRecording && !_isSending)
+            SizedBox(height: _isTablet ? 30 : 7),
+
+          // ── Quyi: status buttonlar ────────────────────────────────────
+          if (!_isRecording && !_isSending)
+            _buildStatusIndicator(provider, task),
+        ],
+      ),
+    );
+  }
+
+  // ── Mini audio player ─────────────────────────────────────────────────────
+
+  Widget _buildMiniAudioPlayer(
+    CheckerCheckTaskModel? task,
+    VideoPlayerProvider provider,
+  ) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        GestureDetector(
+          onTap: () => _toggleAudioPlay(task),
+          child: Container(
+            width: _audioPlayButtonSize,
+            height: _audioPlayButtonSize,
+            decoration: const BoxDecoration(
+              color: Color(0xFF2196F3),
+              shape: BoxShape.circle,
+            ),
+            child: Icon(
+              _isAudioCompleted
+                  ? Icons.replay_rounded
+                  : (_isAudioPlaying
+                        ? Icons.pause_rounded
+                        : Icons.play_arrow_rounded),
+              color: Colors.white,
+              size: _audioPlayIconSize,
+            ),
+          ),
+        ),
+        SizedBox(width: _isTablet ? 6 : 4),
+        SizedBox(
+          width: _audioTimeWidth,
+          child: Text(
+            _isAudioPlaying || _audioPosition > Duration.zero
+                ? _fmt(_audioPosition)
+                : _fmt(_audioDuration),
+            style: TextStyle(
+              color: Colors.white70,
+              fontSize: _audioTimeFontSize,
+            ),
+          ),
+        ),
+        if (_canRecord(task))
+          GestureDetector(
+            onTap: () => _startRecording(provider),
+            child: Padding(
+              padding: EdgeInsets.only(left: _isTablet ? 4 : 2),
+              child: Icon(
+                Icons.mic_rounded,
+                size: _audioMicIconSize,
+                color: Colors.white54,
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+
+  // ── Recording row ─────────────────────────────────────────────────────────
+
+  Widget _buildRecordingRow(VideoPlayerProvider provider) {
+    final bool showManualControls = _pressedLevel == null && _isRecording;
+
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        AnimatedBuilder(
+          animation: _pulseCtrl,
+          builder: (_, __) => Container(
+            width: _pulseDotSize,
+            height: _pulseDotSize,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: Colors.red.withOpacity(0.35 + 0.65 * _pulseCtrl.value),
+            ),
+          ),
+        ),
+        SizedBox(width: _isTablet ? 16 : 5),
+        Text(
+          _fmt(Duration(seconds: _recordSeconds)),
+          style: TextStyle(
+            fontSize: _recordingFontSize,
+            fontWeight: FontWeight.w600,
+            color: Colors.red,
+          ),
+        ),
+        SizedBox(width: _isTablet ? 8 : 5),
+
+        if (showManualControls) ...[
+          SizedBox(width: _isTablet ? 12 : 8),
+          // Bekor qilish
+          GestureDetector(
+            onTap: _cancelRecording,
+            child: Container(
+              width: _circleButtonSize,
+              height: _circleButtonSize,
+              decoration: const BoxDecoration(
+                color: Colors.white24,
+                shape: BoxShape.circle,
+              ),
+              child: Icon(
+                Icons.delete_outline,
+                size: _isTablet ? 25 : 18,
+                color: Colors.white70,
+              ),
+            ),
+          ),
+          SizedBox(width: _isTablet ? 16 : 8),
+          // Yuborish
+          GestureDetector(
+            onTap: () => _stopAndSend(provider, goNext: true),
+            child: Container(
+              width: _circleButtonSize,
+              height: _circleButtonSize,
+              decoration: const BoxDecoration(
+                color: Color(0xFF4CAF50),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(
+                Icons.send_rounded,
+                size: _sendIconSize,
+                color: Colors.white,
+              ),
+            ),
+          ),
+        ] else ...[
+          SizedBox(width: _isTablet ? 8 : 4),
+          Text(
+            _pressedInside ? 'Qo\'yib yuboring →' : '↑ Tepaga — davom etadi',
+            style: TextStyle(
+              fontSize: _recordingSubFontSize,
+              color: _pressedInside ? Colors.white70 : Colors.orange,
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+
+  // ── Sending row ───────────────────────────────────────────────────────────
+
+  Widget _buildSendingRow() {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        SizedBox(
+          width: _isTablet ? 18 : 14,
+          height: _isTablet ? 18 : 14,
+          child: const CircularProgressIndicator(
+            strokeWidth: 2,
+            color: Colors.white,
+          ),
+        ),
+        const SizedBox(width: 10),
+        Text(
+          'Yuborilmoqda...',
+          style: TextStyle(
+            fontSize: _recordingSubFontSize,
+            color: Colors.white70,
+          ),
+        ),
+      ],
+    );
+  }
+
+  // ── Status indicator ──────────────────────────────────────────────────────
+
+  Widget _buildStatusIndicator(
+    VideoPlayerProvider provider,
+    CheckerCheckTaskModel task,
+  ) {
+    return Listener(
+      onPointerDown: (e) => _onStatusPointerDown(e, provider, task),
+      onPointerMove: _onStatusPointerMove,
+      onPointerUp: (e) => _onStatusPointerUp(e, provider),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          _statusCircle(task, 3, Colors.green),
+          SizedBox(width: _statusGap),
+          _statusCircle(task, 2, Colors.orange),
+          SizedBox(width: _statusGap),
+          _statusCircle(task, 1, Colors.red),
+        ],
+      ),
+    );
+  }
+
+  Widget _statusCircle(
+    CheckerCheckTaskModel task,
+    int level,
+    Color activeColor,
+  ) {
+    final bool isActive = task.status == level;
+    final bool isHolding = _pressedLevel == level;
+
+    return Container(
+      key: _statusKeys[level],
+      width: isHolding ? _statusCircleSize + 6 : _statusCircleSize,
+      height: isHolding ? _statusCircleSize + 6 : _statusCircleSize,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        color: isActive || isHolding ? activeColor : Colors.grey.shade300,
+        border: Border.all(
+          color: isActive || isHolding ? activeColor : Colors.grey,
+          width: isHolding ? 3 : 2,
+        ),
+        boxShadow: isActive || isHolding
+            ? [
+                BoxShadow(
+                  color: activeColor.withOpacity(0.4),
+                  blurRadius: isHolding ? 8 : 4,
+                ),
+              ]
+            : [],
+      ),
+      child: isActive
+          ? Icon(Icons.check, size: _statusIconSize, color: Colors.white)
+          : (level != 3
+                ? Icon(
+                    Icons.mic_rounded,
+                    size: _statusIconSize - 2,
+                    color: Colors.black,
+                  )
+                : null),
     );
   }
 
@@ -593,13 +1017,19 @@ class _CircleVideoPlayerBodyState extends State<_CircleVideoPlayerBody>
                       if (provider.isInitialized &&
                           !provider.hasError &&
                           provider.controller != null)
-                        FittedBox(
-                          fit: BoxFit.cover,
-                          child: SizedBox(
-                            width: provider.controller!.value.size.width,
-                            height: provider.controller!.value.size.height,
-                            child: VideoPlayer(provider.controller!),
-                          ),
+                        Builder(
+                          builder: (context) {
+                            final ctrl = provider.controller;
+                            if (ctrl == null) return const SizedBox.shrink();
+                            return FittedBox(
+                              fit: BoxFit.cover,
+                              child: SizedBox(
+                                width: ctrl.value.size.width,
+                                height: ctrl.value.size.height,
+                                child: VideoPlayer(ctrl),
+                              ),
+                            );
+                          },
                         ),
                       if (!provider.isInitialized && !provider.hasError)
                         const Center(
@@ -631,48 +1061,6 @@ class _CircleVideoPlayerBodyState extends State<_CircleVideoPlayerBody>
               ),
             ),
           ),
-          // Prev
-          Positioned(
-            left: -10,
-            bottom: arcBoxSize * 0.02,
-            child: GestureDetector(
-              onTap: provider.hasPrev ? provider.goToPrev : null,
-              child: AnimatedOpacity(
-                opacity: provider.hasPrev ? 1.0 : 0.25,
-                duration: const Duration(milliseconds: 200),
-                child: CircleAvatar(
-                  radius: _bottomButtonRadius,
-                  backgroundColor: Colors.black.withOpacity(0.75),
-                  child: Icon(
-                    Icons.arrow_back_ios_new_rounded,
-                    color: Colors.white,
-                    size: _bottomIconSize,
-                  ),
-                ),
-              ),
-            ),
-          ),
-          // Next
-          Positioned(
-            right: 0,
-            bottom: arcBoxSize * 0.02,
-            child: GestureDetector(
-              onTap: provider.hasNext ? provider.goToNext : null,
-              child: AnimatedOpacity(
-                opacity: provider.hasNext ? 1.0 : 0.25,
-                duration: const Duration(milliseconds: 200),
-                child: CircleAvatar(
-                  radius: _bottomButtonRadius,
-                  backgroundColor: Colors.black.withOpacity(0.75),
-                  child: Icon(
-                    Icons.arrow_forward_ios_rounded,
-                    color: Colors.white,
-                    size: _bottomIconSize,
-                  ),
-                ),
-              ),
-            ),
-          ),
         ],
       ),
     );
@@ -688,7 +1076,7 @@ class _CircleVideoPlayerBodyState extends State<_CircleVideoPlayerBody>
             const Icon(Icons.error_outline, color: Colors.red, size: 48),
             const SizedBox(height: 16),
             const Text(
-              "Video yuklanmadi",
+              'Video yuklanmadi',
               style: TextStyle(
                 color: Colors.white,
                 fontSize: 16,
@@ -709,486 +1097,6 @@ class _CircleVideoPlayerBodyState extends State<_CircleVideoPlayerBody>
           ],
         ),
       ),
-    );
-  }
-
-  // ── Control panel ─────────────────────────────────────────────────────────
-
-  Widget _buildControlPanel(VideoPlayerProvider provider, double circleSize) {
-    return Container(
-      width: circleSize,
-      padding: EdgeInsets.symmetric(
-        horizontal: _isTablet ? 12 : 8,
-        vertical: _isTablet ? 10 : 6,
-      ),
-      decoration: BoxDecoration(
-        color: Colors.black.withOpacity(0.6),
-        borderRadius: BorderRadius.circular(_isTablet ? 20 : 14),
-      ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          // _buildTimeRow(provider), time
-          SizedBox(height: _isTablet ? 4 : 2),
-          if (_isRecording)
-            _buildRecordingRow(provider)
-          else if (_isSending)
-            _buildSendingRow()
-          else
-            _buildControlsRow(provider),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildTimeRow(VideoPlayerProvider provider) {
-    final task = provider.currentTask;
-    return Row(
-      children: [
-        Text(
-          "   ${task?.submittedAt?.toLocal().hour.toString().padLeft(2, '0') ?? '00'}:"
-          "${task?.submittedAt?.toLocal().minute.toString().padLeft(2, '0') ?? '00'}   "
-          "${task?.date ?? ''}",
-          style: TextStyle(
-            color: Colors.black,
-            fontSize: _timeFontSize,
-            fontWeight: FontWeight.bold,
-          ),
-        ),
-        if (provider.videoUrls.length > 1)
-          Padding(
-            padding: const EdgeInsets.only(right: 8),
-            child: Text(
-              '${provider.currentIndex + 1}/${provider.videoUrls.length}',
-              style: TextStyle(color: Colors.white54, fontSize: _indexFontSize),
-            ),
-          ),
-        Text(
-          provider.formatDuration(provider.duration),
-          style: TextStyle(color: Colors.white70, fontSize: _timeFontSize),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildControlsRow(VideoPlayerProvider provider) {
-    final task = provider.currentTask;
-    return Row(
-      children: [
-        const Spacer(),
-        if (_hasAudio(task))
-          _buildMiniAudioPlayer(task)
-        else if (_canRecord(task))
-          GestureDetector(
-            onTap: () => _startRecording(provider),
-            child: Container(
-              width: _circleButtonSize,
-              height: _circleButtonSize,
-              decoration: const BoxDecoration(
-                color: Colors.white24,
-                shape: BoxShape.circle,
-              ),
-              child: Icon(
-                Icons.mic_rounded,
-                size: _isTablet ? 25 : 18,
-                color: Colors.white,
-              ),
-            ),
-          ),
-        SizedBox(width: _isTablet ? 20 : 10),
-        if (task != null) _buildStatusIndicator(provider, task),
-      ],
-    );
-  }
-
-  Widget _buildMiniAudioPlayer(CheckerCheckTaskModel? task) {
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        GestureDetector(
-          onTap: () => _toggleAudioPlay(task),
-          child: Container(
-            width: _audioPlayButtonSize,
-            height: _audioPlayButtonSize,
-            decoration: const BoxDecoration(
-              color: Color(0xFF2196F3),
-              shape: BoxShape.circle,
-            ),
-            child: Icon(
-              _isAudioCompleted
-                  ? Icons.replay_rounded
-                  : (_isAudioPlaying
-                        ? Icons.pause_rounded
-                        : Icons.play_arrow_rounded),
-              color: Colors.white,
-              size: _audioPlayIconSize,
-            ),
-          ),
-        ),
-        SizedBox(width: _isTablet ? 6 : 4),
-        SizedBox(
-          width: _audioTimeWidth,
-          child: Text(
-            _isAudioPlaying || _audioPosition > Duration.zero
-                ? _fmt(_audioPosition)
-                : _fmt(_audioDuration),
-            style: TextStyle(
-              color: Colors.white70,
-              fontSize: _audioTimeFontSize,
-            ),
-          ),
-        ),
-        if (_canRecord(task))
-          GestureDetector(
-            onTap: () => _startRecording(context.read<VideoPlayerProvider>()),
-            child: Padding(
-              padding: EdgeInsets.only(left: _isTablet ? 4 : 2),
-              child: Icon(
-                Icons.mic_rounded,
-                size: _audioMicIconSize,
-                color: Colors.white54,
-              ),
-            ),
-          ),
-      ],
-    );
-  }
-
-  // ── Listener-based status + recording ──────────────────────────────────
-  // Status 1: button ichida bosib qo'yib yuborish → auto yuborish
-  // Status 2: buttondan tepaga chiqish → recording davom, send/delete chiqadi
-  // Status 3: pointer up
-
-  int _pointerStatus = 0; // 0=idle, 1=inside, 2=outside(recording continues)
-  int? _activeLevel; // qaysi button bosilgan
-  bool _recorderReady = false;
-  bool _pendingSend = false;
-
-  final Map<int, GlobalKey> _statusKeys = {
-    1: GlobalKey(),
-    2: GlobalKey(),
-    3: GlobalKey(),
-  };
-
-  bool _isInsideButton(int level, Offset globalPos) {
-    final key = _statusKeys[level];
-    final box = key?.currentContext?.findRenderObject() as RenderBox?;
-    if (box == null) return false;
-    final local = box.globalToLocal(globalPos);
-    return local.dx >= 0 &&
-        local.dy >= 0 &&
-        local.dx <= box.size.width &&
-        local.dy <= box.size.height;
-  }
-
-  Future<void> _onPointerDown(
-    PointerDownEvent event,
-    VideoPlayerProvider provider,
-    CheckerCheckTaskModel task,
-  ) async {
-    // Qaysi button bosilganini topish
-    for (final level in [1, 2, 3]) {
-      if (_isInsideButton(level, event.position)) {
-        if (task.status == level) return; // allaqachon tanlangan
-
-        _activeLevel = level;
-        _pointerStatus = 1; // inside
-        _recorderReady = false;
-        _pendingSend = false;
-        setState(() {});
-
-        // Statusni o'zgartir
-        provider.updateTaskStatus(task.taskId, level, task.date);
-
-        // Yashil (3) uchun recording yo'q
-        if (level == 3) return;
-
-        // Qizil/sariq — recording boshlash
-        if (!_isRecording && !_isSending) {
-          provider.consumeRecordingSignal();
-          await _startRecording(provider);
-          _recorderReady = true;
-
-          // Agar pointer allaqachon ko'tarilgan bo'lsa
-          if (_pendingSend) {
-            _pendingSend = false;
-            if (_pointerStatus == 1) {
-              // Button ichida qo'yib yuborilgan — auto send
-              await Future.delayed(const Duration(milliseconds: 500));
-              await _stopSendAndNext(provider);
-            }
-            // Status 2 (tashqarida) bo'lsa — recording davom etadi
-          }
-        }
-        return;
-      }
-    }
-  }
-
-  void _onPointerMove(PointerMoveEvent event, CheckerCheckTaskModel task) {
-    if (_activeLevel == null || _activeLevel == 3) return;
-
-    final inside = _isInsideButton(_activeLevel!, event.position);
-
-    if (inside && _pointerStatus != 1) {
-      _pointerStatus = 1;
-      setState(() {});
-    } else if (!inside && _pointerStatus != 2) {
-      _pointerStatus = 2; // tashqariga chiqdi — recording davom etadi
-      setState(() {});
-    }
-  }
-
-  Future<void> _onPointerUp(
-    PointerUpEvent event,
-    VideoPlayerProvider provider,
-  ) async {
-    final level = _activeLevel;
-    final status = _pointerStatus;
-
-    _activeLevel = null;
-    _pointerStatus = 0;
-    setState(() {});
-
-    if (level == null || level == 3) return;
-    if (!_isRecording) {
-      // Recorder hali tayyor bo'lmasa
-      if (_recorderReady == false) {
-        _pendingSend = true;
-      }
-      return;
-    }
-
-    if (status == 1) {
-      // ── Button ichida qo'yib yuborildi → auto yuborish + keyingi ────
-      await _stopSendAndNext(provider);
-    }
-    // Status 2 — tashqariga chiqqan, recording davom etadi
-    // Foydalanuvchi send/delete tugmalardan foydalanadi
-  }
-
-  /// Yuborish va keyingi videoga o'tish
-  Future<void> _stopSendAndNext(VideoPlayerProvider provider) async {
-    if (!_isRecording) return;
-    _recordTimer?.cancel();
-    _recordTimer = null;
-
-    final path = await _recorder.stop();
-    _recorderReady = false;
-    setState(() => _isRecording = false);
-
-    if (path == null) return;
-
-    final file = File(path);
-    if (!await file.exists() || await file.length() < 100) {
-      try {
-        file.deleteSync();
-      } catch (_) {}
-      return;
-    }
-
-    final task = provider.currentTask;
-    if (task == null) return;
-
-    setState(() => _isSending = true);
-
-    try {
-      final success = await AdminTaskService().pushAudio(
-        task.taskId,
-        file,
-        widget.selectedDate,
-      );
-      if (success && mounted) setState(() => _localAudioUrl = path);
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(success ? 'Audio yuborildi ✓' : 'Xato yuz berdi'),
-            backgroundColor: success ? Colors.green : Colors.red,
-            duration: const Duration(milliseconds: 800),
-          ),
-        );
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Xato: $e'), backgroundColor: Colors.red),
-        );
-      }
-    } finally {
-      if (mounted) setState(() => _isSending = false);
-    }
-
-    // Keyingi videoga o'tish
-    if (provider.hasNext) {
-      _localAudioUrl = null;
-      provider.goToNext();
-    }
-  }
-
-  Widget _buildRecordingRow(VideoPlayerProvider provider) {
-    // Status 2: tashqariga chiqqan — send/delete ko'rsatish
-    final bool showManualControls = _pointerStatus == 0 && _isRecording;
-
-    return Row(
-      children: [
-        AnimatedBuilder(
-          animation: _pulseCtrl,
-          builder: (_, __) => Container(
-            width: _pulseDotSize,
-            height: _pulseDotSize,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              color: Colors.red.withOpacity(0.35 + 0.65 * _pulseCtrl.value),
-            ),
-          ),
-        ),
-        SizedBox(width: _isTablet ? 8 : 5),
-        Text(
-          _fmt(Duration(seconds: _recordSeconds)),
-          style: TextStyle(
-            fontSize: _recordingFontSize,
-            fontWeight: FontWeight.w600,
-            color: Colors.red,
-          ),
-        ),
-        SizedBox(width: _isTablet ? 8 : 5),
-
-        if (showManualControls) ...[
-          // Tashqariga chiqilgan — send/delete tugmalar
-          const Spacer(),
-          GestureDetector(
-            onTap: _cancelRecording,
-            child: Container(
-              width: _circleButtonSize,
-              height: _circleButtonSize,
-              decoration: const BoxDecoration(
-                color: Colors.white24,
-                shape: BoxShape.circle,
-              ),
-              child: Icon(
-                Icons.delete_outline,
-                size: _isTablet ? 25 : 18,
-                color: Colors.white70,
-              ),
-            ),
-          ),
-          SizedBox(width: _isTablet ? 32 : 12),
-          GestureDetector(
-            onTap: () => _stopSendAndNext(provider),
-            child: Container(
-              width: _circleButtonSize,
-              height: _circleButtonSize,
-              decoration: const BoxDecoration(
-                color: Color(0xFF4CAF50),
-                shape: BoxShape.circle,
-              ),
-              child: Icon(
-                Icons.send_rounded,
-                size: _sendIconSize,
-                color: Colors.white,
-              ),
-            ),
-          ),
-        ] else ...[
-          // Bosib turilmoqda — hint
-          Expanded(
-            child: Text(
-              _pointerStatus == 2
-                  ? '↑ Tepaga — davom etadi'
-                  : 'Qo\'yib yuboring →',
-              style: TextStyle(
-                fontSize: _recordingSubFontSize,
-                color: _pointerStatus == 2 ? Colors.orange : Colors.white70,
-              ),
-            ),
-          ),
-        ],
-      ],
-    );
-  }
-
-  Widget _buildSendingRow() {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.center,
-      children: [
-        SizedBox(
-          width: _isTablet ? 18 : 14,
-          height: _isTablet ? 18 : 14,
-          child: const CircularProgressIndicator(
-            strokeWidth: 2,
-            color: Colors.white,
-          ),
-        ),
-        const SizedBox(width: 10),
-        Text(
-          'Yuborilmoqda...',
-          style: TextStyle(
-            fontSize: _recordingSubFontSize,
-            color: Colors.white70,
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildStatusIndicator(
-    VideoPlayerProvider provider,
-    CheckerCheckTaskModel task,
-  ) {
-    return Listener(
-      onPointerDown: (e) => _onPointerDown(e, provider, task),
-      onPointerMove: (e) => _onPointerMove(e, task),
-      onPointerUp: (e) => _onPointerUp(e, provider),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          _statusCircle(task, 3, Colors.green),
-          SizedBox(width: _statusGap),
-          _statusCircle(task, 2, Colors.orange),
-          SizedBox(width: _statusGap),
-          _statusCircle(task, 1, Colors.red),
-        ],
-      ),
-    );
-  }
-
-  Widget _statusCircle(
-    CheckerCheckTaskModel task,
-    int level,
-    Color activeColor,
-  ) {
-    final bool isActive = task.status == level;
-    final bool isHolding = _activeLevel == level && _pointerStatus > 0;
-
-    return Container(
-      key: _statusKeys[level],
-      width: isHolding ? _statusCircleSize + 6 : _statusCircleSize,
-      height: isHolding ? _statusCircleSize + 6 : _statusCircleSize,
-      decoration: BoxDecoration(
-        shape: BoxShape.circle,
-        color: isActive || isHolding ? activeColor : Colors.grey.shade300,
-        border: Border.all(
-          color: isActive || isHolding ? activeColor : Colors.grey,
-          width: isHolding ? 3 : 2,
-        ),
-        boxShadow: isActive || isHolding
-            ? [
-                BoxShadow(
-                  color: activeColor.withOpacity(0.4),
-                  blurRadius: isHolding ? 8 : 4,
-                ),
-              ]
-            : [],
-      ),
-      child: isActive
-          ? Icon(Icons.check, size: _statusIconSize, color: Colors.white)
-          : (level != 3
-                ? Icon(
-                    Icons.mic_rounded,
-                    size: _statusIconSize - 2,
-                    color: Colors.black,
-                  )
-                : null),
     );
   }
 }
