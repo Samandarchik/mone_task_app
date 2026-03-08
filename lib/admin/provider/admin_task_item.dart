@@ -1,4 +1,3 @@
-import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:mone_task_app/admin/provider/admin_tasks_provider.dart';
@@ -7,8 +6,6 @@ import 'package:mone_task_app/admin/ui/audio_task_row.dart';
 import 'package:mone_task_app/checker/model/checker_check_task_model.dart';
 import 'package:mone_task_app/utils/get_color.dart';
 import 'package:provider/provider.dart';
-import 'package:record/record.dart';
-import 'package:path_provider/path_provider.dart';
 
 class AdminTaskListItem extends StatefulWidget {
   final int index;
@@ -45,11 +42,6 @@ class _AdminTaskListItemState extends State<AdminTaskListItem>
   late CheckerCheckTaskModel task;
   late AnimationController _pulseController;
 
-  // ── Audio recording ───────────────────────────────────────────────────────
-  final AudioRecorder _recorder = AudioRecorder();
-  bool _isRecording = false;
-  String? _recordedPath;
-
   @override
   void initState() {
     super.initState();
@@ -71,7 +63,6 @@ class _AdminTaskListItemState extends State<AdminTaskListItem>
   @override
   void dispose() {
     _pulseController.dispose();
-    _recorder.dispose();
     super.dispose();
   }
 
@@ -88,6 +79,8 @@ class _AdminTaskListItemState extends State<AdminTaskListItem>
     }
     return _buildDefaultCard(context);
   }
+
+  // ── Cards ─────────────────────────────────────────────────────────────────
 
   Widget _buildDefaultCard(BuildContext context) {
     return Card(
@@ -139,14 +132,18 @@ class _AdminTaskListItemState extends State<AdminTaskListItem>
     );
   }
 
+  // ── Task info ─────────────────────────────────────────────────────────────
+
   Widget _buildTaskInfo(BuildContext context, {required bool showBadge}) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        // Sarlavha
         Text(
           "${widget.index}. ${task.task}",
           style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
         ),
+        // Kim yubordi + vaqt
         if (task.submittedBy != null)
           Text(
             "${task.submittedBy} | "
@@ -154,6 +151,7 @@ class _AdminTaskListItemState extends State<AdminTaskListItem>
             "${task.submittedAt?.minute.toString().padLeft(2, '0')}",
           ),
         const SizedBox(height: 4),
+        // Tur + video badge + status tugmalari
         Row(
           children: [
             Expanded(
@@ -162,21 +160,95 @@ class _AdminTaskListItemState extends State<AdminTaskListItem>
                 style: const TextStyle(fontSize: 12, color: Colors.black),
               ),
             ),
-            if (showBadge && task.videoUrl != null && task.videoUrl!.isNotEmpty)
+            if (showBadge &&
+                task.videoUrl != null &&
+                task.videoUrl!.isNotEmpty) ...[
               _buildVideoStatusBadge(),
-            const SizedBox(width: 8),
-            buildStatusIndicator(
-              task.status,
-              hasVideo: task.videoUrl != null && task.videoUrl!.isNotEmpty,
-            ),
+              const SizedBox(width: 8),
+            ],
+            _buildStatusIndicator(),
           ],
         ),
-        // ── AudioTaskRow ──────────────────────────────────────────────────
+        // ── AudioTaskRow: yozish + yuborish + eshitish ─────────────────────
         const SizedBox(height: 8),
         AudioTaskRow(task: task, selectedDate: widget.selectedDate),
       ],
     );
   }
+
+  // ── Status tugmalari (faqat 3 ta — mic olib tashlandi) ────────────────────
+
+  Widget _buildStatusIndicator() {
+    final bool hasVideo = task.videoUrl != null && task.videoUrl!.isNotEmpty;
+
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        _statusCircleButton(3, task.status, Colors.green, enabled: hasVideo),
+        const SizedBox(width: 30),
+        _statusCircleButton(2, task.status, Colors.orange, enabled: hasVideo),
+        const SizedBox(width: 30),
+        _statusCircleButton(1, task.status, Colors.red, enabled: hasVideo),
+      ],
+    );
+  }
+
+  Widget _statusCircleButton(
+    int level,
+    int? currentStatus,
+    Color activeColor, {
+    bool enabled = true,
+  }) {
+    final bool isActive = enabled && currentStatus == level;
+    final bool isNull = currentStatus == null;
+
+    return GestureDetector(
+      onTap: enabled
+          ? () async {
+              if (currentStatus != level) {
+                final tasksProvider = context.read<AdminTasksProvider>();
+                final bool isSuccess = await tasksProvider.updateTaskStatus(
+                  task.taskId,
+                  level,
+                  widget.selectedDate,
+                );
+                if (isSuccess && mounted) {
+                  setState(() => task.status = level);
+                }
+              }
+            }
+          : null,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 100),
+        width: 40,
+        height: 40,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          color: isActive
+              ? activeColor
+              : (!enabled || !isNull)
+              ? activeColor.withOpacity(0.1)
+              : Colors.transparent,
+          border: Border.all(
+            color: isActive
+                ? activeColor
+                : activeColor.withOpacity(enabled ? 0.5 : 0.3),
+            width: 2,
+          ),
+          boxShadow: isActive
+              ? [BoxShadow(color: activeColor.withOpacity(0.4), blurRadius: 4)]
+              : [],
+        ),
+        child: isActive
+            ? const Icon(Icons.check, size: 20, color: Colors.white)
+            : (enabled && isNull)
+            ? const Icon(Icons.check, size: 20, color: Colors.grey)
+            : null,
+      ),
+    );
+  }
+
+  // ── Share button ──────────────────────────────────────────────────────────
 
   Widget _buildShareButton(BuildContext context) {
     if (task.videoUrl == null || task.videoUrl!.isEmpty) {
@@ -188,41 +260,40 @@ class _AdminTaskListItemState extends State<AdminTaskListItem>
     );
   }
 
+  // ── Video download badge ──────────────────────────────────────────────────
+
   Widget _buildVideoStatusBadge() {
     switch (widget.videoStatus) {
       case VideoStatus.cached:
-        return const SizedBox();
+        return const SizedBox.shrink();
 
       case VideoStatus.downloading:
         final percent = (widget.downloadProgress * 100).toInt();
-        return Container(
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(
-                '$percent%',
-                style: const TextStyle(
-                  fontSize: 11,
-                  color: Colors.black,
-                  fontWeight: FontWeight.bold,
-                ),
+        return Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              '$percent%',
+              style: const TextStyle(
+                fontSize: 11,
+                color: Colors.black,
+                fontWeight: FontWeight.bold,
               ),
-              const SizedBox(width: 10),
-              SizedBox(
-                width: 14,
-                height: 14,
-                child: CircularProgressIndicator(
-                  value: widget.downloadProgress > 0
-                      ? widget.downloadProgress
-                      : null,
-                  strokeWidth: 2,
-                  valueColor: const AlwaysStoppedAnimation<Color>(Colors.black),
-                  backgroundColor: Colors.black12,
-                ),
+            ),
+            const SizedBox(width: 6),
+            SizedBox(
+              width: 14,
+              height: 14,
+              child: CircularProgressIndicator(
+                value: widget.downloadProgress > 0
+                    ? widget.downloadProgress
+                    : null,
+                strokeWidth: 2,
+                valueColor: const AlwaysStoppedAnimation<Color>(Colors.black),
+                backgroundColor: Colors.black12,
               ),
-            ],
-          ),
+            ),
+          ],
         );
 
       case VideoStatus.error:
@@ -251,150 +322,7 @@ class _AdminTaskListItemState extends State<AdminTaskListItem>
     }
   }
 
-  // ── Status indicator ──────────────────────────────────────────────────────
-
-  Widget buildStatusIndicator(int? status, {bool hasVideo = true}) {
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        _statusCircleButton(3, status, Colors.green, enabled: hasVideo),
-        const SizedBox(width: 30),
-        _statusCircleButton(2, status, Colors.orange, enabled: hasVideo),
-        const SizedBox(width: 30),
-        _statusCircleButton(1, status, Colors.red, enabled: hasVideo),
-        const SizedBox(width: 30),
-        _buildRecordButton(),
-      ],
-    );
-  }
-
-  // ── Audio record button ───────────────────────────────────────────────────
-
-  Widget _buildRecordButton() {
-    return GestureDetector(
-      onTap: _toggleRecording,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 100),
-        width: 40,
-        height: 40,
-        decoration: BoxDecoration(
-          shape: BoxShape.circle,
-          color: _isRecording ? Colors.red : Colors.transparent,
-          border: Border.all(
-            color: _isRecording ? Colors.red : Colors.grey,
-            width: 2,
-          ),
-          boxShadow: _isRecording
-              ? [BoxShadow(color: Colors.red.withOpacity(0.4), blurRadius: 4)]
-              : [],
-        ),
-        child: Icon(
-          _isRecording ? Icons.stop : Icons.mic,
-          size: 20,
-          color: _isRecording ? Colors.white : Colors.grey,
-        ),
-      ),
-    );
-  }
-
-  Future<void> _toggleRecording() async {
-    if (_isRecording) {
-      // ── To'xtatish ────────────────────────────────────────────────────────
-      final path = await _recorder.stop();
-      if (mounted) {
-        setState(() {
-          _isRecording = false;
-          _recordedPath = path;
-        });
-      }
-      if (path != null) {
-        _onRecordingDone(path);
-      }
-    } else {
-      // ── Boshlash ──────────────────────────────────────────────────────────
-      final hasPermission = await _recorder.hasPermission();
-      if (!hasPermission) return;
-
-      final dir = await getTemporaryDirectory();
-      final filePath =
-          '${dir.path}/audio_${task.taskId}_${DateTime.now().millisecondsSinceEpoch}.m4a';
-
-      await _recorder.start(
-        const RecordConfig(encoder: AudioEncoder.aacLc, bitRate: 128000),
-        path: filePath,
-      );
-
-      if (mounted) {
-        setState(() => _isRecording = true);
-      }
-    }
-  }
-
-  void _onRecordingDone(String path) {
-    // TODO: audio faylini serverga yuklash
-    // context.read<AdminTasksProvider>().uploadAudio(task.taskId, path, widget.selectedDate);
-    debugPrint('Audio yozildi: $path');
-  }
-
-  Widget _statusCircleButton(
-    int level,
-    int? currentStatus,
-    Color activeColor, {
-    bool enabled = true,
-  }) {
-    // Video yo'q bo'lsa (enabled=false) — hech qaysi button active ko'rinmasin
-    final bool isActive = enabled && currentStatus == level;
-    final bool isNull = currentStatus == null;
-
-    return GestureDetector(
-      onTap: enabled
-          ? () async {
-              if (currentStatus != level) {
-                final tasksProvider = context.read<AdminTasksProvider>();
-                final bool isSuccess = await tasksProvider.updateTaskStatus(
-                  task.taskId,
-                  level,
-                  widget.selectedDate,
-                );
-                if (isSuccess && mounted) {
-                  setState(() => task.status = level);
-                }
-              }
-            }
-          : null,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 100),
-        width: 40,
-        height: 40,
-        decoration: BoxDecoration(
-          shape: BoxShape.circle,
-          color: isActive
-              ? activeColor // Video bor + active → to'liq rang
-              : (!enabled || !isNull)
-              ? activeColor.withOpacity(
-                  0.1,
-                ) // Video yo'q yoki status bor lekin active emas → och rang
-              : Colors.transparent, // Video bor + status null → shaffof
-          border: Border.all(
-            color: isActive
-                ? activeColor
-                : activeColor.withOpacity(enabled ? 0.5 : 0.3),
-            width: 2,
-          ),
-          boxShadow: isActive
-              ? [BoxShadow(color: activeColor.withOpacity(0.4), blurRadius: 4)]
-              : [],
-        ),
-        child: isActive
-            // Video bor + active → oq check
-            ? const Icon(Icons.check, size: 20, color: Colors.white)
-            : (enabled && isNull)
-            // Video bor + status null → kulrang check (rang yoqilmaydi)
-            ? const Icon(Icons.check, size: 20, color: Colors.grey)
-            : null,
-      ),
-    );
-  }
+  // ── Tap handler ───────────────────────────────────────────────────────────
 
   Future<void> _handleTap() async {
     if (task.videoUrl != null && task.videoUrl!.isNotEmpty) {

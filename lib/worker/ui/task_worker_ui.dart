@@ -220,7 +220,6 @@ class _TaskWorkerUiState extends State<TaskWorkerUi> {
               ),
             ),
           ),
-          IconButton(onPressed: _handleLogout, icon: const Icon(Icons.logout)),
         ],
       ),
       body: _buildBody(),

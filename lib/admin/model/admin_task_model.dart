@@ -3,7 +3,7 @@ class AdminTaskModel {
   int filialId;
   String task;
   int type;
-  int status;
+  int? status;
   String? videoUrl;
   List<int?>? days;
 
@@ -12,7 +12,7 @@ class AdminTaskModel {
     required this.task,
     required this.type,
     required this.filialId,
-    required this.status,
+    this.status,
     this.videoUrl,
     this.days,
   });

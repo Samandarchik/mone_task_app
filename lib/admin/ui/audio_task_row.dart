@@ -25,7 +25,7 @@ class AudioTaskRow extends StatefulWidget {
 
 class _AudioTaskRowState extends State<AudioTaskRow>
     with SingleTickerProviderStateMixin {
-  // ── Record ────────────────────────────────────────────────────────────────
+  // ── Recorder ──────────────────────────────────────────────────────────────
   final AudioRecorder _recorder = AudioRecorder();
   bool _isRecording = false;
   bool _isSending = false;
@@ -33,23 +33,33 @@ class _AudioTaskRowState extends State<AudioTaskRow>
   Timer? _recordTimer;
   late AnimationController _pulseCtrl;
 
-  // long press tugaganda recording tayyor bo'lmagan bo'lsa kutish
-  bool _pendingSend = false;
-  bool _recorderReady = false; // recorder haqiqatan yozayaptimi
-
-  // Telegram style swipe up cancel
+  // ── Pointer / swipe state ─────────────────────────────────────────────────
+  bool _recorderReady = false;
+  bool _pendingAction = false;
+  bool _swipedUp = false; // tepaga surildi → preview rejimi
   double _dragStartY = 0;
-  bool _isCancelledBySwipe = false;
 
-  // ── Player ────────────────────────────────────────────────────────────────
+  // ── Preview rejimi ────────────────────────────────────────────────────────
+  // Tepaga surib qo'yib yuborilganda: tinglash + yuborish/o'chirish
+  String? _previewPath;
+  final AudioPlayer _previewPlayer = AudioPlayer();
+  bool _isPreviewPlaying = false;
+  Duration _previewDuration = Duration.zero;
+  Duration _previewPosition = Duration.zero;
+  bool _isPreviewCompleted = false;
+  StreamSubscription? _previewStateSub;
+  StreamSubscription? _previewPosSub;
+  StreamSubscription? _previewDurSub;
+
+  // ── Serverga yuborilgan audio player ─────────────────────────────────────
   final AudioPlayer _player = AudioPlayer();
   bool _isPlaying = false;
   Duration _duration = Duration.zero;
   Duration _position = Duration.zero;
+  bool _isCompleted = false;
   StreamSubscription? _playerStateSub;
   StreamSubscription? _positionSub;
   StreamSubscription? _durationSub;
-  bool _isCompleted = false;
 
   String? _localAudioUrl;
 
@@ -67,18 +77,18 @@ class _AudioTaskRowState extends State<AudioTaskRow>
       duration: const Duration(milliseconds: 700),
     )..repeat(reverse: true);
 
+    // Serverdan audio player
     _playerStateSub = _player.onPlayerStateChanged.listen((s) {
-      if (mounted) {
-        setState(() {
-          _isPlaying = s == PlayerState.playing;
-          if (s == PlayerState.completed) {
-            _isCompleted = true;
-            _position = Duration.zero;
-          } else if (s == PlayerState.playing) {
-            _isCompleted = false;
-          }
-        });
-      }
+      if (!mounted) return;
+      setState(() {
+        _isPlaying = s == PlayerState.playing;
+        if (s == PlayerState.completed) {
+          _isCompleted = true;
+          _position = Duration.zero;
+        } else if (s == PlayerState.playing) {
+          _isCompleted = false;
+        }
+      });
     });
     _positionSub = _player.onPositionChanged.listen((p) {
       if (mounted) setState(() => _position = p);
@@ -86,17 +96,41 @@ class _AudioTaskRowState extends State<AudioTaskRow>
     _durationSub = _player.onDurationChanged.listen((d) {
       if (mounted) setState(() => _duration = d);
     });
+
+    // Preview player
+    _previewStateSub = _previewPlayer.onPlayerStateChanged.listen((s) {
+      if (!mounted) return;
+      setState(() {
+        _isPreviewPlaying = s == PlayerState.playing;
+        if (s == PlayerState.completed) {
+          _isPreviewCompleted = true;
+          _previewPosition = Duration.zero;
+        } else if (s == PlayerState.playing) {
+          _isPreviewCompleted = false;
+        }
+      });
+    });
+    _previewPosSub = _previewPlayer.onPositionChanged.listen((p) {
+      if (mounted) setState(() => _previewPosition = p);
+    });
+    _previewDurSub = _previewPlayer.onDurationChanged.listen((d) {
+      if (mounted) setState(() => _previewDuration = d);
+    });
   }
 
   @override
   void dispose() {
     _recorder.dispose();
     _player.dispose();
+    _previewPlayer.dispose();
     _recordTimer?.cancel();
     _pulseCtrl.dispose();
     _playerStateSub?.cancel();
     _positionSub?.cancel();
     _durationSub?.cancel();
+    _previewStateSub?.cancel();
+    _previewPosSub?.cancel();
+    _previewDurSub?.cancel();
     super.dispose();
   }
 
@@ -113,51 +147,18 @@ class _AudioTaskRowState extends State<AudioTaskRow>
     return '${AppUrls.baseUrl}/$url';
   }
 
-  // ── Player actions ────────────────────────────────────────────────────────
+  // ── Pointer events ────────────────────────────────────────────────────────
 
-  Future<void> _togglePlay() async {
-    if (_audioUrl == null) return;
+  Future<void> _onPointerDown(PointerDownEvent event) async {
+    if (_isSending) return;
 
-    if (_isPlaying) {
-      await _player.pause();
-      return;
-    }
-
-    if (_isCompleted) {
-      setState(() {
-        _isCompleted = false;
-        _position = Duration.zero;
-      });
-    }
-
-    if (_localAudioUrl != null && File(_localAudioUrl!).existsSync()) {
-      await _player.play(DeviceFileSource(_localAudioUrl!));
-      return;
-    }
-
-    final url = _fullAudioUrl(_audioUrl!);
-    await _player.play(UrlSource(url));
-  }
-
-  Future<void> _seekTo(double value) async {
-    final pos = Duration(
-      milliseconds: (value * _duration.inMilliseconds).round(),
-    );
-    await _player.seek(pos);
-  }
-
-  // ── Recording — Telegram style ────────────────────────────────────────────
-
-  Future<void> _onLongPressStart(LongPressStartDetails details) async {
-    _dragStartY = details.globalPosition.dy;
-    _isCancelledBySwipe = false;
-    _pendingSend = false;
+    _dragStartY = event.position.dy;
+    _swipedUp = false;
+    _pendingAction = false;
     _recorderReady = false;
 
-    // UI ni darhol yangilaymiz
     setState(() => _isRecording = true);
 
-    // Permission tekshirish
     if (!await _recorder.hasPermission()) {
       if (mounted) {
         setState(() => _isRecording = false);
@@ -169,6 +170,7 @@ class _AudioTaskRowState extends State<AudioTaskRow>
     }
 
     await _player.stop();
+    await _previewPlayer.stop();
 
     final dir = await getTemporaryDirectory();
     final path =
@@ -185,45 +187,41 @@ class _AudioTaskRowState extends State<AudioTaskRow>
       if (mounted) setState(() => _recordSeconds++);
     });
 
-    // Agar long press allaqachon tugagan bo'lsa (juda tez qo'yib yuborilgan)
-    if (_pendingSend) {
-      _pendingSend = false;
-      if (_isCancelledBySwipe) {
-        await _cancelRecording();
+    if (_pendingAction) {
+      _pendingAction = false;
+      if (_swipedUp) {
+        await _stopForPreview();
       } else {
         await _stopAndSend();
       }
     }
   }
 
-  void _onLongPressMoveUpdate(LongPressMoveUpdateDetails details) {
+  void _onPointerMove(PointerMoveEvent event) {
     if (!_isRecording) return;
-
-    final dy = _dragStartY - details.globalPosition.dy;
-    if (dy > 80 && !_isCancelledBySwipe) {
-      _isCancelledBySwipe = true;
-      setState(() {});
-    } else if (dy <= 80 && _isCancelledBySwipe) {
-      _isCancelledBySwipe = false;
-      setState(() {});
+    final dy = _dragStartY - event.position.dy;
+    if (dy > 80 && !_swipedUp) {
+      setState(() => _swipedUp = true);
+    } else if (dy <= 80 && _swipedUp) {
+      setState(() => _swipedUp = false);
     }
   }
 
-  Future<void> _onLongPressEnd(LongPressEndDetails details) async {
-    // Recorder hali tayyor bo'lmasa — kutamiz
+  Future<void> _onPointerUp(PointerUpEvent event) async {
     if (!_recorderReady) {
-      _pendingSend = true;
+      _pendingAction = true;
       return;
     }
-
-    if (_isCancelledBySwipe) {
-      _isCancelledBySwipe = false;
-      await _cancelRecording();
+    if (_swipedUp) {
+      await _stopForPreview();
     } else {
       await _stopAndSend();
     }
   }
 
+  // ── Recording actions ─────────────────────────────────────────────────────
+
+  /// Tepaga surilmagan → to'g'ridan-to'g'ri yuborish
   Future<void> _stopAndSend() async {
     if (!_isRecording) return;
     _recordTimer?.cancel();
@@ -234,11 +232,10 @@ class _AudioTaskRowState extends State<AudioTaskRow>
     if (mounted) setState(() => _isRecording = false);
 
     if (path == null || _recordSeconds < 1) {
-      if (path != null) {
+      if (path != null)
         try {
           File(path).deleteSync();
         } catch (_) {}
-      }
       return;
     }
 
@@ -253,10 +250,7 @@ class _AudioTaskRowState extends State<AudioTaskRow>
         file,
         widget.selectedDate,
       );
-
-      if (success && mounted) {
-        setState(() => _localAudioUrl = path);
-      }
+      if (success && mounted) setState(() => _localAudioUrl = path);
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -278,12 +272,151 @@ class _AudioTaskRowState extends State<AudioTaskRow>
     }
   }
 
-  Future<void> _cancelRecording() async {
+  /// Tepaga surildi → to'xtatib preview rejimiga o'tish + avtomatik eshitish
+  Future<void> _stopForPreview() async {
+    if (!_isRecording) return;
     _recordTimer?.cancel();
     _recordTimer = null;
-    await _recorder.stop();
+
+    final path = await _recorder.stop();
     _recorderReady = false;
-    if (mounted) setState(() => _isRecording = false);
+
+    if (mounted)
+      setState(() {
+        _isRecording = false;
+        _swipedUp = false;
+      });
+
+    if (path == null || _recordSeconds < 1) {
+      if (path != null)
+        try {
+          File(path).deleteSync();
+        } catch (_) {}
+      return;
+    }
+
+    final file = File(path);
+    if (!await file.exists()) return;
+
+    if (mounted) {
+      setState(() {
+        _previewPath = path;
+        _isPreviewCompleted = false;
+        _previewPosition = Duration.zero;
+        _previewDuration = Duration.zero;
+      });
+    }
+
+    // Avtomatik eshitishni boshlash
+    await _previewPlayer.play(DeviceFileSource(path));
+  }
+
+  /// Preview → yuborish
+  Future<void> _sendPreview() async {
+    final path = _previewPath;
+    if (path == null) return;
+
+    await _previewPlayer.stop();
+    final file = File(path);
+    if (!await file.exists()) return;
+
+    if (mounted) setState(() => _isSending = true);
+
+    try {
+      final success = await AdminTaskService().pushAudio(
+        widget.task.taskId,
+        file,
+        widget.selectedDate,
+      );
+
+      if (mounted) {
+        setState(() {
+          if (success) _localAudioUrl = path;
+          _previewPath = null;
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(success ? 'Audio yuborildi ✓' : 'Xato yuz berdi'),
+            backgroundColor: success ? Colors.green : Colors.red,
+            duration: const Duration(milliseconds: 800),
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _previewPath = null);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Xato: $e'), backgroundColor: Colors.red),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isSending = false);
+    }
+  }
+
+  /// Preview → o'chirish (qaytadan yozish mumkin)
+  Future<void> _discardPreview() async {
+    await _previewPlayer.stop();
+    final path = _previewPath;
+    if (path != null)
+      try {
+        File(path).deleteSync();
+      } catch (_) {}
+    if (mounted) {
+      setState(() {
+        _previewPath = null;
+        _isPreviewPlaying = false;
+        _isPreviewCompleted = false;
+        _previewPosition = Duration.zero;
+        _previewDuration = Duration.zero;
+      });
+    }
+  }
+
+  /// Preview play/pause
+  Future<void> _togglePreviewPlay() async {
+    if (_previewPath == null) return;
+    if (_isPreviewPlaying) {
+      await _previewPlayer.pause();
+      return;
+    }
+    if (_isPreviewCompleted) {
+      setState(() {
+        _isPreviewCompleted = false;
+        _previewPosition = Duration.zero;
+      });
+    }
+    await _previewPlayer.play(DeviceFileSource(_previewPath!));
+  }
+
+  // ── Serverdan audio play/pause ────────────────────────────────────────────
+
+  Future<void> _togglePlay() async {
+    if (_audioUrl == null) return;
+    if (_isPlaying) {
+      await _player.pause();
+      return;
+    }
+    if (_isCompleted) {
+      setState(() {
+        _isCompleted = false;
+        _position = Duration.zero;
+      });
+    }
+    if (_localAudioUrl != null && File(_localAudioUrl!).existsSync()) {
+      await _player.play(DeviceFileSource(_localAudioUrl!));
+      return;
+    }
+    await _player.play(UrlSource(_fullAudioUrl(_audioUrl!)));
+  }
+
+  Future<void> _seekTo(double value) async {
+    await _player.seek(
+      Duration(
+        milliseconds: (value.clamp(0.0, 1.0) * _duration.inMilliseconds)
+            .round(),
+      ),
+    );
   }
 
   // ── Build ─────────────────────────────────────────────────────────────────
@@ -291,20 +424,20 @@ class _AudioTaskRowState extends State<AudioTaskRow>
   @override
   Widget build(BuildContext context) {
     if (!_canRecord) return const SizedBox.shrink();
-
     if (_isSending) return _buildSending();
     if (_isRecording) return _buildRecording();
+    if (_previewPath != null) return _buildPreview();
     if (_hasAudio) return _buildPlayer();
     return _buildMicButton();
   }
 
-  // ── Sub-widgets ───────────────────────────────────────────────────────────
+  // ── 1. Mic tugmasi ────────────────────────────────────────────────────────
 
   Widget _buildMicButton() {
-    return GestureDetector(
-      onLongPressStart: _onLongPressStart,
-      onLongPressMoveUpdate: _onLongPressMoveUpdate,
-      onLongPressEnd: _onLongPressEnd,
+    return Listener(
+      onPointerDown: _onPointerDown,
+      onPointerMove: _onPointerMove,
+      onPointerUp: _onPointerUp,
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
         decoration: BoxDecoration(
@@ -326,60 +459,269 @@ class _AudioTaskRowState extends State<AudioTaskRow>
     );
   }
 
+  // ── 2. Yozilmoqda ─────────────────────────────────────────────────────────
+
   Widget _buildRecording() {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-      decoration: BoxDecoration(
-        color: Colors.red.withOpacity(0.07),
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: Colors.red.withOpacity(0.25)),
-      ),
-      child: Row(
-        children: [
-          AnimatedBuilder(
-            animation: _pulseCtrl,
-            builder: (_, __) => Container(
-              width: 10,
-              height: 10,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: Colors.red.withOpacity(0.35 + 0.65 * _pulseCtrl.value),
+    return Listener(
+      onPointerMove: _onPointerMove,
+      onPointerUp: _onPointerUp,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        decoration: BoxDecoration(
+          color: _swipedUp
+              ? Colors.orange.withOpacity(0.12)
+              : Colors.red.withOpacity(0.07),
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(
+            color: _swipedUp
+                ? Colors.orange.withOpacity(0.6)
+                : Colors.red.withOpacity(0.25),
+          ),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // Pulse dot
+            AnimatedBuilder(
+              animation: _pulseCtrl,
+              builder: (_, __) => Container(
+                width: 9,
+                height: 9,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: (_swipedUp ? Colors.orange : Colors.red).withOpacity(
+                    0.35 + 0.65 * _pulseCtrl.value,
+                  ),
+                ),
               ),
             ),
-          ),
-          const SizedBox(width: 8),
-          Text(
-            _fmt(Duration(seconds: _recordSeconds)),
-            style: const TextStyle(
-              fontSize: 14,
-              fontWeight: FontWeight.w600,
-              color: Colors.red,
-            ),
-          ),
-          const SizedBox(width: 6),
-          Expanded(
-            child: Text(
-              _isCancelledBySwipe ? '↑ Bekor qilish' : 'Qo\'yib yuboring →',
+            const SizedBox(width: 8),
+            Text(
+              _fmt(Duration(seconds: _recordSeconds)),
               style: TextStyle(
-                fontSize: 12,
-                color: _isCancelledBySwipe ? Colors.red : Colors.black54,
-                fontWeight: _isCancelledBySwipe
-                    ? FontWeight.bold
-                    : FontWeight.normal,
+                fontSize: 14,
+                fontWeight: FontWeight.w600,
+                color: _swipedUp ? Colors.orange : Colors.red,
               ),
             ),
+            const SizedBox(width: 8),
+            // Hint (swipe holati)
+            AnimatedSwitcher(
+              duration: const Duration(milliseconds: 150),
+              child: _swipedUp
+                  ? const Row(
+                      key: ValueKey('preview'),
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          Icons.arrow_upward,
+                          size: 13,
+                          color: Colors.orange,
+                        ),
+                        SizedBox(width: 2),
+                        Text(
+                          'Qo\'yib yuboring → tinglash',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: Colors.orange,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ],
+                    )
+                  : const Row(
+                      key: ValueKey('normal'),
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          Icons.arrow_upward,
+                          size: 13,
+                          color: Colors.black38,
+                        ),
+                        SizedBox(width: 2),
+                        Text(
+                          'Tepaga — tinglash',
+                          style: TextStyle(fontSize: 12, color: Colors.black45),
+                        ),
+                      ],
+                    ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // ── 3. Preview rejimi: tinglash + yuborish/o'chirish ─────────────────────
+
+  Widget _buildPreview() {
+    final double progress = (_previewDuration.inMilliseconds > 0)
+        ? (_previewPosition.inMilliseconds / _previewDuration.inMilliseconds)
+              .clamp(0.0, 1.0)
+        : 0.0;
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+      decoration: BoxDecoration(
+        color: Colors.orange.withOpacity(0.08),
+        borderRadius: BorderRadius.circular(22),
+        border: Border.all(color: Colors.orange.withOpacity(0.4)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Padding(
+            padding: EdgeInsets.only(left: 4, bottom: 4),
+            child: Text(
+              'Yuborishdan oldin tinglang',
+              style: TextStyle(
+                fontSize: 11,
+                color: Colors.orange,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // Play / Pause / Replay
+              GestureDetector(
+                onTap: _togglePreviewPlay,
+                child: Container(
+                  width: 36,
+                  height: 36,
+                  decoration: const BoxDecoration(
+                    color: Colors.orange,
+                    shape: BoxShape.circle,
+                  ),
+                  child: Icon(
+                    _isPreviewCompleted
+                        ? Icons.replay_rounded
+                        : (_isPreviewPlaying
+                              ? Icons.pause_rounded
+                              : Icons.play_arrow_rounded),
+                    color: Colors.white,
+                    size: 22,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              // Slider + vaqt
+              SizedBox(
+                width: 120,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    SliderTheme(
+                      data: SliderThemeData(
+                        trackHeight: 3,
+                        thumbShape: const RoundSliderThumbShape(
+                          enabledThumbRadius: 6,
+                        ),
+                        overlayShape: const RoundSliderOverlayShape(
+                          overlayRadius: 12,
+                        ),
+                        activeTrackColor: Colors.orange,
+                        inactiveTrackColor: Colors.black12,
+                        thumbColor: Colors.orange,
+                        overlayColor: Colors.orange.withOpacity(0.15),
+                      ),
+                      child: Slider(
+                        value: progress,
+                        min: 0,
+                        max: 1,
+                        onChanged: (v) async {
+                          await _previewPlayer.seek(
+                            Duration(
+                              milliseconds:
+                                  (v * _previewDuration.inMilliseconds).round(),
+                            ),
+                          );
+                        },
+                      ),
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 4),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(
+                            _fmt(_previewPosition),
+                            style: const TextStyle(
+                              fontSize: 10,
+                              color: Colors.black54,
+                            ),
+                          ),
+                          Text(
+                            _fmt(_previewDuration),
+                            style: const TextStyle(
+                              fontSize: 10,
+                              color: Colors.black54,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 8),
+              // O'chirish (🗑)
+              GestureDetector(
+                onTap: _discardPreview,
+                child: Container(
+                  width: 36,
+                  height: 36,
+                  decoration: BoxDecoration(
+                    color: Colors.red.withOpacity(0.1),
+                    shape: BoxShape.circle,
+                    border: Border.all(
+                      color: Colors.red.withOpacity(0.5),
+                      width: 1.5,
+                    ),
+                  ),
+                  child: const Icon(
+                    Icons.delete_outline_rounded,
+                    size: 18,
+                    color: Colors.red,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 6),
+              // Yuborish (✓)
+              GestureDetector(
+                onTap: _sendPreview,
+                child: Container(
+                  width: 36,
+                  height: 36,
+                  decoration: const BoxDecoration(
+                    color: Color(0xFF4CAF50),
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(
+                    Icons.send_rounded,
+                    size: 18,
+                    color: Colors.white,
+                  ),
+                ),
+              ),
+            ],
           ),
         ],
       ),
     );
   }
 
+  // ── 4. Yuborilmoqda ───────────────────────────────────────────────────────
+
   Widget _buildSending() {
     return const Row(
+      mainAxisSize: MainAxisSize.min,
       children: [
         SizedBox(
-          width: 16,
-          height: 16,
+          width: 14,
+          height: 14,
           child: CircularProgressIndicator(strokeWidth: 2),
         ),
         SizedBox(width: 8),
@@ -391,11 +733,12 @@ class _AudioTaskRowState extends State<AudioTaskRow>
     );
   }
 
+  // ── 5. Serverdan audio player ─────────────────────────────────────────────
+
   Widget _buildPlayer() {
     final double progress = (_duration.inMilliseconds > 0)
         ? (_position.inMilliseconds / _duration.inMilliseconds).clamp(0.0, 1.0)
         : 0.0;
-
     final bool finished = _duration > Duration.zero && _position >= _duration;
 
     return Container(
@@ -405,7 +748,9 @@ class _AudioTaskRowState extends State<AudioTaskRow>
         borderRadius: BorderRadius.circular(22),
       ),
       child: Row(
+        mainAxisSize: MainAxisSize.min,
         children: [
+          // Play / Pause / Replay
           GestureDetector(
             onTap: _togglePlay,
             child: Container(
@@ -427,9 +772,12 @@ class _AudioTaskRowState extends State<AudioTaskRow>
             ),
           ),
           const SizedBox(width: 8),
-          Expanded(
+          // Slider + vaqt
+          SizedBox(
+            width: 140,
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
               children: [
                 SliderTheme(
                   data: SliderThemeData(
@@ -477,12 +825,13 @@ class _AudioTaskRowState extends State<AudioTaskRow>
               ],
             ),
           ),
+          // Qayta yozish mic
           if (_canRecord) ...[
             const SizedBox(width: 4),
-            GestureDetector(
-              onLongPressStart: _onLongPressStart,
-              onLongPressMoveUpdate: _onLongPressMoveUpdate,
-              onLongPressEnd: _onLongPressEnd,
+            Listener(
+              onPointerDown: _onPointerDown,
+              onPointerMove: _onPointerMove,
+              onPointerUp: _onPointerUp,
               child: Container(
                 width: 32,
                 height: 32,

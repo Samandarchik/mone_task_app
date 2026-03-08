@@ -534,18 +534,18 @@ class _CircleVideoPlayerBodyState extends State<_CircleVideoPlayerBody>
                       vertical: 8,
                     ),
                     margin: EdgeInsets.symmetric(
-                      horizontal: size.width * 0.1,
+                      horizontal: size.width * 0.15,
                       vertical: 10,
                     ),
                     child: Text(
                       provider.currentTask!.task,
                       style: TextStyle(
                         color: Colors.black,
-                        fontSize: isTablet ? 18 : 14,
+                        fontSize: isTablet ? 20 : 14,
+
                         fontWeight: FontWeight.bold,
                       ),
                       textAlign: TextAlign.center,
-                      overflow: TextOverflow.ellipsis,
                     ),
                   ),
               ],
