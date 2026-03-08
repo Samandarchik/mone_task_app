@@ -330,8 +330,6 @@ class _AdminTaskListItemState extends State<AdminTaskListItem>
     }
   }
 
-  /// Yozib olingan audio bilan nima qilishni shu yerda belgilang.
-  /// Masalan: serverga yuklash yoki providerga uzatish.
   void _onRecordingDone(String path) {
     // TODO: audio faylini serverga yuklash
     // context.read<AdminTasksProvider>().uploadAudio(task.taskId, path, widget.selectedDate);
@@ -344,7 +342,8 @@ class _AdminTaskListItemState extends State<AdminTaskListItem>
     Color activeColor, {
     bool enabled = true,
   }) {
-    final bool isActive = currentStatus == level;
+    // Video yo'q bo'lsa (enabled=false) — hech qaysi button active ko'rinmasin
+    final bool isActive = enabled && currentStatus == level;
     final bool isNull = currentStatus == null;
 
     return GestureDetector(
@@ -370,21 +369,27 @@ class _AdminTaskListItemState extends State<AdminTaskListItem>
         decoration: BoxDecoration(
           shape: BoxShape.circle,
           color: isActive
-              ? activeColor
-              : isNull
-              ? Colors.transparent
-              : Colors.grey.shade300,
+              ? activeColor // Video bor + active → to'liq rang
+              : (!enabled || !isNull)
+              ? activeColor.withOpacity(
+                  0.1,
+                ) // Video yo'q yoki status bor lekin active emas → och rang
+              : Colors.transparent, // Video bor + status null → shaffof
           border: Border.all(
-            color: isActive ? activeColor : Colors.grey,
+            color: isActive
+                ? activeColor
+                : activeColor.withOpacity(enabled ? 0.5 : 0.3),
             width: 2,
           ),
           boxShadow: isActive
               ? [BoxShadow(color: activeColor.withOpacity(0.4), blurRadius: 4)]
               : [],
         ),
-        child: isActive && enabled
+        child: isActive
+            // Video bor + active → oq check
             ? const Icon(Icons.check, size: 20, color: Colors.white)
-            : isNull && enabled
+            : (enabled && isNull)
+            // Video bor + status null → kulrang check (rang yoqilmaydi)
             ? const Icon(Icons.check, size: 20, color: Colors.grey)
             : null,
       ),

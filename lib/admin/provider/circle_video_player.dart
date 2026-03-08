@@ -84,6 +84,7 @@ class _CircleVideoPlayerBodyState extends State<_CircleVideoPlayerBody>
 
   // ── Status button Listener ────────────────────────────────────────────────
   int? _pressedLevel;
+  int? _lastPressedLevel; // audio yuborilgandan keyin status uchun
   bool _pressedInside = true;
 
   final Map<int, GlobalKey> _statusKeys = {
@@ -195,7 +196,7 @@ class _CircleVideoPlayerBodyState extends State<_CircleVideoPlayerBody>
       );
     }
     Share.share(
-      '[${task.task}]($link)',
+      '${task.task}\n$link',
       subject: task.task,
       sharePositionOrigin: sharePosition,
     );
@@ -296,7 +297,20 @@ class _CircleVideoPlayerBodyState extends State<_CircleVideoPlayerBody>
         file,
         widget.selectedDate,
       );
-      if (success && mounted) setState(() => _localAudioUrl = path);
+
+      if (success && mounted) {
+        setState(() => _localAudioUrl = path);
+
+        // ✅ Faqat audio muvaffaqiyatli yuborilgandan KEYIN status yangilanadi
+        if (_lastPressedLevel != null) {
+          await provider.updateTaskStatus(
+            task.taskId,
+            _lastPressedLevel!,
+            task.date,
+          );
+        }
+      }
+
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -316,6 +330,7 @@ class _CircleVideoPlayerBodyState extends State<_CircleVideoPlayerBody>
       if (mounted) setState(() => _isSending = false);
     }
 
+    // goNext: false — video o'z-o'zidan o'tmaydi
     if (goNext && provider.hasNext && mounted) {
       _localAudioUrl = null;
       provider.goToNext();
@@ -327,7 +342,12 @@ class _CircleVideoPlayerBodyState extends State<_CircleVideoPlayerBody>
     _recordTimer?.cancel();
     _recordTimer = null;
     await _recorder.stop();
-    if (mounted) setState(() => _isRecording = false);
+    if (mounted) {
+      setState(() {
+        _isRecording = false;
+        _lastPressedLevel = null;
+      });
+    }
   }
 
   Future<void> _toggleAudioPlay(CheckerCheckTaskModel? task) async {
@@ -380,14 +400,19 @@ class _CircleVideoPlayerBodyState extends State<_CircleVideoPlayerBody>
     }
     if (tappedLevel == null) return;
 
-    provider.updateTaskStatus(task.taskId, tappedLevel, task.date);
     setState(() {
       _pressedLevel = tappedLevel;
+      _lastPressedLevel = tappedLevel; // ✅ keyinroq status uchun saqlaymiz
       _pressedInside = true;
     });
 
-    if (tappedLevel == 3) return;
+    // ✅ Status 3 (yashil) — audio yo'q, darhol yangilansin
+    if (tappedLevel == 3) {
+      provider.updateTaskStatus(task.taskId, tappedLevel, task.date);
+      return;
+    }
 
+    // ✅ Status 1 va 2 — avval audio yoziladi, status KEYIN o'zgaradi
     if (!_isRecording && !_isSending) {
       await _startRecording(provider);
     }
@@ -416,6 +441,7 @@ class _CircleVideoPlayerBodyState extends State<_CircleVideoPlayerBody>
     if (!_isRecording) return;
 
     if (inside) {
+      // ✅ goNext: false — audio yuborilgandan keyin video o'tmaydi
       await _stopAndSend(provider, goNext: false);
     }
     // Tashqarida qo'yildi → manual send/delete ko'rinadi
@@ -488,7 +514,6 @@ class _CircleVideoPlayerBodyState extends State<_CircleVideoPlayerBody>
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                // Vaqt qatori — recording paytida ko'rsatilmaydi
                 _buildTimeRow(provider),
                 _buildVideoCircle(
                   context,
@@ -611,7 +636,7 @@ class _CircleVideoPlayerBodyState extends State<_CircleVideoPlayerBody>
     );
   }
 
-  // ── Time row — recording/sending paytida yashiriladi ─────────────────────
+  // ── Time row ──────────────────────────────────────────────────────────────
 
   Widget _buildTimeRow(VideoPlayerProvider provider) {
     if (_isRecording || _isSending) return const SizedBox.shrink();
@@ -645,7 +670,7 @@ class _CircleVideoPlayerBodyState extends State<_CircleVideoPlayerBody>
     );
   }
 
-  // ── Control panel: audio TEPADA, status PASTDA, qora fon ─────────────────
+  // ── Control panel ─────────────────────────────────────────────────────────
 
   Widget _buildControlPanel(VideoPlayerProvider provider) {
     final task = provider.currentTask;
@@ -664,7 +689,6 @@ class _CircleVideoPlayerBodyState extends State<_CircleVideoPlayerBody>
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.end,
         children: [
-          // ── Yuqori: audio / mic / recording / sending ─────────────────
           if (_isRecording)
             _buildRecordingRow(provider)
           else if (_isSending)
@@ -683,17 +707,15 @@ class _CircleVideoPlayerBodyState extends State<_CircleVideoPlayerBody>
                 ),
                 child: Icon(
                   Icons.mic_rounded,
-                  size: _isTablet ? 30 : 18,
+                  size: _isTablet ? 25 : 18,
                   color: Colors.white,
                 ),
               ),
             ),
 
-          // ── Bo'shliq ─────────────────────────────────────────────────
           if (!_isRecording && !_isSending)
-            SizedBox(height: _isTablet ? 30 : 7),
+            SizedBox(height: _isTablet ? 10 : 7),
 
-          // ── Quyi: status buttonlar ────────────────────────────────────
           if (!_isRecording && !_isSending)
             _buildStatusIndicator(provider, task),
         ],
@@ -809,9 +831,9 @@ class _CircleVideoPlayerBodyState extends State<_CircleVideoPlayerBody>
             ),
           ),
           SizedBox(width: _isTablet ? 16 : 8),
-          // Yuborish
+          // Yuborish — goNext: false
           GestureDetector(
-            onTap: () => _stopAndSend(provider, goNext: true),
+            onTap: () => _stopAndSend(provider, goNext: false),
             child: Container(
               width: _circleButtonSize,
               height: _circleButtonSize,
@@ -903,9 +925,17 @@ class _CircleVideoPlayerBodyState extends State<_CircleVideoPlayerBody>
       height: isHolding ? _statusCircleSize + 6 : _statusCircleSize,
       decoration: BoxDecoration(
         shape: BoxShape.circle,
-        color: isActive || isHolding ? activeColor : Colors.grey.shade300,
+        color: isHolding
+            ? activeColor
+            : isActive
+            ? activeColor
+            : activeColor.withOpacity(0.2), // ← past rang
         border: Border.all(
-          color: isActive || isHolding ? activeColor : Colors.grey,
+          color: isHolding
+              ? activeColor
+              : isActive
+              ? activeColor
+              : activeColor.withOpacity(0.9), // ← past chegara
           width: isHolding ? 3 : 2,
         ),
         boxShadow: isActive || isHolding
@@ -923,12 +953,11 @@ class _CircleVideoPlayerBodyState extends State<_CircleVideoPlayerBody>
                 ? Icon(
                     Icons.mic_rounded,
                     size: _statusIconSize - 2,
-                    color: Colors.black,
+                    color: Colors.white, // ← mic ham rangli
                   )
                 : null),
     );
   }
-
   // ── Video circle ──────────────────────────────────────────────────────────
 
   Widget _buildVideoCircle(
@@ -1014,23 +1043,25 @@ class _CircleVideoPlayerBodyState extends State<_CircleVideoPlayerBody>
                   child: Stack(
                     fit: StackFit.expand,
                     children: [
-                      if (provider.isInitialized &&
-                          !provider.hasError &&
-                          provider.controller != null)
-                        Builder(
-                          builder: (context) {
-                            final ctrl = provider.controller;
-                            if (ctrl == null) return const SizedBox.shrink();
-                            return FittedBox(
-                              fit: BoxFit.cover,
-                              child: SizedBox(
-                                width: ctrl.value.size.width,
-                                height: ctrl.value.size.height,
-                                child: VideoPlayer(ctrl),
-                              ),
-                            );
-                          },
-                        ),
+                      // ✅ Race condition fix: ctrl o'zgaruvchisiga olamiz
+                      Builder(
+                        builder: (context) {
+                          final ctrl = provider.controller;
+                          if (!provider.isInitialized ||
+                              provider.hasError ||
+                              ctrl == null) {
+                            return const SizedBox.shrink();
+                          }
+                          return FittedBox(
+                            fit: BoxFit.cover,
+                            child: SizedBox(
+                              width: ctrl.value.size.width,
+                              height: ctrl.value.size.height,
+                              child: VideoPlayer(ctrl),
+                            ),
+                          );
+                        },
+                      ),
                       if (!provider.isInitialized && !provider.hasError)
                         const Center(
                           child: CircularProgressIndicator.adaptive(),

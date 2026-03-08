@@ -2,7 +2,7 @@ class TaskWorkerModel {
   int id;
   String description;
   int taskType;
-  int taskStatus;
+  int? taskStatus;
   String? submittedBy;
   DateTime? submittedAt;
   String? checkerAudioUrl;
@@ -13,7 +13,7 @@ class TaskWorkerModel {
     required this.id,
     required this.description,
     required this.taskType,
-    required this.taskStatus,
+    this.taskStatus,
     this.submittedBy,
     this.submittedAt,
     this.checkerAudioUrl,

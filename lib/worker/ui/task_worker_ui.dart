@@ -95,8 +95,6 @@ class _TaskWorkerUiState extends State<TaskWorkerUi> {
   Future<void> _showVideoRecorder(TaskWorkerModel task) async {
     setState(() => _isRecording = true);
 
-    // opaque: false — orqa sahifa render bo'lib turadi,
-    // BackdropFilter shu render ustiga ishlaydi → haqiqiy blur!
     final result = await Navigator.of(context).push(
       PageRouteBuilder(
         opaque: false,
@@ -300,6 +298,17 @@ class _TaskWorkerUiState extends State<TaskWorkerUi> {
                                 ],
                               ),
                             ),
+                            // ── Read-only status indicator ─────────────────
+                            _buildReadonlyStatus(
+                              taskStatus: task.taskStatus == 0
+                                  ? null
+                                  : task.taskStatus,
+                              hasVideo:
+                                  task.videoUrl != null &&
+                                  task.videoUrl!.isNotEmpty,
+                            ),
+                            const SizedBox(width: 8),
+                            // ── Video record button ────────────────────────
                             IconButton(
                               onPressed: _isRecording
                                   ? null
@@ -326,6 +335,56 @@ class _TaskWorkerUiState extends State<TaskWorkerUi> {
     );
   }
 
+  /// Faqat ko'rsatish uchun — bosilmaydi, o'zgarmaydi.
+  /// taskStatus:  null → bo'sh doira,  1 → qizil,  2 → sariq,  3 → yashil
+  Widget _buildReadonlyStatus({
+    required int? taskStatus,
+    required bool hasVideo,
+  }) {
+    if (taskStatus == null) {
+      return Container(
+        width: 32,
+        height: 32,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          color: Colors.transparent,
+          border: hasVideo
+              ? Border.all(color: Colors.grey.shade400, width: 2)
+              : null,
+        ),
+        child: hasVideo
+            ? const Icon(Icons.check, size: 18, color: Colors.green)
+            : null,
+      );
+    }
+
+    Color color;
+    switch (taskStatus) {
+      case 1:
+        color = Colors.red;
+        break;
+      case 2:
+        color = Colors.orange;
+        break;
+      case 3:
+        color = Colors.green;
+        break;
+      default:
+        return const SizedBox.shrink();
+    }
+
+    return Container(
+      width: 32,
+      height: 32,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        color: color,
+        boxShadow: [BoxShadow(color: color.withOpacity(0.4), blurRadius: 4)],
+      ),
+      child: const Icon(Icons.check, size: 18, color: Colors.white),
+    );
+  }
+
   Future<void> _handleLogout() async {
     await LogOutService().logOut();
     tokenStorage.removeToken();
@@ -336,8 +395,6 @@ class _TaskWorkerUiState extends State<TaskWorkerUi> {
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Orqa sahifa (tasklar) ustiga blur + kamera overlay
-// opaque:false route tufayli orqa sahifa render bo'lib turadi →
-// BackdropFilter haqiqiy blur effekt beradi
 // ─────────────────────────────────────────────────────────────────────────────
 class _BlurCameraOverlay extends StatelessWidget {
   final int taskId;
@@ -348,13 +405,10 @@ class _BlurCameraOverlay extends StatelessWidget {
     return Stack(
       fit: StackFit.expand,
       children: [
-        // 1. Orqa fon (tasklar) ustiga blur
         BackdropFilter(
           filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
           child: Container(color: Colors.black.withOpacity(0.4)),
         ),
-
-        // 2. Kamera widget — o'zi qora fon bilan
         TelegramStyleVideoRecorder(taskId: taskId),
       ],
     );

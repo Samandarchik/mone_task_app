@@ -25,8 +25,7 @@ class _EditUserPageState extends State<EditUserPage> {
   late List<String> _selectedCategories;
 
   final UserService _userService = UserService();
-  late Future<List<FilialModel>> filial;
-  late Future<List<CategoryModel>> categories;
+  late Future<List<dynamic>> _combinedFuture;
 
   bool _isLoading = false;
 
@@ -37,8 +36,10 @@ class _EditUserPageState extends State<EditUserPage> {
     _selectedRole = widget.user.role;
     _selectedFilialIds = widget.user.filialIds ?? [];
     _selectedCategories = widget.user.categories ?? [];
-    filial = AdminTaskService().fetchFilials();
-    categories = AdminTaskService().fetchCategories();
+    _combinedFuture = Future.wait([
+      AdminTaskService().fetchFilials(),
+      AdminTaskService().fetchCategories(),
+    ]);
   }
 
   @override
@@ -116,7 +117,7 @@ class _EditUserPageState extends State<EditUserPage> {
         ],
       ),
       body: FutureBuilder<List<dynamic>>(
-        future: Future.wait([filial, categories]),
+        future: _combinedFuture,
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
             return const Center(child: CircularProgressIndicator.adaptive());
@@ -176,8 +177,8 @@ class _EditUserPageState extends State<EditUserPage> {
 
                 // Filiallar (faqat worker uchun)
                 if (_selectedRole == 'worker') ...[
-                  Center(
-                    child: const Text(
+                  const Center(
+                    child: Text(
                       'Филиал',
                       style: TextStyle(
                         fontSize: 16,
@@ -217,7 +218,7 @@ class _EditUserPageState extends State<EditUserPage> {
                           value: isSelected,
                           onChanged: (value) {
                             setState(() {
-                              if (value == true) {
+                              if (value) {
                                 _selectedFilialIds.add(filial.filialId);
                               } else {
                                 _selectedFilialIds.remove(filial.filialId);
@@ -233,8 +234,8 @@ class _EditUserPageState extends State<EditUserPage> {
 
                 // Categories (faqat worker uchun)
                 if (_selectedRole == 'worker') ...[
-                  Center(
-                    child: const Text(
+                  const Center(
+                    child: Text(
                       'Категории',
                       style: TextStyle(
                         fontSize: 16,
@@ -274,7 +275,7 @@ class _EditUserPageState extends State<EditUserPage> {
                           value: isSelected,
                           onChanged: (value) {
                             setState(() {
-                              if (value == true) {
+                              if (value) {
                                 _selectedCategories.add(category.name);
                               } else {
                                 _selectedCategories.remove(category.name);
@@ -287,11 +288,12 @@ class _EditUserPageState extends State<EditUserPage> {
                   }),
                   const SizedBox(height: 16),
                 ],
+
                 ElevatedButton(
                   onPressed: () async {
                     await LogOutService().logOutUser(widget.user.userId);
                   },
-                  child: Text("Выпускать"),
+                  child: const Text("Выпускать"),
                 ),
               ],
             ),
