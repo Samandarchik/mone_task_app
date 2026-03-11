@@ -63,3 +63,6 @@ android {
 flutter {
     source = "../.."
 }
+dependencies {
+    coreLibraryDesugaring("com.android.tools.build:desugaring:2.0.4")
+}
