@@ -3,7 +3,10 @@
     "allow": [
       "Bash(go build:*)",
       "Bash(flutter pub:*)",
-      "Bash(flutter analyze:*)"
+      "Bash(flutter analyze:*)",
+      "Bash(find lib:*)",
+      "Bash(grep:*)",
+      "Bash(ls -la /Users/samandar/Desktop/flutter_app/mone_task_app/lib/*/service/)"
     ]
   }
 }

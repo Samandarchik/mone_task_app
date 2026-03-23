@@ -1,6 +1,6 @@
 abstract final class AppUrls {
-  // static const String baseUrl = "https://taskapi.monebakeryuz.uz";
-  static const String baseUrl = "http://localhost:8000";
+  static const String baseUrl = "https://taskapi.monebakeryuz.uz";
+  // static const String baseUrl = "http://localhost:8000";
   // static const String baseUrl = "http://localhost:8000";
 
   static String get wsUrl {

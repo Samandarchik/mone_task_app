@@ -34,17 +34,17 @@ class CircleVideoPlayer extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return ChangeNotifierProvider(
-      create: (_) => VideoPlayerProvider(
-        videoUrls: videoUrls,
-        tasks: title,
-        initialIndex: initialIndex,
-        onHalfWatched: onHalfWatched,
-        onStatusChanged: () {
-          try {
-            context.read<AdminTasksProvider>().fetchTasks();
-          } catch (_) {}
-        },
-      ),
+      create: (_) {
+        final tasksProvider = context.read<AdminTasksProvider>();
+        return VideoPlayerProvider(
+          videoUrls: videoUrls,
+          tasks: title,
+          initialIndex: initialIndex,
+          onHalfWatched: onHalfWatched,
+          onUpdateStatus: (taskId, status) =>
+              tasksProvider.updateTaskStatus(taskId, status, tasksProvider.selectedDate),
+        );
+      },
       child: _CircleVideoPlayerBody(selectedDate: selectedDate),
     );
   }
@@ -79,8 +79,6 @@ class _CircleVideoPlayerBodyState extends State<_CircleVideoPlayerBody>
   StreamSubscription? _playerStateSub;
   StreamSubscription? _positionSub;
   StreamSubscription? _durationSub;
-
-  String? _localAudioUrl;
 
   // ── Status button Listener ────────────────────────────────────────────────
   int? _pressedLevel;
@@ -205,7 +203,6 @@ class _CircleVideoPlayerBodyState extends State<_CircleVideoPlayerBody>
   // ── Audio helpers ─────────────────────────────────────────────────────────
 
   String? _getAudioUrl(CheckerCheckTaskModel? task) =>
-      _localAudioUrl ??
       (task != null && task.checkerAudioUrls.isNotEmpty
           ? task.checkerAudioUrls.last
           : null);
@@ -302,8 +299,6 @@ class _CircleVideoPlayerBodyState extends State<_CircleVideoPlayerBody>
       );
 
       if (success && mounted) {
-        setState(() => _localAudioUrl = path);
-
         // ✅ Faqat audio muvaffaqiyatli yuborilgandan KEYIN status yangilanadi
         if (_lastPressedLevel != null) {
           await provider.updateTaskStatus(
@@ -335,7 +330,6 @@ class _CircleVideoPlayerBodyState extends State<_CircleVideoPlayerBody>
 
     // goNext: false — video o'z-o'zidan o'tmaydi
     if (goNext && provider.hasNext && mounted) {
-      _localAudioUrl = null;
       provider.goToNext();
     }
   }
@@ -369,10 +363,6 @@ class _CircleVideoPlayerBodyState extends State<_CircleVideoPlayerBody>
       });
     }
 
-    if (_localAudioUrl != null && File(_localAudioUrl!).existsSync()) {
-      await _audioPlayer.play(DeviceFileSource(_localAudioUrl!));
-      return;
-    }
     await _audioPlayer.play(UrlSource(_fullAudioUrl(audioUrl)));
   }
 
@@ -403,19 +393,16 @@ class _CircleVideoPlayerBodyState extends State<_CircleVideoPlayerBody>
     }
     if (tappedLevel == null) return;
 
+    // Status 3 qo'lda o'zgartirib bo'lmaydi — faqat 50% video ko'rish orqali
+    if (tappedLevel == 3) return;
+
     setState(() {
       _pressedLevel = tappedLevel;
-      _lastPressedLevel = tappedLevel; // ✅ keyinroq status uchun saqlaymiz
+      _lastPressedLevel = tappedLevel;
       _pressedInside = true;
     });
 
-    // ✅ Status 3 (yashil) — audio yo'q, darhol yangilansin
-    if (tappedLevel == 3) {
-      provider.updateTaskStatus(task.taskId, tappedLevel, task.date);
-      return;
-    }
-
-    // ✅ Status 1 va 2 — avval audio yoziladi, status KEYIN o'zgaradi
+    // Status 1 va 2 — avval audio yoziladi, status KEYIN o'zgaradi
     if (!_isRecording && !_isSending) {
       await _startRecording(provider);
     }

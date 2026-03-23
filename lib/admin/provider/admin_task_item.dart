@@ -39,25 +39,17 @@ class AdminTaskListItem extends StatefulWidget {
 
 class _AdminTaskListItemState extends State<AdminTaskListItem>
     with SingleTickerProviderStateMixin {
-  late CheckerCheckTaskModel task;
   late AnimationController _pulseController;
+
+  CheckerCheckTaskModel get task => widget.task;
 
   @override
   void initState() {
     super.initState();
-    task = widget.task;
     _pulseController = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 800),
     )..repeat(reverse: true);
-  }
-
-  @override
-  void didUpdateWidget(AdminTaskListItem oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (oldWidget.task != widget.task) {
-      task = widget.task;
-    }
   }
 
   @override
@@ -201,22 +193,21 @@ class _AdminTaskListItemState extends State<AdminTaskListItem>
     Color activeColor, {
     bool enabled = true,
   }) {
-    final bool isActive = enabled && currentStatus == level;
-    final bool isNull = currentStatus == null;
+    final bool isActive = currentStatus == level;
+    final bool hasVideo = task.videoUrl != null && task.videoUrl!.isNotEmpty;
+    // Video yuborilgan lekin hali tekshirmagan (status null)
+    final bool isWaiting = hasVideo && currentStatus == null;
 
     return GestureDetector(
       onTap: enabled
           ? () async {
               if (currentStatus != level) {
                 final tasksProvider = context.read<AdminTasksProvider>();
-                final bool isSuccess = await tasksProvider.updateTaskStatus(
+                await tasksProvider.updateTaskStatus(
                   task.taskId,
                   level,
                   widget.selectedDate,
                 );
-                if (isSuccess && mounted) {
-                  setState(() => task.status = level);
-                }
               }
             }
           : null,
@@ -228,24 +219,22 @@ class _AdminTaskListItemState extends State<AdminTaskListItem>
           shape: BoxShape.circle,
           color: isActive
               ? activeColor
-              : (!enabled || !isNull)
-              ? activeColor.withOpacity(0.1)
-              : Colors.transparent,
+              : activeColor.withValues(alpha: 0.1),
           border: Border.all(
             color: isActive
                 ? activeColor
-                : activeColor.withOpacity(enabled ? 0.5 : 0.3),
+                : activeColor.withValues(alpha: enabled ? 0.5 : 0.3),
             width: 2,
           ),
           boxShadow: isActive
-              ? [BoxShadow(color: activeColor.withOpacity(0.4), blurRadius: 4)]
+              ? [BoxShadow(color: activeColor.withValues(alpha: 0.4), blurRadius: 4)]
               : [],
         ),
         child: isActive
             ? const Icon(Icons.check, size: 20, color: Colors.white)
-            : (enabled && isNull)
-            ? const Icon(Icons.check, size: 20, color: Colors.grey)
-            : null,
+            : isWaiting
+                ? Icon(Icons.check, size: 20, color: activeColor.withValues(alpha: 0.5))
+                : null,
       ),
     );
   }

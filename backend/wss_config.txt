@@ -1,0 +1,99 @@
+=====================================================
+  NGINX WebSocket (WSS) sozlash bo'yicha qo'llanma
+  Domain: taskapi.monebakeryuz.uz
+=====================================================
+
+1-QADAM: Nginx config faylni oching
+--------------------------------------
+sudo nano /etc/nginx/sites-available/taskapi.monebakeryuz.uz
+
+(yoki /etc/nginx/conf.d/taskapi.conf — qayerda bo'lsa)
+
+
+2-QADAM: location /ws/ blokini qo'shing
+--------------------------------------
+Hozirgi config ichida server { ... } blokiga quyidagini QO'SHING:
+
+    # WebSocket proxy
+    location /ws/ {
+        proxy_pass http://127.0.0.1:8000;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_read_timeout 86400s;
+        proxy_send_timeout 86400s;
+    }
+
+MUHIM: proxy_read_timeout va proxy_send_timeout 86400s (24 soat) qo'yilgan,
+chunki WebSocket uzoq vaqt ochiq turadi. Default 60s bo'lsa uzilib qoladi.
+
+
+3-QADAM: To'liq config NAMUNASI (taxminiy)
+--------------------------------------
+server {
+    listen 443 ssl;
+    server_name taskapi.monebakeryuz.uz;
+
+    ssl_certificate     /etc/letsencrypt/live/taskapi.monebakeryuz.uz/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/taskapi.monebakeryuz.uz/privkey.pem;
+
+    client_max_body_size 200M;
+
+    # Oddiy HTTP API
+    location / {
+        proxy_pass http://127.0.0.1:8000;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+
+    # WebSocket
+    location /ws/ {
+        proxy_pass http://127.0.0.1:8000;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_read_timeout 86400s;
+        proxy_send_timeout 86400s;
+    }
+}
+
+
+4-QADAM: Configni tekshiring
+--------------------------------------
+sudo nginx -t
+
+
+5-QADAM: Nginx ni qayta yuklang
+--------------------------------------
+sudo systemctl reload nginx
+
+
+6-QADAM: Tekshirish
+--------------------------------------
+Terminalda tekshirish (serverda):
+
+curl -i -N \
+  -H "Connection: Upgrade" \
+  -H "Upgrade: websocket" \
+  -H "Sec-WebSocket-Version: 13" \
+  -H "Sec-WebSocket-Key: dGVzdA==" \
+  https://taskapi.monebakeryuz.uz/ws/tasks?token=YOUR_JWT_TOKEN
+
+Agar "101 Switching Protocols" javob kelsa — ishlayapti!
+
+
+XULOSA:
+- Backend kodini o'zgartirish kerak EMAS (allaqachon /ws/tasks endpoint bor)
+- Faqat nginx configga location /ws/ blokini qo'shish kerak
+- SSL (wss://) nginx tomonidan avtomatik handle qilinadi
+- Flutter da AppUrls.wsUrl allaqachon wss:// ishlatadi (https bo'lgani uchun)

@@ -85,17 +85,7 @@ class _AudioTaskRowState extends State<AudioTaskRow>
   StreamSubscription? _positionSub;
   StreamSubscription? _durationSub;
 
-  String? _localAudioUrl;
-
-  List<String> get _audioUrls {
-    if (_localAudioUrl != null) {
-      // Yangi yuborilgan audio oxiriga qo'shiladi
-      final list = List<String>.from(widget.audioUrls);
-      if (!list.contains(_localAudioUrl)) list.add(_localAudioUrl!);
-      return list;
-    }
-    return widget.audioUrls;
-  }
+  List<String> get _audioUrls => widget.audioUrls;
 
 
   @override
@@ -280,12 +270,12 @@ class _AudioTaskRowState extends State<AudioTaskRow>
         file,
         widget.selectedDate,
       );
-      if (success && mounted) setState(() => _localAudioUrl = path);
+      // WS broadcast orqali provider yangilanadi, _localAudioUrl kerak emas
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(success ? 'Audio yuborildi ✓' : 'Xato yuz berdi'),
+            content: Text(success ? 'Audio yuborildi' : 'Xato yuz berdi'),
             backgroundColor: success ? Colors.green : Colors.red,
             duration: const Duration(milliseconds: 800),
           ),
@@ -360,13 +350,10 @@ class _AudioTaskRowState extends State<AudioTaskRow>
       );
 
       if (mounted) {
-        setState(() {
-          if (success) _localAudioUrl = path;
-          _previewPath = null;
-        });
+        setState(() => _previewPath = null);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(success ? 'Audio yuborildi ✓' : 'Xato yuz berdi'),
+            content: Text(success ? 'Audio yuborildi' : 'Xato yuz berdi'),
             backgroundColor: success ? Colors.green : Colors.red,
             duration: const Duration(milliseconds: 800),
           ),
@@ -469,15 +456,15 @@ class _AudioTaskRowState extends State<AudioTaskRow>
       widget.selectedDate,
       index,
     );
-    if (success && mounted) {
+    if (mounted) {
       setState(() {
-        _localAudioUrl = null;
         _currentPlayingUrl = null;
         _isPlaying = false;
         _position = Duration.zero;
         _duration = Duration.zero;
       });
     }
+    // WS broadcast orqali provider yangilanadi
   }
 
   // ── Build ─────────────────────────────────────────────────────────────────

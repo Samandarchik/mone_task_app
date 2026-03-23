@@ -12,7 +12,7 @@ class VideoPlayerProvider extends ChangeNotifier {
   final List<String> videoUrls;
   final List<CheckerCheckTaskModel> tasks;
   final void Function(int taskId)? onHalfWatched;
-  final VoidCallback? onStatusChanged; // ✅ YANGI
+  final Future<bool> Function(int taskId, int status)? onUpdateStatus;
 
   VideoPlayerController? _controller;
   int _currentIndex;
@@ -40,7 +40,7 @@ class VideoPlayerProvider extends ChangeNotifier {
     required this.tasks,
     int initialIndex = 0,
     this.onHalfWatched,
-    this.onStatusChanged, // ✅ YANGI
+    this.onUpdateStatus,
   }) : _currentIndex = initialIndex {
     WakelockPlus.enable();
     initializeVideo();
@@ -87,28 +87,32 @@ class VideoPlayerProvider extends ChangeNotifier {
     String? selectedDate,
   ) async {
     try {
-      final success = await AdminTaskService().updateTaskStatus(
-        taskId,
-        newStatus,
-        null,
-        selectedDate,
-      );
+      bool success = false;
+
+      if (onUpdateStatus != null) {
+        // Provider orqali yangilash (local + backend, fetchTasks yo'q)
+        success = await onUpdateStatus!(taskId, newStatus);
+      } else {
+        // Fallback: to'g'ridan-to'g'ri service chaqirish
+        success = await AdminTaskService().updateTaskStatus(
+          taskId,
+          newStatus,
+          null,
+          selectedDate,
+        );
+      }
 
       if (success) {
         final index = tasks.indexWhere((t) => t.taskId == taskId);
         if (index != -1) {
           tasks[index].status = newStatus;
 
-          // Status 1 bo'lsa → recording signalni yoqamiz
           if (newStatus == 1 || newStatus == 2) {
             _shouldStartRecording = true;
           }
 
           notifyListeners();
         }
-
-        // ✅ YANGI — AdminTasksProvider ga xabar berish (backenddan qayta yuklash)
-        onStatusChanged?.call();
       }
       return success;
     } catch (e) {
