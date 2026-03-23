@@ -1,0 +1,3 @@
+go build -o task_app main.go
+pkill task_app
+nohup ./task_app > task_app.log 2>&1 &

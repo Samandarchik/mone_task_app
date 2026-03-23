@@ -10,6 +10,7 @@ import 'package:mone_task_app/core/context_extension.dart';
 import 'package:mone_task_app/core/data/local/token_storage.dart';
 import 'package:mone_task_app/core/di/di.dart';
 import 'package:mone_task_app/home/service/login_service.dart';
+import 'package:mone_task_app/core/network/ws_service.dart';
 import 'package:mone_task_app/worker/model/user_model.dart';
 import 'package:mone_task_app/worker/service/log_out.dart';
 import 'package:provider/provider.dart';
@@ -98,6 +99,7 @@ class _AdminTaskUiState extends State<AdminTaskUi>
   }
 
   Future<void> _handleLogout() async {
+    WsService().disconnect();
     await LogOutService().logOut();
     _tokenStorage.removeToken();
     _tokenStorage.putUserData({});

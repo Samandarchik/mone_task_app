@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(go build:*)",
+      "Bash(flutter pub:*)",
+      "Bash(flutter analyze:*)"
+    ]
+  }
+}

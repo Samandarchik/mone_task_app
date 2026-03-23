@@ -19,6 +19,7 @@ import 'package:mone_task_app/worker/service/log_out.dart';
 import 'package:mone_task_app/worker/service/task_worker_service.dart';
 import 'dart:async';
 
+import 'package:mone_task_app/core/network/ws_service.dart';
 import 'package:mone_task_app/worker/ui/telegram_style_video_recorder.dart';
 
 class TaskWorkerUi extends StatefulWidget {
@@ -38,12 +39,30 @@ class _TaskWorkerUiState extends State<TaskWorkerUi> {
 
   TokenStorage tokenStorage = sl<TokenStorage>();
   UserModel? user;
+  StreamSubscription? _wsSub;
 
   @override
   void initState() {
     super.initState();
     user = tokenStorage.getUserData();
     _fetchTasks(showLoading: true);
+    _initWs();
+  }
+
+  void _initWs() {
+    final ws = WsService();
+    ws.connect();
+    _wsSub = ws.onEvent.listen((event) {
+      if (event['event'] == 'task_updated') {
+        _fetchTasks(showLoading: false);
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _wsSub?.cancel();
+    super.dispose();
   }
 
   Future<void> _fetchTasks({bool showLoading = false}) async {
@@ -385,10 +404,11 @@ class _TaskWorkerUiState extends State<TaskWorkerUi> {
   }
 
   Future<void> _handleLogout() async {
+    WsService().disconnect();
     await LogOutService().logOut();
     tokenStorage.removeToken();
     tokenStorage.putUserData({});
-    context.pushAndRemove(LoginPage());
+    if (mounted) context.pushAndRemove(LoginPage());
   }
 }
 

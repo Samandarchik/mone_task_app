@@ -11,8 +11,10 @@ import 'package:mone_task_app/core/context_extension.dart';
 import 'package:mone_task_app/core/data/local/token_storage.dart';
 import 'package:mone_task_app/core/di/di.dart';
 import 'package:mone_task_app/home/service/login_service.dart';
+import 'package:mone_task_app/core/network/ws_service.dart';
 import 'package:mone_task_app/worker/model/user_model.dart';
 import 'package:mone_task_app/worker/service/log_out.dart';
+import 'dart:async';
 
 class CheckerHomeUi extends StatefulWidget {
   const CheckerHomeUi({super.key});
@@ -27,6 +29,7 @@ class _CheckerHomeUiState extends State<CheckerHomeUi> {
   UserModel? user;
   TokenStorage tokenStorage = sl<TokenStorage>();
   DateTime selectedDate = DateTime.now();
+  StreamSubscription? _wsSub;
 
   @override
   void initState() {
@@ -34,6 +37,23 @@ class _CheckerHomeUiState extends State<CheckerHomeUi> {
     user = tokenStorage.getUserData();
     tasksFuture = AdminTaskService().fetchTasks(selectedDate);
     categoriesFuture = AdminTaskService().fetchFilials();
+    _initWs();
+  }
+
+  void _initWs() {
+    final ws = WsService();
+    ws.connect();
+    _wsSub = ws.onEvent.listen((event) {
+      if (event['event'] == 'task_updated') {
+        _refreshTasks();
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _wsSub?.cancel();
+    super.dispose();
   }
 
   /// TaskListWidget dan List<String> va startIndex keladi.
@@ -88,6 +108,7 @@ class _CheckerHomeUiState extends State<CheckerHomeUi> {
   }
 
   Future<void> _handleLogout() async {
+    WsService().disconnect();
     await LogOutService().logOut();
     tokenStorage.removeToken();
     tokenStorage.putUserData({});

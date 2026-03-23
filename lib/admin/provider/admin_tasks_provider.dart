@@ -1,12 +1,16 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:mone_task_app/admin/model/filial_model.dart';
 import 'package:mone_task_app/checker/model/checker_check_task_model.dart';
 import 'package:mone_task_app/checker/service/task_worker_service.dart';
+import 'package:mone_task_app/core/network/ws_service.dart';
 
 enum LoadingState { idle, loading, loaded, error }
 
 class AdminTasksProvider extends ChangeNotifier {
   final AdminTaskService _service = AdminTaskService();
+  StreamSubscription? _wsSub;
 
   // ── Filials ──────────────────────────────────────────────────────────────
   List<FilialModel> _filials = [];
@@ -144,8 +148,27 @@ class AdminTasksProvider extends ChangeNotifier {
     }
   }
 
+  // ── WebSocket ────────────────────────────────────────────────────────────
+  void initWs() {
+    final ws = WsService();
+    ws.connect();
+    _wsSub?.cancel();
+    _wsSub = ws.onEvent.listen((event) {
+      if (event['event'] == 'task_updated') {
+        fetchTasks();
+      }
+    });
+  }
+
   // ── Initial load ─────────────────────────────────────────────────────────
   Future<void> init() async {
+    initWs();
     await Future.wait([fetchFilials(), fetchTasks()]);
+  }
+
+  @override
+  void dispose() {
+    _wsSub?.cancel();
+    super.dispose();
   }
 }
