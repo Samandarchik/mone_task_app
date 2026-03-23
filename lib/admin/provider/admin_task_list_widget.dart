@@ -1,13 +1,9 @@
-import 'dart:io';
-
-import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:mone_task_app/admin/provider/admin_task_item.dart';
 import 'package:mone_task_app/admin/provider/video_download_provider.dart';
 import 'package:mone_task_app/checker/model/checker_check_task_model.dart';
 import 'package:provider/provider.dart';
 import 'package:share_plus/share_plus.dart';
-import 'package:path_provider/path_provider.dart';
 
 class AdminTaskListWidget extends StatefulWidget {
   final List<TaskModel> tasks;
@@ -77,70 +73,9 @@ class _AdminTaskListWidgetState extends State<AdminTaskListWidget> {
     return videoTasks.indexWhere((t) => t.taskId == task.taskId);
   }
 
-  Future<void> _shareVideo(
-    TaskModel task,
-    VideoDownloadProvider downloadProvider,
-  ) async {
-    try {
-      final videoUrl = task.videoUrl;
-      if (videoUrl == null || videoUrl.isEmpty) {
-        if (mounted) {
-          ScaffoldMessenger.of(
-            context,
-          ).showSnackBar(const SnackBar(content: Text('Video topilmadi')));
-        }
-        return;
-      }
-
-      final fullUrl = downloadProvider.getFullUrl(videoUrl);
-
-      if (mounted) {
-        showDialog(
-          context: context,
-          barrierDismissible: false,
-          builder: (_) =>
-              const Center(child: CircularProgressIndicator.adaptive()),
-        );
-      }
-
-      String localPath;
-
-      if (downloadProvider.isCached(fullUrl)) {
-        localPath = downloadProvider.getLocalPath(fullUrl)!;
-      } else {
-        final directory = await getApplicationDocumentsDirectory();
-        final fileName = fullUrl
-            .split('/')
-            .last
-            .replaceAll(RegExp(r'[^\w\s\-\.]'), '_');
-        localPath = '${directory.path}/videos/$fileName';
-        final file = File(localPath);
-        if (!await file.exists() || await file.length() == 0) {
-          await Dio().download(fullUrl, localPath);
-        }
-      }
-
-      if (mounted && Navigator.of(context).canPop()) {
-        Navigator.of(context).pop();
-      }
-
-      final file = File(localPath);
-      if (await file.exists() && await file.length() > 0) {
-        await Share.shareXFiles([
-          XFile(file.path),
-        ], text: 'Задача: ${task.task}');
-      } else {
-        if (mounted) {
-          ScaffoldMessenger.of(
-            context,
-          ).showSnackBar(const SnackBar(content: Text('Video fayl topilmadi')));
-        }
-      }
-    } catch (e) {
-      if (mounted && Navigator.of(context).canPop()) {
-        Navigator.of(context).pop();
-      }
-    }
+  void _shareTaskLink(TaskModel task) {
+    final link = 'https://taskapi.monebakeryuz.uz/task/${task.date}/${task.taskId}';
+    Share.share('${task.task}\n$link', subject: task.task);
   }
 
   @override
@@ -203,7 +138,7 @@ class _AdminTaskListWidgetState extends State<AdminTaskListWidget> {
                 videoTasks, // ← faqat videoli tasklar
               );
             },
-            onShareVideo: () => _shareVideo(task, downloadProvider),
+            onShareVideo: () => _shareTaskLink(task),
           );
         },
       ),

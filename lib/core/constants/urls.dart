@@ -2,7 +2,7 @@ abstract final class AppUrls {
   static const String baseUrl = "https://taskapi.monebakeryuz.uz";
   // static const String baseUrl = "http://localhost:8000";
   // static const String baseUrl = "http://localhost:8000";
-
+  // https://apps.apple.com/us/app/task-app-mone/id6756741172
   static String get wsUrl {
     final uri = Uri.parse(baseUrl);
     final scheme = uri.scheme == 'https' ? 'wss' : 'ws';

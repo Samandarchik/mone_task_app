@@ -105,7 +105,6 @@ class _MyAppState extends State<MyApp> {
         ),
         routes: {
           "/login": (context) => LoginPage(),
-          // "/admin": (context) => AdminTaskUi(), // ← AdminTaskUi import qiling
         },
         navigatorKey: navigatorKey,
         debugShowCheckedModeBanner: false,

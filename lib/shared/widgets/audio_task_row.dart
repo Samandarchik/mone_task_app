@@ -15,7 +15,7 @@ class AudioTaskRow extends StatefulWidget {
   final DateTime selectedDate;
   final Future<bool> Function(int taskId, File file, DateTime date) onPushAudio;
   final Future<bool> Function(int taskId, DateTime date, int audioIndex)
-      onDeleteAudio;
+  onDeleteAudio;
 
   const AudioTaskRow({
     super.key,
@@ -86,7 +86,6 @@ class _AudioTaskRowState extends State<AudioTaskRow>
   StreamSubscription? _durationSub;
 
   List<String> get _audioUrls => widget.audioUrls;
-
 
   @override
   void initState() {
@@ -797,9 +796,8 @@ class _AudioTaskRowState extends State<AudioTaskRow>
     final double progress = isThisPlaying && _duration.inMilliseconds > 0
         ? (_position.inMilliseconds / _duration.inMilliseconds).clamp(0.0, 1.0)
         : 0.0;
-    final bool finished = isThisPlaying &&
-        _duration > Duration.zero &&
-        _position >= _duration;
+    final bool finished =
+        isThisPlaying && _duration > Duration.zero && _position >= _duration;
 
     return Padding(
       padding: const EdgeInsets.only(bottom: 4),
@@ -852,7 +850,9 @@ class _AudioTaskRowState extends State<AudioTaskRow>
                       activeTrackColor: const Color(0xFF2196F3),
                       inactiveTrackColor: Colors.black12,
                       thumbColor: const Color(0xFF2196F3),
-                      overlayColor: const Color(0xFF2196F3).withValues(alpha: 0.15),
+                      overlayColor: const Color(
+                        0xFF2196F3,
+                      ).withValues(alpha: 0.15),
                     ),
                     child: Slider(
                       value: isThisPlaying ? progress : 0.0,

@@ -10,15 +10,15 @@ class DeepLinkData {
 }
 
 /// Deep link ni parse qilish
-/// Format: https://monebakeryuz.uz/2026-03-07/62
+/// Format: https://taskapi.monebakeryuz.uz/task/2026-03-07/62
 DeepLinkData? parseDeepLink(Uri uri) {
   try {
-    // Path segments: ["2026-03-07", "62"]
+    // Path segments: ["task", "2026-03-07", "62"]
     final segments = uri.pathSegments;
-    if (segments.length < 2) return null;
+    if (segments.length < 3 || segments[0] != 'task') return null;
 
-    final date = segments[0]; // "2026-03-07"
-    final taskId = int.tryParse(segments[1]); // 62
+    final date = segments[1]; // "2026-03-07"
+    final taskId = int.tryParse(segments[2]); // 62
 
     if (taskId == null) return null;
 
@@ -29,4 +29,10 @@ DeepLinkData? parseDeepLink(Uri uri) {
   } catch (_) {
     return null;
   }
+}
+
+/// Task uchun share link yaratish
+String createTaskLink(String? date, int taskId) {
+  final d = date ?? DateTime.now().toIso8601String().substring(0, 10);
+  return 'https://taskapi.monebakeryuz.uz/task/$d/$taskId';
 }

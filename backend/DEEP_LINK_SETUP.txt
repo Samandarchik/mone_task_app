@@ -1,0 +1,136 @@
+================================================================
+  DEEP LINK & APP DOWNLOAD - SOZLASH QO'LLANMASI
+================================================================
+
+LINK FORMAT:  https://taskapi.monebakeryuz.uz/task/{date}/{taskId}
+MISOL:        https://taskapi.monebakeryuz.uz/task/2026-03-24/62
+
+QANDAY ISHLAYDI:
+1. Link bosilganda ilova o'rnatilgan bo'lsa → ilova ochiladi, shu taskga o'tadi
+2. Ilova o'rnatilmagan bo'lsa → brauzerda download sahifa ko'rinadi
+
+
+================================================================
+1. BACKEND (ALLAQACHON TAYYOR)
+================================================================
+
+Backend quyidagi endpointlarni beradi:
+- GET /.well-known/apple-app-site-association  (iOS Universal Links)
+- GET /.well-known/assetlinks.json             (Android App Links)
+- GET /task/{date}/{taskId}                     (Fallback HTML sahifa)
+- GET /downloads/task.apk                       (Android yuklab olish)
+- GET /downloads/task.ipa                       (iOS yuklab olish - agar kerak bo'lsa)
+
+Serverda downloads/ papka yaratiladi avtomatik.
+
+
+================================================================
+2. APK VA IPA FAYLLARNI QO'YISH
+================================================================
+
+Serverga ulanib:
+  ssh user@server
+
+APK faylni qo'yish:
+  scp path/to/task.apk user@server:/path/to/backend/downloads/task.apk
+
+IPA faylni qo'yish (ixtiyoriy):
+  scp path/to/task.ipa user@server:/path/to/backend/downloads/task.ipa
+
+APK build qilish:
+  flutter build apk --release
+  Fayl: build/app/outputs/flutter-apk/app-release.apk
+
+IPA build qilish:
+  flutter build ipa --release
+  Fayl: build/ios/ipa/mone_task_app.ipa
+
+
+================================================================
+3. iOS UNIVERSAL LINKS SOZLASH
+================================================================
+
+3.1 Apple Developer Console (developer.apple.com):
+   - Certificates, Identifiers & Profiles → Identifiers
+   - com.monebakery.taskApp ni tanlang
+   - "Associated Domains" capability ni yoqing (checkbox)
+   - Save
+
+3.2 Xcode da (allaqachon qilingan):
+   - Runner.entitlements va RunnerRelease.entitlements da:
+     com.apple.developer.associated-domains = ["applinks:taskapi.monebakeryuz.uz"]
+
+3.3 Backend da (allaqachon qilingan):
+   - /.well-known/apple-app-site-association endpointi bor
+
+3.4 MUHIM: TEAM_ID ni o'zgartirish:
+   - Backend main.go da "TEAM_ID.com.monebakery.taskApp" bor
+   - "TEAM_ID" ni Apple Developer Console dagi haqiqiy Team ID ga almashtiring
+   - Team ID: developer.apple.com → Account → Membership → Team ID
+   - Misol: "A1B2C3D4E5.com.monebakery.taskApp"
+
+3.5 Tekshirish:
+   curl https://taskapi.monebakeryuz.uz/.well-known/apple-app-site-association
+   → JSON qaytishi kerak
+
+
+================================================================
+4. ANDROID APP LINKS SOZLASH
+================================================================
+
+4.1 SHA256 fingerprint olish:
+   keytool -list -v -keystore path/to/keystore.jks -alias key0
+   → SHA256 qiymatini oling
+   → Format: "14:6D:E9:..." (kolonli)
+
+4.2 Backend da SHA256 ni qo'yish:
+   - main.go da "SHA256_FINGERPRINT_HERE" ni haqiqiy SHA256 ga almashtiring
+   - Misol: "14:6D:E9:83:C5:73:06:50:D8:EE:B9:95:2F:34:FC:64:16:..."
+
+4.3 AndroidManifest.xml (allaqachon qilingan):
+   - intent-filter android:autoVerify="true" qo'shilgan
+   - host: taskapi.monebakeryuz.uz
+   - pathPrefix: /task/
+
+4.4 Tekshirish:
+   curl https://taskapi.monebakeryuz.uz/.well-known/assetlinks.json
+   → JSON qaytishi kerak
+
+
+================================================================
+5. NGINX SOZLASH (agar hali qilinmagan bo'lsa)
+================================================================
+
+Nginx config da .well-known endpointlari backend ga proxy bo'lishi kerak:
+
+    location /.well-known/ {
+        proxy_pass http://127.0.0.1:8000;
+        proxy_set_header Host $host;
+    }
+
+    location /task/ {
+        proxy_pass http://127.0.0.1:8000;
+        proxy_set_header Host $host;
+    }
+
+    location /downloads/ {
+        proxy_pass http://127.0.0.1:8000;
+        proxy_set_header Host $host;
+    }
+
+Keyin:
+    sudo nginx -t
+    sudo systemctl reload nginx
+
+
+================================================================
+6. XULOSA - QILISH KERAK BO'LGAN ISHLAR
+================================================================
+
+[ ] 1. Apple Developer Console da Associated Domains yoqish
+[ ] 2. TEAM_ID ni backend main.go da o'zgartirish
+[ ] 3. SHA256 fingerprint ni backend main.go da o'zgartirish
+[ ] 4. Nginx configga .well-known, /task/, /downloads/ qo'shish
+[ ] 5. APK faylni serverga downloads/ papkaga qo'yish
+[ ] 6. Backend ni qayta ishga tushirish
+[ ] 7. Test: Safari/Chrome da link ochib tekshirish

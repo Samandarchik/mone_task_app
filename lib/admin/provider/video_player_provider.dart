@@ -21,6 +21,8 @@ class VideoPlayerProvider extends ChangeNotifier {
   bool _hasError = false;
   String? _errorMessage;
   bool _halfWatchedFired = false;
+  int _accumulatedWatchMs = 0; // haqiqiy ko'rish vaqti (ms)
+  int _lastPositionMs = 0; // oxirgi listener dagi position
   bool _isMuted = false;
   double _playbackSpeed = 1.0;
   bool _isLoading = false;
@@ -134,6 +136,8 @@ class VideoPlayerProvider extends ChangeNotifier {
     _hasError = false;
     _errorMessage = null;
     _halfWatchedFired = false;
+    _accumulatedWatchMs = 0;
+    _lastPositionMs = 0;
     notifyListeners();
 
     try {
@@ -196,7 +200,21 @@ class VideoPlayerProvider extends ChangeNotifier {
     final total = value.duration.inMilliseconds;
     final current = value.position.inMilliseconds;
 
-    if (!_halfWatchedFired && total > 0 && current >= total * 0.5) {
+    // Haqiqiy ko'rish vaqtini hisoblash:
+    // Faqat video play bo'layotganda va position normal oldinga ketayotganda
+    // (seekbar surish hisobga olinmaydi)
+    if (value.isPlaying && _lastPositionMs > 0) {
+      final delta = current - _lastPositionMs;
+      // delta 0..500ms oralig'ida bo'lsa normal play (listener ~200-300ms da chaqiriladi)
+      // Katta jump (seek) bo'lsa hisobga olmaymiz
+      if (delta > 0 && delta < 500) {
+        _accumulatedWatchMs += delta;
+      }
+    }
+    _lastPositionMs = current;
+
+    // 50% haqiqiy ko'rish vaqti to'lganda
+    if (!_halfWatchedFired && total > 0 && _accumulatedWatchMs >= total * 0.5) {
       _halfWatchedFired = true;
       if (onHalfWatched != null && _currentIndex < tasks.length) {
         onHalfWatched!(tasks[_currentIndex].taskId);

@@ -178,65 +178,9 @@ class _TaskListWidgetState extends State<TaskListWidget> {
     }
   }
 
-  Future<void> _shareVideo(TaskModel task) async {
-    try {
-      String? videoUrl = task.videoUrl;
-      if (videoUrl == null || videoUrl.isEmpty) {
-        if (mounted) {
-          ScaffoldMessenger.of(
-            context,
-          ).showSnackBar(const SnackBar(content: Text('Video topilmadi')));
-        }
-        return;
-      }
-
-      if (!videoUrl.startsWith('http')) {
-        videoUrl = '${AppUrls.baseUrl}/$videoUrl';
-      }
-
-      if (mounted) {
-        showDialog(
-          context: context,
-          barrierDismissible: false,
-          builder: (_) =>
-              const Center(child: CircularProgressIndicator.adaptive()),
-        );
-      }
-
-      String? localPath;
-      if (cachedVideos.containsKey(videoUrl)) {
-        localPath = cachedVideos[videoUrl];
-      } else {
-        localPath = await _getLocalFilePath(videoUrl);
-        final file = File(localPath);
-        if (!await file.exists() || await file.length() == 0) {
-          final dio = Dio();
-          await dio.download(videoUrl, localPath);
-        }
-        if (mounted) setState(() => cachedVideos[videoUrl!] = localPath!);
-      }
-
-      if (mounted && Navigator.of(context).canPop()) {
-        Navigator.of(context).pop();
-      }
-
-      final file = File(localPath!);
-      if (await file.exists() && await file.length() > 0) {
-        await Share.shareXFiles([
-          XFile(file.path),
-        ], text: 'Задача: ${task.task}');
-      } else {
-        if (mounted) {
-          ScaffoldMessenger.of(
-            context,
-          ).showSnackBar(const SnackBar(content: Text('Video fayl topilmadi')));
-        }
-      }
-    } catch (e) {
-      if (mounted && Navigator.of(context).canPop()) {
-        Navigator.of(context).pop();
-      }
-    }
+  void _shareTaskLink(TaskModel task) {
+    final link = 'https://taskapi.monebakeryuz.uz/task/${task.date}/${task.taskId}';
+    Share.share('${task.task}\n$link', subject: task.task);
   }
 
   String? _getVideoPath(String? videoUrl) {
@@ -283,7 +227,7 @@ class _TaskListWidgetState extends State<TaskListWidget> {
             selectedDate: widget.selectedDate,
             onRefresh: widget.onRefresh,
             onShowVideoPlayer: widget.onShowVideoPlayer,
-            onShareVideo: () => _shareVideo(filtered[i]),
+            onShareVideo: () => _shareTaskLink(filtered[i]),
             getVideoPath: _getVideoPath,
           );
         },

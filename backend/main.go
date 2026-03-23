@@ -264,21 +264,21 @@ type Category struct {
 // Task - status nullable: null = hali worker ko'rmagan/bajarmagan
 // admin/checker o'zgartirsa yangilanadi
 type Task struct {
-	ID               int     `json:"taskId"`
-	FilialID         int     `json:"filialId"`
-	WorkerIDs        []int   `json:"workerIds,omitempty"`
-	Task             string  `json:"task"`
-	Type             int     `json:"type"`
-	Status           *int    `json:"status"` // null yoki 1,2,3,4
-	VideoURL          *string  `json:"videoUrl"`
-	CheckerAudioURLs  []string `json:"checkerAudioUrls"`
-	SubmittedAt      *string `json:"submittedAt,omitempty"`
-	SubmittedBy      *string `json:"submittedBy,omitempty"`
-	Date             string  `json:"date"`
-	Days             []int   `json:"days,omitempty"`
-	Category         string  `json:"category"`
-	NotificationTime string  `json:"notificationTime,omitempty"`
-	OrderIndex       int     `json:"orderIndex"`
+	ID               int      `json:"taskId"`
+	FilialID         int      `json:"filialId"`
+	WorkerIDs        []int    `json:"workerIds,omitempty"`
+	Task             string   `json:"task"`
+	Type             int      `json:"type"`
+	Status           *int     `json:"status"` // null yoki 1,2,3,4
+	VideoURL         *string  `json:"videoUrl"`
+	CheckerAudioURLs []string `json:"checkerAudioUrls"`
+	SubmittedAt      *string  `json:"submittedAt,omitempty"`
+	SubmittedBy      *string  `json:"submittedBy,omitempty"`
+	Date             string   `json:"date"`
+	Days             []int    `json:"days,omitempty"`
+	Category         string   `json:"category"`
+	NotificationTime string   `json:"notificationTime,omitempty"`
+	OrderIndex       int      `json:"orderIndex"`
 }
 
 type TaskTemplate struct {
@@ -364,6 +364,63 @@ func main() {
 	// WebSocket
 	r.HandleFunc("/ws/tasks", wsHandler)
 
+	// Deep link: Apple Universal Links
+	r.HandleFunc("/.well-known/apple-app-site-association", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.Write([]byte(`{
+  "applinks": {
+    "apps": [],
+    "details": [{
+      "appID": "KC2VPYBYF5.uz.uzaidev.taskapp",
+      "paths": ["/task/*"]
+    }]
+  }
+}`))
+	}).Methods("GET")
+
+	// Deep link: Android App Links
+	r.HandleFunc("/.well-known/assetlinks.json", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.Write([]byte(`[{
+  "relation": ["delegate_permission/common.handle_all_urls"],
+  "target": {
+    "namespace": "android_app",
+    "package_name": "com.uzaidev.mone_task_app",
+    "sha256_cert_fingerprints": ["SHA256_FINGERPRINT_HERE"]
+  }
+}]`))
+	}).Methods("GET")
+
+	// Deep link: /task/{date}/{taskId} — app o'rnatilmagan bo'lsa download sahifaga yo'naltiradi
+	r.HandleFunc("/task/{date}/{taskId}", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		w.Write([]byte(`<!DOCTYPE html>
+<html><head>
+<meta charset="utf-8">
+<title>Mone Task App</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<style>
+body{font-family:-apple-system,sans-serif;display:flex;align-items:center;justify-content:center;min-height:100vh;margin:0;background:#f5f5f5}
+.card{background:#fff;border-radius:16px;padding:40px;text-align:center;box-shadow:0 4px 12px rgba(0,0,0,.1);max-width:360px}
+h1{font-size:24px;margin:0 0 8px}
+p{color:#666;margin:0 0 24px}
+.btn{display:inline-block;padding:14px 32px;border-radius:12px;text-decoration:none;font-weight:600;font-size:16px;margin:6px}
+.ios{background:#007AFF;color:#fff}
+.android{background:#34A853;color:#fff}
+</style>
+</head><body>
+<div class="card">
+<h1>Mone Task App</h1>
+<p>Ilovani yuklab oling</p>
+<a class="btn ios" href="/downloads/task.ipa">iOS yuklash</a><br>
+<a class="btn android" href="/downloads/task.apk">Android yuklash</a>
+</div>
+</body></html>`))
+	}).Methods("GET")
+
+	// App downloads
+	r.PathPrefix("/downloads/").Handler(http.StripPrefix("/downloads/", http.FileServer(http.Dir("./downloads"))))
+
 	// Health
 	r.HandleFunc("/health", healthCheck).Methods("GET")
 
@@ -379,6 +436,7 @@ func initDB() {
 	os.MkdirAll("./db", 0755)
 	os.MkdirAll("./videos", 0755)
 	os.MkdirAll("./audios", 0755)
+	os.MkdirAll("./downloads", 0755)
 
 	createMainDB()
 	ensureTodayDB()

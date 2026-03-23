@@ -154,7 +154,31 @@ class AdminTasksProvider extends ChangeNotifier {
     ws.connect();
     _wsSub?.cancel();
     _wsSub = ws.onEvent.listen((event) {
-      if (event['event'] == 'task_updated') {
+      if (event['event'] != 'task_updated') return;
+
+      final data = event['data'];
+      if (data == null) return;
+
+      final action = data['action'] as String?;
+
+      if (action == 'status_changed') {
+        // Status o'zgarishi — lokal yangilash (fetchTasks kerak emas)
+        final taskIdRaw = data['taskId'];
+        final statusRaw = data['status'];
+        if (taskIdRaw != null && statusRaw != null) {
+          final taskId = taskIdRaw is int ? taskIdRaw : int.tryParse('$taskIdRaw');
+          final status = statusRaw is int ? statusRaw : int.tryParse('$statusRaw');
+          if (taskId != null && status != null) {
+            final idx = _tasks.indexWhere((t) => t.taskId == taskId);
+            if (idx != -1) {
+              _tasks[idx].status = status;
+              notifyListeners();
+            }
+          }
+        }
+      } else {
+        // audio_comment, audio_deleted, video_submitted, video_merged
+        // Yangi URL kerak — backenddan yuklash
         fetchTasks();
       }
     });

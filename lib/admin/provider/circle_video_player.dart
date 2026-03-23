@@ -172,7 +172,7 @@ class _CircleVideoPlayerBodyState extends State<_CircleVideoPlayerBody>
     if (task == null) return;
     if (provider.isPlaying) provider.togglePlayPause();
 
-    final link = 'https://monebakeryuz.uz/${task.date}/${task.taskId}';
+    final link = 'https://taskapi.monebakeryuz.uz/task/${task.date}/${task.taskId}';
     final box =
         _shareButtonKey.currentContext?.findRenderObject() as RenderBox?;
     final Rect sharePosition;
