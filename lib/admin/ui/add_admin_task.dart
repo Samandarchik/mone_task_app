@@ -25,7 +25,7 @@ class AddAdminTask extends StatefulWidget {
 }
 
 class _AddAdminTaskState extends State<AddAdminTask> {
-  AdminTaskService taskService = AdminTaskService();
+  TemplateService taskService = TemplateService();
   late TextEditingController controller;
   late Future<List<FilialModel>> filialsFuture;
 
@@ -43,7 +43,7 @@ class _AddAdminTaskState extends State<AddAdminTask> {
   void initState() {
     super.initState();
     controller = TextEditingController();
-    filialsFuture = AdminTaskService().fetchFilials();
+    filialsFuture = TemplateService().fetchFilials();
     _loadCategories();
   }
 
@@ -235,7 +235,7 @@ class _AddAdminTaskState extends State<AddAdminTask> {
                     onPressed: () {
                       Future.microtask(() {
                         setState(() {
-                          filialsFuture = AdminTaskService().fetchFilials();
+                          filialsFuture = TemplateService().fetchFilials();
                         });
                       });
                     },
@@ -583,7 +583,7 @@ class _AddAdminTaskState extends State<AddAdminTask> {
 }
 
 // ==================== Service extension ====================
-// Sizning AdminTaskService'ga qo'shing shu methodlarni:
+// Sizning TemplateService'ga qo'shing shu methodlarni:
 //
 // Types ma'lumotlari
 const List<Map<String, dynamic>> types = [

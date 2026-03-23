@@ -34,7 +34,7 @@ class _TaskWorkerUiState extends State<TaskWorkerUi> {
   bool _isLoading = true;
   bool _hasError = false;
   String _errorMessage = '';
-  List<TaskWorkerModel> _tasks = [];
+  List<TaskModel> _tasks = [];
   DateTime _selectedDate = DateTime.now();
 
   TokenStorage tokenStorage = sl<TokenStorage>();
@@ -111,7 +111,7 @@ class _TaskWorkerUiState extends State<TaskWorkerUi> {
     }
   }
 
-  Future<void> _showVideoRecorder(TaskWorkerModel task) async {
+  Future<void> _showVideoRecorder(TaskModel task) async {
     setState(() => _isRecording = true);
 
     final result = await Navigator.of(context).push(
@@ -121,7 +121,7 @@ class _TaskWorkerUiState extends State<TaskWorkerUi> {
         transitionDuration: const Duration(milliseconds: 300),
         reverseTransitionDuration: const Duration(milliseconds: 200),
         pageBuilder: (context, animation, secondaryAnimation) =>
-            _BlurCameraOverlay(taskId: task.id),
+            _BlurCameraOverlay(taskId: task.taskId),
         transitionsBuilder: (context, animation, secondaryAnimation, child) =>
             FadeTransition(opacity: animation, child: child),
       ),
@@ -137,12 +137,12 @@ class _TaskWorkerUiState extends State<TaskWorkerUi> {
   }
 
   Future<void> _uploadVideoSegments(
-    TaskWorkerModel task,
+    TaskModel task,
     List<XFile> segments,
   ) async {
     try {
       final success = await TaskWorkerService().completeTaskWithSegments(
-        taskId: task.id,
+        taskId: task.taskId,
         segments: segments,
       );
       if (mounted)
@@ -166,10 +166,10 @@ class _TaskWorkerUiState extends State<TaskWorkerUi> {
     }
   }
 
-  Future<void> _uploadVideo(TaskWorkerModel task, XFile video) async {
+  Future<void> _uploadVideo(TaskModel task, XFile video) async {
     try {
       final success = await TaskWorkerService().completeTask(
-        RequestTaskModel(id: task.id, file: video),
+        RequestTaskModel(id: task.taskId, file: video),
       );
       if (mounted)
         ScaffoldMessenger.of(context).showSnackBar(
@@ -298,7 +298,7 @@ class _TaskWorkerUiState extends State<TaskWorkerUi> {
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
                                   Text(
-                                    "${i + 1}. ${task.description}",
+                                    "${i + 1}. ${task.task}",
                                     style: const TextStyle(
                                       fontWeight: FontWeight.bold,
                                       fontSize: 16,
@@ -315,9 +315,9 @@ class _TaskWorkerUiState extends State<TaskWorkerUi> {
                             ),
                             // ── Read-only status indicator ─────────────────
                             _buildReadonlyStatus(
-                              taskStatus: task.taskStatus == 0
+                              taskStatus: task.status == 0
                                   ? null
-                                  : task.taskStatus,
+                                  : task.status,
                               hasVideo:
                                   task.videoUrl != null &&
                                   task.videoUrl!.isNotEmpty,
@@ -339,7 +339,7 @@ class _TaskWorkerUiState extends State<TaskWorkerUi> {
                         ),
                         const SizedBox(height: 8),
                         AudioTaskRow(
-                          taskId: task.id,
+                          taskId: task.taskId,
                           audioUrls: task.checkerAudioUrls,
                           selectedDate: _selectedDate,
                           onPushAudio: (id, file, date) =>

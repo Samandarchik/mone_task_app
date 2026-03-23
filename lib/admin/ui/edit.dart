@@ -37,8 +37,8 @@ class _EditUserPageState extends State<EditUserPage> {
     _selectedFilialIds = widget.user.filialIds ?? [];
     _selectedCategories = widget.user.categories ?? [];
     _combinedFuture = Future.wait([
-      AdminTaskService().fetchFilials(),
-      AdminTaskService().fetchCategories(),
+      TaskViewService().fetchFilials(),
+      TaskViewService().fetchCategories(),
     ]);
   }
 

@@ -8,7 +8,9 @@ import 'package:mone_task_app/admin/ui/add_admin_task.dart';
 import 'package:mone_task_app/core/constants/urls.dart';
 import 'package:mone_task_app/core/di/di.dart';
 
-class AdminTaskService {
+/// Admin template CRUD — task yaratish, tahrirlash, o'chirish, tartib.
+/// Filial va Category boshqaruvi ham shu yerda.
+class TemplateService {
   final Dio _dio = sl<Dio>();
 
   Future<List<AdminTaskModel>> fetchTasks() async {

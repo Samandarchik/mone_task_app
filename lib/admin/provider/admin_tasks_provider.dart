@@ -9,7 +9,7 @@ import 'package:mone_task_app/core/network/ws_service.dart';
 enum LoadingState { idle, loading, loaded, error }
 
 class AdminTasksProvider extends ChangeNotifier {
-  final AdminTaskService _service = AdminTaskService();
+  final TaskViewService _service = TaskViewService();
   StreamSubscription? _wsSub;
 
   // ── Filials ──────────────────────────────────────────────────────────────
@@ -22,11 +22,11 @@ class AdminTasksProvider extends ChangeNotifier {
   String? get filialsError => _filialsError;
 
   // ── Tasks ────────────────────────────────────────────────────────────────
-  List<CheckerCheckTaskModel> _tasks = [];
+  List<TaskModel> _tasks = [];
   LoadingState _tasksState = LoadingState.idle;
   String? _tasksError;
 
-  List<CheckerCheckTaskModel> get tasks => _tasks;
+  List<TaskModel> get tasks => _tasks;
   LoadingState get tasksState => _tasksState;
   String? get tasksError => _tasksError;
 
@@ -102,7 +102,7 @@ class AdminTasksProvider extends ChangeNotifier {
   }
 
   // ── Filter tasks by filial + status ─────────────────────────────────────
-  List<CheckerCheckTaskModel> tasksForFilial(int filialId) {
+  List<TaskModel> tasksForFilial(int filialId) {
     var filtered = _tasks.where((t) => t.filialId == filialId);
 
     if (_selectedStatuses.isNotEmpty) {

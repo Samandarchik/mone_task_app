@@ -1,0 +1,309 @@
+================================================================
+  MONE TASK APP - Loyiha Dokumentatsiyasi
+  Versiya: 0.1.5
+  Yangilangan: 2026-03-23
+================================================================
+
+1. LOYIHA HAQIDA
+================================================================
+Mone Bakery task boshqaruv ilovasi.
+- Backend: Go (Golang) + SQLite
+- Frontend: Flutter (Dart)
+- Real-time: WebSocket
+- State: Provider (ChangeNotifier)
+
+3 ta rol:
+- super_admin: Tasklar yaratish, tahrirlash, o'chirish, tekshirish
+- checker: Tasklarni ko'rish, video ko'rib tekshirish (50% auto-approve)
+- worker: Tasklarni bajarish, video yuborish
+
+
+2. ARXITEKTURA
+================================================================
+
+┌─────────────┐     HTTP/WS      ┌──────────────┐
+│   Flutter    │ ◄──────────────► │  Go Backend   │
+│   (Dart)     │                  │  (port 8000)  │
+└─────────────┘                  └──────┬───────┘
+                                        │
+                                  ┌─────┴─────┐
+                                  │  SQLite    │
+                                  │  (per-day) │
+                                  └───────────┘
+
+Backend har kun uchun alohida DB fayl yaratadi:
+- db/main.db — users, filials, categories, task_templates
+- db/tasks_2026-03-23.db — shu kungi tasklar
+
+
+3. FLUTTER FAYL STRUKTURASI
+================================================================
+
+lib/
+├── main.dart                        # App entry point, Provider setup
+├── deep_link_service.dart           # Deep link handling
+│
+├── core/                            # Umumiy infratuzilma
+│   ├── constants/
+│   │   └── urls.dart                # API va WS URL'lar
+│   ├── data/local/
+│   │   ├── app_storage.dart         # App settings storage
+│   │   ├── base_storage.dart        # Abstract storage interface
+│   │   ├── shared_preferences_impl.dart  # SharedPrefs implementation
+│   │   └── token_storage.dart       # JWT token va user data
+│   ├── di/
+│   │   └── di.dart                  # GetIt dependency injection
+│   ├── gen/
+│   │   └── fonts.gen.dart           # Generated fonts
+│   ├── network/
+│   │   ├── dio_settings.dart        # Dio HTTP client config
+│   │   ├── print.dart               # Dio logger
+│   │   └── ws_service.dart          # WebSocket service (singleton)
+│   └── context_extension.dart       # Navigator extension methods
+│
+├── home/                            # Auth (login/splash)
+│   ├── model/
+│   │   └── login_model.dart         # Login request model
+│   ├── service/
+│   │   ├── api_service.dart         # Login API call
+│   │   ├── check_version.dart       # App version check
+│   │   └── login_service.dart       # Login UI + routing logic
+│   └── ui/
+│       └── splash_screen.dart       # Splash + auto-login
+│
+├── admin/                           # Admin/Checker task management
+│   ├── model/
+│   │   ├── add_admin_task.dart      # Task yaratish modeli
+│   │   ├── admin_task_model.dart    # Task ko'rish modeli (kunlik)
+│   │   ├── all_task_model.dart      # Template task modeli
+│   │   ├── edit_task_ui_model.dart  # Task tahrirlash modeli
+│   │   └── filial_model.dart        # Filial + Category modeli
+│   ├── service/
+│   │   ├── task_worker_service.dart # TemplateService — admin template CRUD
+│   │   ├── get_excel_service.dart   # Excel report download
+│   │   └── get_excel_ui.dart        # Excel UI page
+│   ├── provider/
+│   │   ├── admin_task_ui.dart       # ASOSIY SAHIFA (admin+checker)
+│   │   ├── admin_tasks_provider.dart # ChangeNotifier - tasks state
+│   │   ├── admin_task_list_widget.dart # Task list with video download
+│   │   ├── admin_task_item.dart     # Bitta task card (status, audio, share)
+│   │   ├── circle_video_player.dart # Video player dialog (audio yozish)
+│   │   ├── video_player_provider.dart # Video playback state
+│   │   ├── video_download_provider.dart # Video cache/download manager
+│   │   └── my_drawer.dart           # Navigation drawer
+│   └── ui/
+│       ├── add_admin_task.dart      # Yangi task yaratish sahifasi
+│       ├── all_task_ui.dart         # Barcha templatelar ro'yxati
+│       ├── edit_task_ui.dart        # Task tahrirlash
+│       ├── edit.dart                # Task tahrirlash sahifasi v2
+│       ├── audio_task_row.dart      # → redirect to shared/widgets/
+│       ├── add_worker.dart          # Worker qo'shish
+│       ├── user_list_page.dart      # Userlar ro'yxati
+│       ├── user_servise.dart        # User CRUD service
+│       ├── dialog.dart              # Tasdiqlash dialoglari
+│       ├── my_drawer.dart           # Eski drawer (admin/provider/ da yangi bor)
+│       └── video_cache_manager_page.dart # Video kesh boshqaruvi
+│
+├── checker/                         # Checker-specific
+│   ├── model/
+│   │   └── checker_check_task_model.dart  # → redirect to shared/models/task_model.dart
+│   ├── service/
+│   │   └── task_worker_service.dart # TaskViewService — task ko'rish, status, audio
+│   ├── widgets/
+│   │   └── task_title.dart          # Task detail widget (checker video player)
+│   └── ui/
+│       └── player2.dart             # CircleVideoPlayer2 (checker video)
+│
+├── worker/                          # Worker module
+│   ├── model/
+│   │   ├── task_worker_model.dart   # → redirect to shared/models/task_model.dart
+│   │   ├── user_model.dart          # → redirect to shared/models/user_model.dart
+│   │   └── response_task_model.dart # Video upload request model
+│   ├── service/
+│   │   ├── task_worker_service.dart # TaskWorkerService — worker ops
+│   │   └── log_out.dart             # → redirect to shared/services/log_out.dart
+│   └── ui/
+│       ├── task_worker_ui.dart      # Worker asosiy sahifa
+│       ├── telegram_style_video_recorder.dart # Video yozish
+│       └── video_pervi.dart         # Video preview helper
+│
+├── shared/                          # Barcha rollar uchun umumiy
+│   ├── models/
+│   │   ├── task_model.dart          # YAGONA TaskModel (eski nom: CheckerCheckTaskModel/TaskWorkerModel)
+│   │   └── user_model.dart          # UserModel (barcha rollar)
+│   ├── services/
+│   │   └── log_out.dart             # LogOutService (barcha rollar)
+│   └── widgets/
+│       └── audio_task_row.dart      # AudioTaskRow (barcha rollar)
+│
+└── utils/
+    └── get_color.dart               # Task type/status helpers
+
+
+4. BAJARILGAN REFACTORING
+================================================================
+
+4.1 MODELLAR BIRLASHTIRILDI (DONE)
+- TaskWorkerModel + CheckerCheckTaskModel → bitta TaskModel (shared/models/)
+- Eski fayllar export redirect sifatida qoldi (backward compatible)
+
+4.2 SERVICELAR NOMLARI TO'G'RILANDI (DONE)
+- checker/service/ → TaskViewService (task ko'rish - admin/checker)
+- admin/service/ → TemplateService (template CRUD - admin)
+- worker/service/ → TaskWorkerService (worker ops)
+
+4.3 SHARED FAYLLAR KO'CHIRILDI (DONE)
+- audio_task_row.dart → shared/widgets/ (eski joyda export redirect)
+- user_model.dart → shared/models/ (eski joyda export redirect)
+- log_out.dart → shared/services/ (eski joyda export redirect)
+
+4.4 O'LIK KOD O'CHIRILDI (DONE)
+- 4 ta notification fayl (100% commented)
+- checker_home_ui.dart (endi ishlatilmaydi)
+- checker/ui/dialog.dart (hech yerda import qilinmagan)
+- worker_audio_player.dart (AudioTaskRow bilan almashtirilgan)
+
+4.5 QOLGAN TEXNIK QARZ
+- admin/ui/user_servise.dart → nomida typo, service papkaga ko'chirish kerak
+- backend main.go → 3800+ qator bitta faylda, fayllarga ajratish kerak
+- Eski export redirect fayllar — vaqt o'tishi bilan to'g'ridan-to'g'ri import qilish
+
+
+5. BACKEND STRUKTURASI (Go)
+================================================================
+
+backend/
+├── main.go              # 3800+ qator - barcha kod bitta faylda
+├── go.mod / go.sum
+├── wss_config.txt       # Nginx WS config qo'llanmasi
+├── db/                  # SQLite databases
+│   ├── main.db          # Users, filials, categories, templates
+│   └── tasks_YYYY-MM-DD.db # Kunlik task DB'lar
+├── videos/              # Yuklangan videolar
+│   └── YYYY-MM-DD/
+└── audios/              # Yuklangan audiolar
+    └── YYYY-MM-DD/
+
+Backend endpointlar:
+- POST   /api/auth/login
+- POST   /api/auth/register
+- POST   /api/auth/logout
+- POST   /api/auth/force-logout/{userId}
+- GET    /api/tasks?date=YYYY-MM-DD
+- GET    /api/tasks/all (templates)
+- POST   /api/tasks (create template)
+- GET    /api/tasks/{id}
+- PUT    /api/tasks/{id} (update template)
+- DELETE /api/tasks/{id}
+- POST   /api/tasks/{id}/submit (video upload)
+- POST   /api/tasks/{id}/check/{date} (status update)
+- POST   /api/tasks/{id}/voice-comment/{date} (audio upload)
+- DELETE /api/tasks/{id}/voice-comment/{date}/{index} (audio delete)
+- PUT    /api/tasks/reorder/{id}/{pos}
+- PUT    /api/tasks/reorder (bulk reorder)
+- GET    /api/filials
+- POST   /api/filials
+- PUT    /api/filials/{id}
+- DELETE /api/filials/{id}
+- GET    /api/categories
+- POST   /api/categories
+- PUT    /api/categories/{id}
+- DELETE /api/categories/{id}
+- GET    /api/users
+- PUT    /api/users/{id}
+- DELETE /api/users/{id}
+- GET    /api/reports/excel
+- GET    /api/reports/json
+- GET    /api/notifications
+- GET    /api/debug/info
+- GET    /health
+- WS     /ws/tasks?token=JWT
+
+WebSocket events (server → client):
+- {"event": "task_updated", "data": {"taskId": "...", "action": "...", "date": "..."}}
+  Actions: video_submitted, video_merged, status_changed, audio_comment, audio_deleted
+
+
+6. STATUS LOGIKASI
+================================================================
+
+Task statuslari:
+- null  → hali ko'rilmagan / video yuborilgan, tekshirmagan
+- 1     → rad etilgan (qizil)
+- 2     → kutilmoqda/qayta ko'rish (sariq)
+- 3     → tasdiqlangan (yashil)
+
+Qoidalar:
+- Status 3 qo'lda o'zgartirib BO'LMAYDI (na checker, na super_admin)
+- Checker 50% video ko'rsa → avtomatik status 3
+- Super_admin status 3 qila olmaydi
+- Status 1, 2 → qo'lda o'zgartirish mumkin (video bo'lsa)
+- Status 1, 2 bosilganda → avval audio yoziladi, keyin status o'zgaradi
+
+
+7. AUDIO LOGIKASI
+================================================================
+
+- Har bir taskda max 2 ta audio saqlash mumkin
+- DB da checker_audio_url TEXT fieldida JSON array saqlanadi:
+  '["url1.m4a", "url2.m4a"]'
+- 3-chi audio yuborilsa eng eskisi (1-chi) o'chiriladi
+- Barcha rollar (worker, checker, admin) audio yubora oladi
+- Audio o'chirish: DELETE /api/tasks/{id}/voice-comment/{date}/{index}
+- Eski format (bitta string) ham o'qiladi (backward compatible)
+
+
+8. VIDEO LOGIKASI
+================================================================
+
+- Worker video yozib yuboradi (segmentli yoki bitta)
+- Video yuborilganda status NULL ga o'tadi
+- Segmentli videolar backgroundda FFmpeg bilan birlashtiriladi
+- Video cache: VideoDownloadProvider orqali local cache
+- Video player: CircleVideoPlayer (PageView + arc progress)
+
+
+9. WEBSOCKET
+================================================================
+
+Flutter: WsService (singleton, auto-reconnect 3s)
+Backend: gorilla/websocket, Hub pattern
+
+Flow:
+1. Client JWT token bilan /ws/tasks ga ulanadi
+2. Server task o'zgarganda broadcast qiladi
+3. Client "task_updated" event oladi
+4. AdminTasksProvider.fetchTasks() chaqiriladi
+5. UI yangilanadi
+
+
+10. PROVIDER ARXITEKTURASI
+================================================================
+
+main.dart da MultiProvider:
+- AdminTasksProvider → task list, status filter, CRUD
+- VideoDownloadProvider → video cache management
+
+AdminTasksProvider methods:
+- init() → WS ulash + fetchFilials + fetchTasks
+- fetchTasks() → GET /api/tasks?date=...
+- fetchFilials() → GET /api/filials
+- updateTaskStatus(taskId, status, date)
+- deleteTask(taskId)
+- setSelectedDate(date) → fetch + rebuild
+- toggleStatusFilter(status) → local filter
+- tasksForFilial(filialId) → filtered list
+
+
+11. KEYINGI QADAMLAR (Refactoring reja)
+================================================================
+
+Muhimlik bo'yicha:
+1. [YUQORI] Modellarni birlashtirish
+   TaskWorkerModel + CheckerCheckTaskModel → bitta TaskModel
+2. [YUQORI] Service nomlarini to'g'rilash
+   Dublikat AdminTaskService nomlarini aniq qilish
+3. [O'RTA] Shared fayllarni ko'chirish
+   audio_task_row, user_model, log_out → lib/shared/
+4. [PAST] Papka strukturasini feature-based qilish
+5. [PAST] Backend main.go ni fayllarga ajratish

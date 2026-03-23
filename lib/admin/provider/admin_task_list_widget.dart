@@ -10,7 +10,7 @@ import 'package:share_plus/share_plus.dart';
 import 'package:path_provider/path_provider.dart';
 
 class AdminTaskListWidget extends StatefulWidget {
-  final List<CheckerCheckTaskModel> tasks;
+  final List<TaskModel> tasks;
   final int filialId;
   final DateTime selectedDate;
   final String role;
@@ -18,7 +18,7 @@ class AdminTaskListWidget extends StatefulWidget {
   final Function(
     List<String> videoPaths,
     int startIndex,
-    List<CheckerCheckTaskModel> task,
+    List<TaskModel> task,
   )
   onShowVideoPlayer;
 
@@ -57,7 +57,7 @@ class _AdminTaskListWidgetState extends State<AdminTaskListWidget> {
   }
 
   /// Faqat videoli tasklar ro'yxati
-  List<CheckerCheckTaskModel> _getVideoTasks() {
+  List<TaskModel> _getVideoTasks() {
     return widget.tasks
         .where((t) => t.videoUrl != null && t.videoUrl!.isNotEmpty)
         .toList();
@@ -72,13 +72,13 @@ class _AdminTaskListWidgetState extends State<AdminTaskListWidget> {
   }
 
   /// Berilgan task videoli tasklar ichida nechanchi index da turganini topish
-  int _getVideoIndex(CheckerCheckTaskModel task) {
+  int _getVideoIndex(TaskModel task) {
     final videoTasks = _getVideoTasks();
     return videoTasks.indexWhere((t) => t.taskId == task.taskId);
   }
 
   Future<void> _shareVideo(
-    CheckerCheckTaskModel task,
+    TaskModel task,
     VideoDownloadProvider downloadProvider,
   ) async {
     try {

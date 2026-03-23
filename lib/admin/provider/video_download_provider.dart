@@ -62,7 +62,7 @@ class VideoDownloadProvider extends ChangeNotifier {
 
   /// Start sequential download for a list of tasks
   Future<void> startDownloadsForTasks(
-    List<CheckerCheckTaskModel> tasks,
+    List<TaskModel> tasks,
     int filialId,
   ) async {
     if (_isSequenceRunning) return;
@@ -196,7 +196,7 @@ class VideoDownloadProvider extends ChangeNotifier {
 
   /// Get all video paths for a filial (resolved: local if cached, URL otherwise)
   List<String> getAllVideoPaths(
-    List<CheckerCheckTaskModel> tasks,
+    List<TaskModel> tasks,
     int filialId,
   ) {
     return tasks

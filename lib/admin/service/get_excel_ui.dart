@@ -19,7 +19,7 @@ class ExcelReportPage extends StatefulWidget {
 
 class _ExcelReportPageState extends State<ExcelReportPage> {
   final ExcelReportService _reportService = ExcelReportService();
-  final AdminTaskService _adminService = AdminTaskService();
+  final TaskViewService _adminService = TaskViewService();
 
   List<FilialModel>? _allFilials;
   List<FilialModel>? _availableFilials; // Faqat ko'ra oladigan filiallar

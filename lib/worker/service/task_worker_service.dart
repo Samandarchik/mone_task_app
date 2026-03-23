@@ -12,7 +12,7 @@ class TaskWorkerService {
   final Dio _dio = sl<Dio>();
 
   /// [date] berilmasa bugungi kun ishlatiladi
-  Future<List<TaskWorkerModel>> fetchTasks({DateTime? date}) async {
+  Future<List<TaskModel>> fetchTasks({DateTime? date}) async {
     try {
       final String dateStr = DateFormat(
         'yyyy-MM-dd',
@@ -33,7 +33,7 @@ class TaskWorkerService {
         throw Exception("Server noto'g'ri format qaytardi");
       }
 
-      return data.map((e) => TaskWorkerModel.fromJson(e)).toList();
+      return data.map((e) => TaskModel.fromJson(e)).toList();
     } catch (e) {
       rethrow;
     }

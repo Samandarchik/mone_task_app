@@ -10,7 +10,7 @@ import 'package:wakelock_plus/wakelock_plus.dart';
 
 class VideoPlayerProvider extends ChangeNotifier {
   final List<String> videoUrls;
-  final List<CheckerCheckTaskModel> tasks;
+  final List<TaskModel> tasks;
   final void Function(int taskId)? onHalfWatched;
   final Future<bool> Function(int taskId, int status)? onUpdateStatus;
 
@@ -60,7 +60,7 @@ class VideoPlayerProvider extends ChangeNotifier {
   bool get hasPrev => _currentIndex > 0;
   bool get hasNext => _currentIndex < videoUrls.length - 1;
 
-  CheckerCheckTaskModel? get currentTask =>
+  TaskModel? get currentTask =>
       _currentIndex < tasks.length ? tasks[_currentIndex] : null;
 
   double get progress {
@@ -94,7 +94,7 @@ class VideoPlayerProvider extends ChangeNotifier {
         success = await onUpdateStatus!(taskId, newStatus);
       } else {
         // Fallback: to'g'ridan-to'g'ri service chaqirish
-        success = await AdminTaskService().updateTaskStatus(
+        success = await TaskViewService().updateTaskStatus(
           taskId,
           newStatus,
           null,

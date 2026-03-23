@@ -30,8 +30,8 @@ class _TemplateTaskAdminUiState extends State<TemplateTaskAdminUi> {
   @override
   void initState() {
     super.initState();
-    templatesFuture = AdminTaskService().fetchTemplates();
-    categoriesFuture = AdminTaskService().fetchFilials();
+    templatesFuture = TemplateService().fetchTemplates();
+    categoriesFuture = TemplateService().fetchFilials();
   }
 
   @override
@@ -98,7 +98,7 @@ class _TemplateTaskAdminUiState extends State<TemplateTaskAdminUi> {
                     // Agar yangi task qo'shilsa, refresh qilish
                     if (result == true) {
                       setState(() {
-                        templatesFuture = AdminTaskService().fetchTemplates();
+                        templatesFuture = TemplateService().fetchTemplates();
                       });
                     }
                   },
@@ -170,7 +170,7 @@ class _TemplateTaskAdminUiState extends State<TemplateTaskAdminUi> {
                               ElevatedButton(
                                 onPressed: () {
                                   setState(() {
-                                    templatesFuture = AdminTaskService()
+                                    templatesFuture = TemplateService()
                                         .fetchTemplates();
                                   });
                                 },
@@ -259,14 +259,14 @@ class _TemplateTaskAdminUiState extends State<TemplateTaskAdminUi> {
               Navigator.pop(context);
 
               try {
-                final bool result = await AdminTaskService().addFilial(
+                final bool result = await TemplateService().addFilial(
                   filialName,
                 );
 
                 if (result) {
                   // Yangi filiallarni yuklash
                   setState(() {
-                    categoriesFuture = AdminTaskService().fetchFilials();
+                    categoriesFuture = TemplateService().fetchFilials();
                   });
                 }
               } catch (e) {}
@@ -317,7 +317,7 @@ class _TemplateTaskAdminUiState extends State<TemplateTaskAdminUi> {
                     ),
                     TextButton(
                       onPressed: () {
-                        AdminTaskService().deleteFilial(filial.filialId);
+                        TemplateService().deleteFilial(filial.filialId);
                         Navigator.pop(context, true);
                       },
                       style: TextButton.styleFrom(foregroundColor: Colors.red),
@@ -330,10 +330,10 @@ class _TemplateTaskAdminUiState extends State<TemplateTaskAdminUi> {
               if (confirm == true) {
                 Navigator.pop(context);
 
-                await AdminTaskService().deleteFilial(filial.filialId);
+                await TemplateService().deleteFilial(filial.filialId);
 
                 setState(() {
-                  categoriesFuture = AdminTaskService().fetchFilials();
+                  categoriesFuture = TemplateService().fetchFilials();
                 });
               }
             },
@@ -355,9 +355,9 @@ class _TemplateTaskAdminUiState extends State<TemplateTaskAdminUi> {
               }
 
               Navigator.pop(context);
-              await AdminTaskService().updateFilial(filial.filialId, newName);
+              await TemplateService().updateFilial(filial.filialId, newName);
               setState(() {
-                categoriesFuture = AdminTaskService().fetchFilials();
+                categoriesFuture = TemplateService().fetchFilials();
               });
             },
             child: const Text("Saqlash"),
@@ -387,7 +387,7 @@ class _TemplateTaskAdminUiState extends State<TemplateTaskAdminUi> {
 
     return RefreshIndicator(
       onRefresh: () async {
-        final newTemplates = AdminTaskService().fetchTemplates();
+        final newTemplates = TemplateService().fetchTemplates();
         setState(() {
           templatesFuture = newTemplates;
         });
@@ -417,7 +417,7 @@ class _TemplateTaskAdminUiState extends State<TemplateTaskAdminUi> {
           print('📍 Order index $oldOrderIndex → $newOrderIndex');
 
           // Backend ga yuborish
-          final success = await AdminTaskService().updateTaskReorder(
+          final success = await TemplateService().updateTaskReorder(
             oldOrderIndex,
             newOrderIndex,
           );
@@ -426,7 +426,7 @@ class _TemplateTaskAdminUiState extends State<TemplateTaskAdminUi> {
             print('✅ Reorder muvaffaqiyatli');
             // Qayta yuklash
             setState(() {
-              templatesFuture = AdminTaskService().fetchTemplates();
+              templatesFuture = TemplateService().fetchTemplates();
             });
           } else {
             print('❌ Reorder muvaffaqiyatsiz');
@@ -469,7 +469,7 @@ class _TemplateTaskAdminUiState extends State<TemplateTaskAdminUi> {
                 context,
                 MaterialPageRoute(
                   builder: (_) => EditTaskUi(
-                    task: CheckerCheckTaskModel(
+                    task: TaskModel(
                       taskId: template.templateId,
                       task: template.task,
                       category: template.category,
@@ -486,7 +486,7 @@ class _TemplateTaskAdminUiState extends State<TemplateTaskAdminUi> {
               // Agar tahrirlash bo'lsa, refresh qilish
               if (result == true) {
                 setState(() {
-                  templatesFuture = AdminTaskService().fetchTemplates();
+                  templatesFuture = TemplateService().fetchTemplates();
                 });
               }
             },

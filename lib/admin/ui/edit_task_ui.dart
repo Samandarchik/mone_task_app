@@ -6,7 +6,7 @@ import 'package:mone_task_app/admin/ui/add_admin_task.dart';
 import 'package:mone_task_app/checker/model/checker_check_task_model.dart';
 
 class EditTaskUi extends StatefulWidget {
-  final CheckerCheckTaskModel task;
+  final TaskModel task;
   const EditTaskUi({super.key, required this.task});
 
   @override
@@ -14,7 +14,7 @@ class EditTaskUi extends StatefulWidget {
 }
 
 class _EditTaskUiState extends State<EditTaskUi> {
-  AdminTaskService taskService = AdminTaskService();
+  TemplateService taskService = TemplateService();
   late TextEditingController controller;
 
   int? selectedType;
@@ -62,7 +62,7 @@ class _EditTaskUiState extends State<EditTaskUi> {
       categoriesError = null;
     });
     try {
-      final result = await AdminTaskService().loadCategories();
+      final result = await TemplateService().loadCategories();
       if (!mounted) return;
       setState(() {
         categories = result;

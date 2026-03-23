@@ -9,7 +9,7 @@ import 'package:provider/provider.dart';
 
 class AdminTaskListItem extends StatefulWidget {
   final int index;
-  final CheckerCheckTaskModel task;
+  final TaskModel task;
   final String? videoPath;
   final VideoStatus videoStatus;
   final double downloadProgress;
@@ -41,7 +41,7 @@ class _AdminTaskListItemState extends State<AdminTaskListItem>
     with SingleTickerProviderStateMixin {
   late AnimationController _pulseController;
 
-  CheckerCheckTaskModel get task => widget.task;
+  TaskModel get task => widget.task;
 
   @override
   void initState() {

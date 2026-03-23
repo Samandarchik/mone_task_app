@@ -8,10 +8,12 @@ import 'package:mone_task_app/core/constants/urls.dart';
 import 'package:mone_task_app/core/di/di.dart';
 import 'package:mone_task_app/worker/model/response_task_model.dart';
 
-class AdminTaskService {
+/// Task ko'rish, status o'zgartirish, audio yuborish/o'chirish.
+/// Admin va Checker ikkalasinida ishlatadi.
+class TaskViewService {
   final Dio _dio = sl<Dio>();
 
-  Future<List<CheckerCheckTaskModel>> fetchTasks(DateTime selectedDate) async {
+  Future<List<TaskModel>> fetchTasks(DateTime selectedDate) async {
     try {
       final response = await _dio.get(
         "${AppUrls.tasks}?date=${selectedDate.year}-${selectedDate.month.toString().padLeft(2, '0')}-${selectedDate.day.toString().padLeft(2, '0')}",
@@ -28,7 +30,7 @@ class AdminTaskService {
         throw Exception("Server noto‘g‘ri format qaytardi");
       }
 
-      return data.map((e) => CheckerCheckTaskModel.fromJson(e)).toList();
+      return data.map((e) => TaskModel.fromJson(e)).toList();
     } catch (e) {
       rethrow; // UI ushlashi uchun
     }

@@ -13,7 +13,7 @@ import 'package:path_provider/path_provider.dart';
 import 'dart:io';
 
 class TaskListWidget extends StatefulWidget {
-  final List<CheckerCheckTaskModel> tasks;
+  final List<TaskModel> tasks;
   final int filialId;
   final DateTime selectedDate;
   final VoidCallback onRefresh;
@@ -178,7 +178,7 @@ class _TaskListWidgetState extends State<TaskListWidget> {
     }
   }
 
-  Future<void> _shareVideo(CheckerCheckTaskModel task) async {
+  Future<void> _shareVideo(TaskModel task) async {
     try {
       String? videoUrl = task.videoUrl;
       if (videoUrl == null || videoUrl.isEmpty) {
@@ -293,7 +293,7 @@ class _TaskListWidgetState extends State<TaskListWidget> {
 }
 
 class TaskListItem extends StatefulWidget {
-  final CheckerCheckTaskModel task;
+  final TaskModel task;
   final String? videoUrl;
   final int index;
   final bool isVideoCached;
@@ -323,7 +323,7 @@ class TaskListItem extends StatefulWidget {
 }
 
 class _TaskListItemState extends State<TaskListItem> {
-  late CheckerCheckTaskModel task;
+  late TaskModel task;
 
   @override
   void initState() {
@@ -351,7 +351,7 @@ class _TaskListItemState extends State<TaskListItem> {
           borderRadius: BorderRadius.circular(10),
           onLongPress: () async {
             if (task.videoUrl == null || task.videoUrl!.isEmpty) return;
-            final bool isDelete = await AdminTaskService().updateTaskStatus(
+            final bool isDelete = await TaskViewService().updateTaskStatus(
               task.taskId,
               1,
               widget.selectedDate,
@@ -375,7 +375,7 @@ class _TaskListItemState extends State<TaskListItem> {
                     onHalfWatched: () async {
                       // Status allaqachon 3 bo'lsa qayta so'rov ketmasin
                       if (task.status == 3) return;
-                      final bool isSuccess = await AdminTaskService()
+                      final bool isSuccess = await TaskViewService()
                           .updateTaskStatus(
                             task.taskId,
                             3,

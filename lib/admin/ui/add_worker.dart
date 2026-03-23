@@ -40,8 +40,8 @@ class _AddWorkerPageState extends State<AddWorkerPage> {
   Future<void> _loadData() async {
     try {
       final results = await Future.wait([
-        AdminTaskService().fetchFilials(),
-        AdminTaskService().fetchCategories(),
+        TaskViewService().fetchFilials(),
+        TaskViewService().fetchCategories(),
       ]);
 
       setState(() {

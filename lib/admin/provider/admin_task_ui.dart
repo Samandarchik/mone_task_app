@@ -60,7 +60,7 @@ class _AdminTaskUiState extends State<AdminTaskUi>
   void _showCircleVideoPlayer(
     List<String> videoPaths,
     int startIndex,
-    List<CheckerCheckTaskModel> tasks,
+    List<TaskModel> tasks,
   ) {
     if (videoPaths.isEmpty) return;
     final isChecker = _user?.role == "checker";

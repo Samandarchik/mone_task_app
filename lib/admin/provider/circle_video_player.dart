@@ -16,7 +16,7 @@ import 'package:share_plus/share_plus.dart';
 import 'package:video_player/video_player.dart';
 
 class CircleVideoPlayer extends StatelessWidget {
-  final List<CheckerCheckTaskModel> title;
+  final List<TaskModel> title;
   final List<String> videoUrls;
   final int initialIndex;
   final void Function(int taskId)? onHalfWatched;
@@ -167,7 +167,7 @@ class _CircleVideoPlayerBodyState extends State<_CircleVideoPlayerBody>
   void _shareTaskLink(
     BuildContext context,
     VideoPlayerProvider provider,
-    CheckerCheckTaskModel? task,
+    TaskModel? task,
   ) {
     if (task == null) return;
     if (provider.isPlaying) provider.togglePlayPause();
@@ -202,17 +202,17 @@ class _CircleVideoPlayerBodyState extends State<_CircleVideoPlayerBody>
 
   // ── Audio helpers ─────────────────────────────────────────────────────────
 
-  String? _getAudioUrl(CheckerCheckTaskModel? task) =>
+  String? _getAudioUrl(TaskModel? task) =>
       (task != null && task.checkerAudioUrls.isNotEmpty
           ? task.checkerAudioUrls.last
           : null);
 
-  bool _hasAudio(CheckerCheckTaskModel? task) {
+  bool _hasAudio(TaskModel? task) {
     final url = _getAudioUrl(task);
     return url != null && url.isNotEmpty;
   }
 
-  bool _canRecord(CheckerCheckTaskModel? task) =>
+  bool _canRecord(TaskModel? task) =>
       task?.videoUrl != null && task!.videoUrl!.isNotEmpty;
 
   String _fullAudioUrl(String url) {
@@ -292,7 +292,7 @@ class _CircleVideoPlayerBodyState extends State<_CircleVideoPlayerBody>
     if (mounted) setState(() => _isSending = true);
 
     try {
-      final success = await AdminTaskService().pushAudio(
+      final success = await TaskViewService().pushAudio(
         task.taskId,
         file,
         widget.selectedDate,
@@ -347,7 +347,7 @@ class _CircleVideoPlayerBodyState extends State<_CircleVideoPlayerBody>
     }
   }
 
-  Future<void> _toggleAudioPlay(CheckerCheckTaskModel? task) async {
+  Future<void> _toggleAudioPlay(TaskModel? task) async {
     final audioUrl = _getAudioUrl(task);
     if (audioUrl == null) return;
 
@@ -382,7 +382,7 @@ class _CircleVideoPlayerBodyState extends State<_CircleVideoPlayerBody>
   Future<void> _onStatusPointerDown(
     PointerDownEvent event,
     VideoPlayerProvider provider,
-    CheckerCheckTaskModel task,
+    TaskModel task,
   ) async {
     int? tappedLevel;
     for (final level in [1, 2, 3]) {
@@ -716,7 +716,7 @@ class _CircleVideoPlayerBodyState extends State<_CircleVideoPlayerBody>
   // ── Mini audio player ─────────────────────────────────────────────────────
 
   Widget _buildMiniAudioPlayer(
-    CheckerCheckTaskModel? task,
+    TaskModel? task,
     VideoPlayerProvider provider,
   ) {
     return Row(
@@ -882,7 +882,7 @@ class _CircleVideoPlayerBodyState extends State<_CircleVideoPlayerBody>
 
   Widget _buildStatusIndicator(
     VideoPlayerProvider provider,
-    CheckerCheckTaskModel task,
+    TaskModel task,
   ) {
     return Listener(
       onPointerDown: (e) => _onStatusPointerDown(e, provider, task),
@@ -902,7 +902,7 @@ class _CircleVideoPlayerBodyState extends State<_CircleVideoPlayerBody>
   }
 
   Widget _statusCircle(
-    CheckerCheckTaskModel task,
+    TaskModel task,
     int level,
     Color activeColor,
   ) {
