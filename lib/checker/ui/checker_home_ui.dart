@@ -64,7 +64,7 @@ class _CheckerHomeUiState extends State<CheckerHomeUi> {
     List<CheckerCheckTaskModel> title,
     List<String> videoPaths,
     int startIndex, {
-    VoidCallback? onHalfWatched,
+    void Function(int taskId)? onHalfWatched,
   }) {
     if (videoPaths.isEmpty) return;
     showDialog(

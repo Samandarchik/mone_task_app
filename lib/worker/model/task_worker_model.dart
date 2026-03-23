@@ -5,7 +5,7 @@ class TaskWorkerModel {
   int? taskStatus;
   String? submittedBy;
   DateTime? submittedAt;
-  String? checkerAudioUrl;
+  List<String> checkerAudioUrls;
   String? videoUrl;
   List<int>? days;
 
@@ -16,7 +16,7 @@ class TaskWorkerModel {
     this.taskStatus,
     this.submittedBy,
     this.submittedAt,
-    this.checkerAudioUrl,
+    this.checkerAudioUrls = const [],
     this.videoUrl,
     this.days,
   });
@@ -29,7 +29,9 @@ class TaskWorkerModel {
       taskStatus: json['status'],
       videoUrl: json["videoUrl"],
       submittedBy: json['submittedBy'],
-      checkerAudioUrl: json['checkerAudioUrl'],
+      checkerAudioUrls: json['checkerAudioUrls'] != null
+          ? List<String>.from(json['checkerAudioUrls'])
+          : (json['checkerAudioUrl'] != null ? [json['checkerAudioUrl'] as String] : []),
       submittedAt: json['submittedAt'] != null
           ? DateTime.parse(json['submittedAt'])
           : null,

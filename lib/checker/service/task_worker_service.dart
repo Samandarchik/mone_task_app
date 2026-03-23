@@ -123,7 +123,20 @@ class AdminTaskService {
       );
       return response.statusCode == 200;
     } catch (e) {
-      rethrow; // UI ushlashi uchun
+      rethrow;
+    }
+  }
+
+  Future<bool> deleteAudio(int taskId, DateTime date, int audioIndex) async {
+    try {
+      final dateStr =
+          "${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}";
+      final response = await _dio.delete(
+        "${AppUrls.tasks}/$taskId/voice-comment/$dateStr/$audioIndex",
+      );
+      return response.statusCode == 200;
+    } catch (e) {
+      return false;
     }
   }
 }

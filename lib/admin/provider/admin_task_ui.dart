@@ -63,6 +63,7 @@ class _AdminTaskUiState extends State<AdminTaskUi>
     List<CheckerCheckTaskModel> tasks,
   ) {
     if (videoPaths.isEmpty) return;
+    final isChecker = _user?.role == "checker";
     showDialog(
       context: context,
       barrierColor: Colors.white30,
@@ -73,6 +74,13 @@ class _AdminTaskUiState extends State<AdminTaskUi>
           initialIndex: startIndex,
           title: tasks,
           selectedDate: _selectedDate,
+          // Checker: 50% video ko'rsa avtomatik status=3
+          onHalfWatched: isChecker
+              ? (taskId) {
+                  final provider = context.read<AdminTasksProvider>();
+                  provider.updateTaskStatus(taskId, 3, _selectedDate);
+                }
+              : null,
         ),
       ),
     );

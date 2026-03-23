@@ -486,7 +486,7 @@ class _TaskListItemState extends State<TaskListItem> {
                 ),
 
                 // ── Audio yozish / tinglash (video bo'lsa chiqadi) ─────────
-                AudioTaskRow(task: task, selectedDate: widget.selectedDate),
+                AudioTaskRow.fromCheckerTask(task: task, selectedDate: widget.selectedDate),
               ],
             ),
           ),

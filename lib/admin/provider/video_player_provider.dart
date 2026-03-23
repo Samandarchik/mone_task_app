@@ -11,7 +11,7 @@ import 'package:wakelock_plus/wakelock_plus.dart';
 class VideoPlayerProvider extends ChangeNotifier {
   final List<String> videoUrls;
   final List<CheckerCheckTaskModel> tasks;
-  final VoidCallback? onHalfWatched;
+  final void Function(int taskId)? onHalfWatched;
   final VoidCallback? onStatusChanged; // ✅ YANGI
 
   VideoPlayerController? _controller;
@@ -194,7 +194,9 @@ class VideoPlayerProvider extends ChangeNotifier {
 
     if (!_halfWatchedFired && total > 0 && current >= total * 0.5) {
       _halfWatchedFired = true;
-      onHalfWatched?.call();
+      if (onHalfWatched != null && _currentIndex < tasks.length) {
+        onHalfWatched!(tasks[_currentIndex].taskId);
+      }
     }
 
     if (!value.isPlaying && current >= total - 200 && total > 0) {

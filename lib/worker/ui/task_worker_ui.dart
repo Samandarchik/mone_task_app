@@ -6,7 +6,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:mone_task_app/admin/service/get_excel_ui.dart';
 import 'package:mone_task_app/admin/ui/video_cache_manager_page.dart';
 import 'package:mone_task_app/checker/ui/player2.dart';
-import 'package:mone_task_app/worker/ui/worker_audio_player.dart';
+import 'package:mone_task_app/admin/ui/audio_task_row.dart';
 import 'package:mone_task_app/core/constants/urls.dart';
 import 'package:mone_task_app/core/context_extension.dart';
 import 'package:mone_task_app/core/data/local/token_storage.dart';
@@ -258,9 +258,6 @@ class _TaskWorkerUiState extends State<TaskWorkerUi> {
               itemCount: _tasks.length,
               itemBuilder: (_, i) {
                 final task = _tasks[i];
-                final hasAudio =
-                    task.checkerAudioUrl != null &&
-                    task.checkerAudioUrl!.isNotEmpty;
 
                 return InkWell(
                   onTap: task.videoUrl == null
@@ -340,10 +337,16 @@ class _TaskWorkerUiState extends State<TaskWorkerUi> {
                             ),
                           ],
                         ),
-                        if (hasAudio) ...[
-                          const SizedBox(height: 8),
-                          WorkerAudioPlayer(audioUrl: task.checkerAudioUrl!),
-                        ],
+                        const SizedBox(height: 8),
+                        AudioTaskRow(
+                          taskId: task.id,
+                          audioUrls: task.checkerAudioUrls,
+                          selectedDate: _selectedDate,
+                          onPushAudio: (id, file, date) =>
+                              TaskWorkerService().pushAudio(id, file, date),
+                          onDeleteAudio: (id, date, idx) =>
+                              TaskWorkerService().deleteAudio(id, date, idx),
+                        ),
                       ],
                     ),
                   ),

@@ -1,6 +1,6 @@
 abstract final class AppUrls {
-  static const String baseUrl = "https://taskapi.monebakeryuz.uz";
-  // static const String baseUrl = "http://192.168.1.22:8000";
+  // static const String baseUrl = "https://taskapi.monebakeryuz.uz";
+  static const String baseUrl = "http://localhost:8000";
   // static const String baseUrl = "http://localhost:8000";
 
   static String get wsUrl {
@@ -8,6 +8,7 @@ abstract final class AppUrls {
     final scheme = uri.scheme == 'https' ? 'wss' : 'ws';
     return '$scheme://${uri.host}${uri.hasPort ? ':${uri.port}' : ''}/ws/tasks';
   }
+
   static const String login = '$baseUrl/api/auth/login';
   static const String register = '$baseUrl/api/auth/register';
   static const String logOut = '$baseUrl/api/auth/logout';

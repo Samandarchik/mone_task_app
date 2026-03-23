@@ -183,6 +183,40 @@ func fullURL(path *string) *string {
 	return &full
 }
 
+// parseCheckerAudioURLs - DB dan checker_audio_url ni o'qib []string qaytaradi
+// Eski format: "/audios/..." (bitta string)
+// Yangi format: '["/audios/...", "/audios/..."]' (JSON array)
+func parseCheckerAudioURLs(raw *string) []string {
+	if raw == nil || *raw == "" {
+		return nil
+	}
+	s := *raw
+	if strings.HasPrefix(s, "[") {
+		var urls []string
+		if err := json.Unmarshal([]byte(s), &urls); err == nil {
+			return urls
+		}
+	}
+	// eski format - bitta URL
+	return []string{s}
+}
+
+// fullAudioURLs - har bir URL ga baseURL qo'shadi
+func fullAudioURLs(urls []string) []string {
+	if len(urls) == 0 {
+		return nil
+	}
+	result := make([]string, len(urls))
+	for i, u := range urls {
+		if baseURL != "" && !strings.HasPrefix(u, "http") {
+			result[i] = baseURL + u
+		} else {
+			result[i] = u
+		}
+	}
+	return result
+}
+
 // UTC+5 - Toshkent vaqt zonasi
 var tashkentZone = time.FixedZone("UTC+5", 5*60*60)
 
@@ -236,8 +270,8 @@ type Task struct {
 	Task             string  `json:"task"`
 	Type             int     `json:"type"`
 	Status           *int    `json:"status"` // null yoki 1,2,3,4
-	VideoURL         *string `json:"videoUrl"`
-	CheckerAudioURL  *string `json:"checkerAudioUrl"`
+	VideoURL          *string  `json:"videoUrl"`
+	CheckerAudioURLs  []string `json:"checkerAudioUrls"`
 	SubmittedAt      *string `json:"submittedAt,omitempty"`
 	SubmittedBy      *string `json:"submittedBy,omitempty"`
 	Date             string  `json:"date"`
@@ -293,6 +327,7 @@ func main() {
 	r.HandleFunc("/api/tasks/{id}/check", authMiddleware(checkTask)).Methods("POST")
 	r.HandleFunc("/api/tasks/{id}/check/{date}", authMiddleware(checkTask)).Methods("POST")
 	r.HandleFunc("/api/tasks/{id}/voice-comment/{date}", authMiddleware(submitCheckerAudio)).Methods("POST")
+	r.HandleFunc("/api/tasks/{id}/voice-comment/{date}/{audioIndex}", authMiddleware(deleteCheckerAudio)).Methods("DELETE")
 	r.HandleFunc("/api/tasks/reorder/{taskId}/{newPosition}", authMiddleware(reorderTask)).Methods("PUT")
 	r.HandleFunc("/api/tasks/reorder", authMiddleware(reorderAllTasks)).Methods("PUT")
 
@@ -689,14 +724,6 @@ func login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if isLogin == 1 {
-		respondJSON(w, http.StatusConflict, map[string]interface{}{
-			"success": false,
-			"error":   "Siz allaqachon tizimga kirgansiz. Avval logout qiling.",
-		})
-		return
-	}
-
 	if err := bcrypt.CompareHashAndPassword([]byte(passwordHash), []byte(req.Password)); err != nil {
 		respondJSON(w, http.StatusUnauthorized, map[string]interface{}{
 			"success": false,
@@ -894,11 +921,10 @@ func getTasks(w http.ResponseWriter, r *http.Request) {
 		var daysStr, notifTime, workerIDsStr sql.NullString
 		var status sql.NullInt64
 		var category sql.NullString
+		var checkerAudioRaw *string
 		t.Date = date.Format("2006-01-02")
-		rows.Scan(&t.ID, &t.FilialID, &workerIDsStr, &t.Task, &t.Type, &status, &t.VideoURL, &t.CheckerAudioURL, &t.SubmittedAt, &t.SubmittedBy, &daysStr, &category, &notifTime, &t.OrderIndex)
+		rows.Scan(&t.ID, &t.FilialID, &workerIDsStr, &t.Task, &t.Type, &status, &t.VideoURL, &checkerAudioRaw, &t.SubmittedAt, &t.SubmittedBy, &daysStr, &category, &notifTime, &t.OrderIndex)
 
-		// status NULL bo'lsa - nil qaytaramiz (frontend null ko'radi)
-		// status bor bo'lsa - qiymatini qaytaramiz
 		if status.Valid {
 			v := int(status.Int64)
 			t.Status = &v
@@ -911,7 +937,7 @@ func getTasks(w http.ResponseWriter, r *http.Request) {
 		} else {
 			t.Category = ""
 		}
-		t.CheckerAudioURL = fullURL(t.CheckerAudioURL)
+		t.CheckerAudioURLs = fullAudioURLs(parseCheckerAudioURLs(checkerAudioRaw))
 		t.VideoURL = fullURL(t.VideoURL)
 
 		if daysStr.Valid && daysStr.String != "" {
@@ -1175,10 +1201,11 @@ func getTask(w http.ResponseWriter, r *http.Request) {
 	var task Task
 	var daysStr, notifTime, workerIDsStr sql.NullString
 	var status sql.NullInt64
+	var checkerAudioRaw *string
 	task.Date = date.Format("2006-01-02")
 
 	err := db.QueryRow("SELECT id, filial_id, worker_ids, task, type, status, video_url, checker_audio_url, submitted_at, submitted_by, days, category, notification_time, order_index FROM tasks WHERE id = ?", id).
-		Scan(&task.ID, &task.FilialID, &workerIDsStr, &task.Task, &task.Type, &status, &task.VideoURL, &task.CheckerAudioURL, &task.SubmittedAt, &task.SubmittedBy, &daysStr, &task.Category, &notifTime, &task.OrderIndex)
+		Scan(&task.ID, &task.FilialID, &workerIDsStr, &task.Task, &task.Type, &status, &task.VideoURL, &checkerAudioRaw, &task.SubmittedAt, &task.SubmittedBy, &daysStr, &task.Category, &notifTime, &task.OrderIndex)
 
 	if err != nil {
 		respondJSON(w, http.StatusNotFound, map[string]interface{}{
@@ -1194,6 +1221,7 @@ func getTask(w http.ResponseWriter, r *http.Request) {
 	} else {
 		task.Status = nil
 	}
+	task.CheckerAudioURLs = fullAudioURLs(parseCheckerAudioURLs(checkerAudioRaw))
 
 	if daysStr.Valid && daysStr.String != "" {
 		task.Days = parseDays(daysStr.String)
@@ -1978,18 +2006,9 @@ func checkTask(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// submitCheckerAudio - checker/super_admin istalgan statusdagi taskka ovozli izoh qoldira oladi
-// Status tekshirilmaydi - har qanday holatda ham audio yuborish mumkin
+// submitCheckerAudio - barcha rollar ovozli izoh qoldira oladi (max 2 ta audio)
+// Yangi audio qo'shilganda eski birinchisi o'chiriladi (FIFO, max 2)
 func submitCheckerAudio(w http.ResponseWriter, r *http.Request) {
-	role := r.Header.Get("Role")
-	if role != RoleChecker && role != RoleSuperAdmin {
-		respondJSON(w, http.StatusForbidden, map[string]interface{}{
-			"success": false,
-			"error":   "Ovozli izoh faqat checker va super admin uchun",
-		})
-		return
-	}
-
 	vars := mux.Vars(r)
 	taskID := vars["id"]
 	dateStr := vars["date"]
@@ -2029,7 +2048,7 @@ func submitCheckerAudio(w http.ResponseWriter, r *http.Request) {
 	defer audioFile.Close()
 
 	today := date.Format("2006-01-02")
-	audioURL, err := saveAudioFile("chk"+taskID, audioFile, audioHandler, today)
+	audioURL, err := saveAudioFile("voice"+taskID, audioFile, audioHandler, today)
 	if err != nil {
 		respondJSON(w, http.StatusInternalServerError, map[string]interface{}{
 			"success": false,
@@ -2041,8 +2060,26 @@ func submitCheckerAudio(w http.ResponseWriter, r *http.Request) {
 	db, _ := getTaskDB(date)
 	defer db.Close()
 
-	// Faqat checker_audio_url yangilanadi, status o'zgarmaydi
-	_, err = db.Exec("UPDATE tasks SET checker_audio_url = ? WHERE id = ?", audioURL, taskID)
+	// Mavjud audio URLlarni o'qish
+	var existingRaw *string
+	db.QueryRow("SELECT checker_audio_url FROM tasks WHERE id = ?", taskID).Scan(&existingRaw)
+	existing := parseCheckerAudioURLs(existingRaw)
+
+	// Yangi audio qo'shish
+	existing = append(existing, audioURL)
+
+	// Max 2 ta saqlash - eng eskisini o'chirish
+	if len(existing) > 2 {
+		// Birinchi (eng eski) audio faylini diskdan o'chirish
+		oldPath := "." + existing[0] // "/audios/..." -> "./audios/..."
+		os.Remove(oldPath)
+		log.Printf("Eski audio o'chirildi: %s", oldPath)
+		existing = existing[len(existing)-2:] // faqat oxirgi 2 tasini saqlash
+	}
+
+	// JSON array sifatida saqlash
+	audioJSON, _ := json.Marshal(existing)
+	_, err = db.Exec("UPDATE tasks SET checker_audio_url = ? WHERE id = ?", string(audioJSON), taskID)
 	if err != nil {
 		respondJSON(w, http.StatusInternalServerError, map[string]interface{}{
 			"success": false,
@@ -2052,15 +2089,93 @@ func submitCheckerAudio(w http.ResponseWriter, r *http.Request) {
 	}
 
 	respondJSON(w, http.StatusOK, map[string]interface{}{
-		"success":         true,
-		"checkerAudioUrl": audioURL,
-		"commentBy":       username,
+		"success":          true,
+		"checkerAudioUrls": fullAudioURLs(existing),
+		"commentBy":        username,
 	})
 
 	// WS broadcast: audio comment added
 	hub.broadcast("task_updated", map[string]interface{}{
 		"taskId": taskID,
 		"action": "audio_comment",
+		"date":   date.Format("2006-01-02"),
+	})
+}
+
+// deleteCheckerAudio - ma'lum audio indexni o'chirish (0-based)
+func deleteCheckerAudio(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	taskID := vars["id"]
+	dateStr := vars["date"]
+	audioIndexStr := vars["audioIndex"]
+
+	audioIndex, err := strconv.Atoi(audioIndexStr)
+	if err != nil {
+		respondJSON(w, http.StatusBadRequest, map[string]interface{}{
+			"success": false,
+			"error":   "Noto'g'ri audio index",
+		})
+		return
+	}
+
+	var date time.Time
+	if dateStr == "" {
+		date = time.Now()
+	} else {
+		date, err = time.Parse("2006-01-02", dateStr)
+		if err != nil {
+			respondJSON(w, http.StatusBadRequest, map[string]interface{}{
+				"success": false,
+				"error":   "Noto'g'ri sana formati",
+			})
+			return
+		}
+	}
+
+	db, _ := getTaskDB(date)
+	defer db.Close()
+
+	// Mavjud audio URLlarni o'qish
+	var existingRaw *string
+	db.QueryRow("SELECT checker_audio_url FROM tasks WHERE id = ?", taskID).Scan(&existingRaw)
+	existing := parseCheckerAudioURLs(existingRaw)
+
+	if audioIndex < 0 || audioIndex >= len(existing) {
+		respondJSON(w, http.StatusBadRequest, map[string]interface{}{
+			"success": false,
+			"error":   "Audio index topilmadi",
+		})
+		return
+	}
+
+	// Faylni diskdan o'chirish
+	oldPath := "." + existing[audioIndex]
+	os.Remove(oldPath)
+	log.Printf("Audio o'chirildi: %s", oldPath)
+
+	// Arraydan olib tashlash
+	existing = append(existing[:audioIndex], existing[audioIndex+1:]...)
+
+	// DB yangilash
+	var audioJSON string
+	if len(existing) == 0 {
+		audioJSON = ""
+	} else {
+		b, _ := json.Marshal(existing)
+		audioJSON = string(b)
+	}
+
+	db.Exec("UPDATE tasks SET checker_audio_url = ? WHERE id = ?", audioJSON, taskID)
+
+	respondJSON(w, http.StatusOK, map[string]interface{}{
+		"success":          true,
+		"checkerAudioUrls": fullAudioURLs(existing),
+	})
+
+	// WS broadcast
+	hub.broadcast("task_updated", map[string]interface{}{
+		"taskId": taskID,
+		"action": "audio_deleted",
 		"date":   date.Format("2006-01-02"),
 	})
 }
@@ -2159,8 +2274,9 @@ func getNotifications(w http.ResponseWriter, r *http.Request) {
 		var t Task
 		var daysStr, notifTime, workerIDsStr sql.NullString
 		var status sql.NullInt64
+		var checkerAudioRaw *string
 		t.Date = time.Now().Format("2006-01-02")
-		rows.Scan(&t.ID, &t.FilialID, &workerIDsStr, &t.Task, &t.Type, &status, &t.VideoURL, &t.CheckerAudioURL, &t.SubmittedAt, &t.SubmittedBy, &daysStr, &t.Category, &notifTime, &t.OrderIndex)
+		rows.Scan(&t.ID, &t.FilialID, &workerIDsStr, &t.Task, &t.Type, &status, &t.VideoURL, &checkerAudioRaw, &t.SubmittedAt, &t.SubmittedBy, &daysStr, &t.Category, &notifTime, &t.OrderIndex)
 
 		if status.Valid {
 			v := int(status.Int64)
@@ -2168,6 +2284,7 @@ func getNotifications(w http.ResponseWriter, r *http.Request) {
 		} else {
 			t.Status = nil
 		}
+		t.CheckerAudioURLs = fullAudioURLs(parseCheckerAudioURLs(checkerAudioRaw))
 
 		if daysStr.Valid && daysStr.String != "" {
 			t.Days = parseDays(daysStr.String)

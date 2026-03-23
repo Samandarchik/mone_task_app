@@ -40,10 +40,8 @@ class SpleshScreenState extends State<SpleshScreen> {
       context.pushAndRemove(LoginPage());
       return;
     }
-    if (userModel?.role == "super_admin") {
+    if (userModel?.role == "super_admin" || userModel?.role == "checker") {
       context.pushAndRemove(AdminTaskUi());
-    } else if (userModel?.role == "checker") {
-      context.pushAndRemove(CheckerHomeUi());
     } else if (userModel?.role == "worker") {
       context.pushAndRemove(TaskWorkerUi());
     } else {

@@ -117,10 +117,8 @@ class _LoginPageState extends State<LoginPage> {
         // 🔄 Role bo‘yicha navigatsiya
         final role = result["user"]["role"];
 
-        if (role == "super_admin") {
+        if (role == "super_admin" || role == "checker") {
           context.pushAndRemove(AdminTaskUi());
-        } else if (role == "checker") {
-          context.pushAndRemove(CheckerHomeUi());
         } else {
           context.pushAndRemove(TaskWorkerUi());
         }

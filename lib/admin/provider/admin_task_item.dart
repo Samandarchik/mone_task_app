@@ -171,7 +171,7 @@ class _AdminTaskListItemState extends State<AdminTaskListItem>
         ),
         // ── AudioTaskRow: yozish + yuborish + eshitish ─────────────────────
         const SizedBox(height: 8),
-        AudioTaskRow(task: task, selectedDate: widget.selectedDate),
+        AudioTaskRow.fromCheckerTask(task: task, selectedDate: widget.selectedDate),
       ],
     );
   }
@@ -184,7 +184,9 @@ class _AdminTaskListItemState extends State<AdminTaskListItem>
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        _statusCircleButton(3, task.status, Colors.green, enabled: hasVideo),
+        // Status 3 (yashil) — faqat ko'rsatish uchun, qo'lda o'zgartirib bo'lmaydi
+        // Checker uchun 50% video ko'rganda avtomatik o'rnatiladi
+        _statusCircleButton(3, task.status, Colors.green, enabled: false),
         const SizedBox(width: 30),
         _statusCircleButton(2, task.status, Colors.orange, enabled: hasVideo),
         const SizedBox(width: 30),

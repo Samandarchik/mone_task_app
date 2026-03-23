@@ -10,14 +10,38 @@ import 'package:path_provider/path_provider.dart';
 import 'package:record/record.dart';
 
 class AudioTaskRow extends StatefulWidget {
-  final CheckerCheckTaskModel task;
+  final int taskId;
+  final List<String> audioUrls;
   final DateTime selectedDate;
+  final Future<bool> Function(int taskId, File file, DateTime date) onPushAudio;
+  final Future<bool> Function(int taskId, DateTime date, int audioIndex)
+      onDeleteAudio;
 
   const AudioTaskRow({
     super.key,
-    required this.task,
+    required this.taskId,
+    required this.audioUrls,
     required this.selectedDate,
+    required this.onPushAudio,
+    required this.onDeleteAudio,
   });
+
+  /// Checker/Admin uchun convenience constructor
+  factory AudioTaskRow.fromCheckerTask({
+    Key? key,
+    required CheckerCheckTaskModel task,
+    required DateTime selectedDate,
+  }) {
+    final service = AdminTaskService();
+    return AudioTaskRow(
+      key: key,
+      taskId: task.taskId,
+      audioUrls: task.checkerAudioUrls,
+      selectedDate: selectedDate,
+      onPushAudio: (id, file, date) => service.pushAudio(id, file, date),
+      onDeleteAudio: (id, date, idx) => service.deleteAudio(id, date, idx),
+    );
+  }
 
   @override
   State<AudioTaskRow> createState() => _AudioTaskRowState();
@@ -63,10 +87,16 @@ class _AudioTaskRowState extends State<AudioTaskRow>
 
   String? _localAudioUrl;
 
-  String? get _audioUrl => _localAudioUrl ?? widget.task.checkerAudioUrl;
-  bool get _hasAudio => _audioUrl != null && _audioUrl!.isNotEmpty;
-  bool get _canRecord =>
-      widget.task.videoUrl != null && widget.task.videoUrl!.isNotEmpty;
+  List<String> get _audioUrls {
+    if (_localAudioUrl != null) {
+      // Yangi yuborilgan audio oxiriga qo'shiladi
+      final list = List<String>.from(widget.audioUrls);
+      if (!list.contains(_localAudioUrl)) list.add(_localAudioUrl!);
+      return list;
+    }
+    return widget.audioUrls;
+  }
+
 
   @override
   void initState() {
@@ -174,7 +204,7 @@ class _AudioTaskRowState extends State<AudioTaskRow>
 
     final dir = await getTemporaryDirectory();
     final path =
-        '${dir.path}/voice_${widget.task.taskId}_${DateTime.now().millisecondsSinceEpoch}.m4a';
+        '${dir.path}/voice_${widget.taskId}_${DateTime.now().millisecondsSinceEpoch}.m4a';
 
     await _recorder.start(
       const RecordConfig(encoder: AudioEncoder.aacLc, bitRate: 128000),
@@ -245,8 +275,8 @@ class _AudioTaskRowState extends State<AudioTaskRow>
     if (mounted) setState(() => _isSending = true);
 
     try {
-      final success = await AdminTaskService().pushAudio(
-        widget.task.taskId,
+      final success = await widget.onPushAudio(
+        widget.taskId,
         file,
         widget.selectedDate,
       );
@@ -323,8 +353,8 @@ class _AudioTaskRowState extends State<AudioTaskRow>
     if (mounted) setState(() => _isSending = true);
 
     try {
-      final success = await AdminTaskService().pushAudio(
-        widget.task.taskId,
+      final success = await widget.onPushAudio(
+        widget.taskId,
         file,
         widget.selectedDate,
       );
@@ -391,8 +421,21 @@ class _AudioTaskRowState extends State<AudioTaskRow>
 
   // ── Serverdan audio play/pause ────────────────────────────────────────────
 
-  Future<void> _togglePlay() async {
-    if (_audioUrl == null) return;
+  String? _currentPlayingUrl;
+
+  Future<void> _togglePlay(String url) async {
+    // Agar boshqa audio play qilinsa, avval to'xtatish
+    if (_currentPlayingUrl != null && _currentPlayingUrl != url) {
+      await _player.stop();
+      setState(() {
+        _isPlaying = false;
+        _isCompleted = false;
+        _position = Duration.zero;
+        _duration = Duration.zero;
+      });
+    }
+    _currentPlayingUrl = url;
+
     if (_isPlaying) {
       await _player.pause();
       return;
@@ -403,11 +446,11 @@ class _AudioTaskRowState extends State<AudioTaskRow>
         _position = Duration.zero;
       });
     }
-    if (_localAudioUrl != null && File(_localAudioUrl!).existsSync()) {
-      await _player.play(DeviceFileSource(_localAudioUrl!));
+    if (File(url).existsSync()) {
+      await _player.play(DeviceFileSource(url));
       return;
     }
-    await _player.play(UrlSource(_fullAudioUrl(_audioUrl!)));
+    await _player.play(UrlSource(_fullAudioUrl(url)));
   }
 
   Future<void> _seekTo(double value) async {
@@ -419,16 +462,43 @@ class _AudioTaskRowState extends State<AudioTaskRow>
     );
   }
 
+  Future<void> _deleteAudio(int index) async {
+    await _player.stop();
+    final success = await widget.onDeleteAudio(
+      widget.taskId,
+      widget.selectedDate,
+      index,
+    );
+    if (success && mounted) {
+      setState(() {
+        _localAudioUrl = null;
+        _currentPlayingUrl = null;
+        _isPlaying = false;
+        _position = Duration.zero;
+        _duration = Duration.zero;
+      });
+    }
+  }
+
   // ── Build ─────────────────────────────────────────────────────────────────
 
   @override
   Widget build(BuildContext context) {
-    if (!_canRecord) return const SizedBox.shrink();
     if (_isSending) return _buildSending();
     if (_isRecording) return _buildRecording();
     if (_previewPath != null) return _buildPreview();
-    if (_hasAudio) return _buildPlayer();
-    return _buildMicButton();
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        // Mavjud audiolar ro'yxati (har birida delete tugmasi)
+        for (int i = 0; i < _audioUrls.length; i++)
+          _buildAudioItem(_audioUrls[i], i),
+        // Mic tugmasi (max 2 ta audio, agar 2 tadan kam bo'lsa ko'rinadi)
+        if (_audioUrls.length < 2) _buildMicButton(),
+      ],
+    );
   }
 
   // ── 1. Mic tugmasi ────────────────────────────────────────────────────────
@@ -733,121 +803,122 @@ class _AudioTaskRowState extends State<AudioTaskRow>
     );
   }
 
-  // ── 5. Serverdan audio player ─────────────────────────────────────────────
+  // ── 5. Serverdan audio player (har bir audio uchun) ──────────────────────
 
-  Widget _buildPlayer() {
-    final double progress = (_duration.inMilliseconds > 0)
+  Widget _buildAudioItem(String url, int index) {
+    final bool isThisPlaying = _currentPlayingUrl == url;
+    final double progress = isThisPlaying && _duration.inMilliseconds > 0
         ? (_position.inMilliseconds / _duration.inMilliseconds).clamp(0.0, 1.0)
         : 0.0;
-    final bool finished = _duration > Duration.zero && _position >= _duration;
+    final bool finished = isThisPlaying &&
+        _duration > Duration.zero &&
+        _position >= _duration;
 
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-      decoration: BoxDecoration(
-        color: Colors.black.withOpacity(0.06),
-        borderRadius: BorderRadius.circular(22),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          // Play / Pause / Replay
-          GestureDetector(
-            onTap: _togglePlay,
-            child: Container(
-              width: 36,
-              height: 36,
-              decoration: const BoxDecoration(
-                color: Color(0xFF2196F3),
-                shape: BoxShape.circle,
-              ),
-              child: Icon(
-                finished
-                    ? Icons.replay_rounded
-                    : (_isPlaying
-                          ? Icons.pause_rounded
-                          : Icons.play_arrow_rounded),
-                color: Colors.white,
-                size: 22,
-              ),
-            ),
-          ),
-          const SizedBox(width: 8),
-          // Slider + vaqt
-          SizedBox(
-            width: 140,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                SliderTheme(
-                  data: SliderThemeData(
-                    trackHeight: 3,
-                    thumbShape: const RoundSliderThumbShape(
-                      enabledThumbRadius: 6,
-                    ),
-                    overlayShape: const RoundSliderOverlayShape(
-                      overlayRadius: 12,
-                    ),
-                    activeTrackColor: const Color(0xFF2196F3),
-                    inactiveTrackColor: Colors.black12,
-                    thumbColor: const Color(0xFF2196F3),
-                    overlayColor: const Color(0xFF2196F3).withOpacity(0.15),
-                  ),
-                  child: Slider(
-                    value: progress,
-                    onChanged: _seekTo,
-                    min: 0,
-                    max: 1,
-                  ),
-                ),
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 4),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Text(
-                        _fmt(_position),
-                        style: const TextStyle(
-                          fontSize: 10,
-                          color: Colors.black54,
-                        ),
-                      ),
-                      Text(
-                        _fmt(_duration),
-                        style: const TextStyle(
-                          fontSize: 10,
-                          color: Colors.black54,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          ),
-          // Qayta yozish mic
-          if (_canRecord) ...[
-            const SizedBox(width: 4),
-            Listener(
-              onPointerDown: _onPointerDown,
-              onPointerMove: _onPointerMove,
-              onPointerUp: _onPointerUp,
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 4),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+        decoration: BoxDecoration(
+          color: Colors.black.withValues(alpha: 0.06),
+          borderRadius: BorderRadius.circular(22),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // Play / Pause / Replay
+            GestureDetector(
+              onTap: () => _togglePlay(url),
               child: Container(
-                width: 32,
-                height: 32,
+                width: 36,
+                height: 36,
+                decoration: const BoxDecoration(
+                  color: Color(0xFF2196F3),
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(
+                  finished
+                      ? Icons.replay_rounded
+                      : (isThisPlaying && _isPlaying
+                            ? Icons.pause_rounded
+                            : Icons.play_arrow_rounded),
+                  color: Colors.white,
+                  size: 22,
+                ),
+              ),
+            ),
+            const SizedBox(width: 8),
+            // Slider + vaqt
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  SliderTheme(
+                    data: SliderThemeData(
+                      trackHeight: 3,
+                      thumbShape: const RoundSliderThumbShape(
+                        enabledThumbRadius: 6,
+                      ),
+                      overlayShape: const RoundSliderOverlayShape(
+                        overlayRadius: 12,
+                      ),
+                      activeTrackColor: const Color(0xFF2196F3),
+                      inactiveTrackColor: Colors.black12,
+                      thumbColor: const Color(0xFF2196F3),
+                      overlayColor: const Color(0xFF2196F3).withValues(alpha: 0.15),
+                    ),
+                    child: Slider(
+                      value: isThisPlaying ? progress : 0.0,
+                      onChanged: isThisPlaying ? _seekTo : null,
+                      min: 0,
+                      max: 1,
+                    ),
+                  ),
+                  if (isThisPlaying)
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 4),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(
+                            _fmt(_position),
+                            style: const TextStyle(
+                              fontSize: 10,
+                              color: Colors.black54,
+                            ),
+                          ),
+                          Text(
+                            _fmt(_duration),
+                            style: const TextStyle(
+                              fontSize: 10,
+                              color: Colors.black54,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                ],
+              ),
+            ),
+            // Delete tugmasi
+            GestureDetector(
+              onTap: () => _deleteAudio(index),
+              child: Container(
+                width: 30,
+                height: 30,
                 decoration: BoxDecoration(
-                  color: Colors.black.withOpacity(0.07),
+                  color: Colors.red.withValues(alpha: 0.1),
                   shape: BoxShape.circle,
                 ),
                 child: const Icon(
-                  Icons.mic_none_rounded,
-                  size: 17,
-                  color: Colors.black54,
+                  Icons.delete_outline_rounded,
+                  size: 16,
+                  color: Colors.red,
                 ),
               ),
             ),
           ],
-        ],
+        ),
       ),
     );
   }

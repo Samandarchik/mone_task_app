@@ -126,4 +126,33 @@ class TaskWorkerService {
       rethrow;
     }
   }
+
+  Future<bool> pushAudio(int id, File filesi, DateTime date) async {
+    try {
+      final dateStr =
+          "${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}";
+      final response = await _dio.post(
+        "${AppUrls.tasks}/$id/voice-comment/$dateStr",
+        data: FormData.fromMap({
+          "audio": await MultipartFile.fromFile(filesi.path),
+        }),
+      );
+      return response.statusCode == 200;
+    } catch (e) {
+      rethrow;
+    }
+  }
+
+  Future<bool> deleteAudio(int taskId, DateTime date, int audioIndex) async {
+    try {
+      final dateStr =
+          "${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}";
+      final response = await _dio.delete(
+        "${AppUrls.tasks}/$taskId/voice-comment/$dateStr/$audioIndex",
+      );
+      return response.statusCode == 200;
+    } catch (e) {
+      return false;
+    }
+  }
 }

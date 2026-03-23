@@ -19,7 +19,7 @@ class CircleVideoPlayer extends StatelessWidget {
   final List<CheckerCheckTaskModel> title;
   final List<String> videoUrls;
   final int initialIndex;
-  final VoidCallback? onHalfWatched;
+  final void Function(int taskId)? onHalfWatched;
   final DateTime selectedDate;
 
   const CircleVideoPlayer({
@@ -205,7 +205,10 @@ class _CircleVideoPlayerBodyState extends State<_CircleVideoPlayerBody>
   // ── Audio helpers ─────────────────────────────────────────────────────────
 
   String? _getAudioUrl(CheckerCheckTaskModel? task) =>
-      _localAudioUrl ?? task?.checkerAudioUrl;
+      _localAudioUrl ??
+      (task != null && task.checkerAudioUrls.isNotEmpty
+          ? task.checkerAudioUrls.last
+          : null);
 
   bool _hasAudio(CheckerCheckTaskModel? task) {
     final url = _getAudioUrl(task);
