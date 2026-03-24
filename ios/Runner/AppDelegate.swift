@@ -49,6 +49,15 @@ import AVFoundation
         
         return super.application(application, didFinishLaunchingWithOptions: launchOptions)
     }
+
+    // Universal Links handle — app_links plugin ishlashi uchun
+    override func application(
+        _ application: UIApplication,
+        continue userActivity: NSUserActivity,
+        restorationHandler: @escaping ([UIUserActivityRestoring]?) -> Void
+    ) -> Bool {
+        return super.application(application, continue: userActivity, restorationHandler: restorationHandler)
+    }
     
     // ── Available lenslarni qaytarish ──
     // iPhone 15 Pro Max: ultraWide (0.5x), wide (1x), telephoto (2x/3x)

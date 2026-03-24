@@ -6,6 +6,7 @@ import 'package:mone_task_app/admin/provider/admin_tasks_provider.dart';
 import 'package:mone_task_app/admin/provider/video_download_provider.dart';
 import 'package:mone_task_app/core/di/di.dart';
 import 'package:mone_task_app/deep_link_service.dart';
+import 'package:mone_task_app/features/deep_link/deep_link_page.dart';
 import 'package:mone_task_app/home/service/login_service.dart';
 import 'package:mone_task_app/home/ui/splash_screen.dart';
 import 'package:provider/provider.dart';
@@ -21,6 +22,12 @@ final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 class MyApp extends StatefulWidget {
   const MyApp({super.key});
 
+  /// Deep link orqali kelgan ma'lumot — SplashScreen tekshiradi
+  static DeepLinkData? pendingDeepLink;
+
+  /// Initial deep link tekshirildi (SplashScreen kutishi uchun)
+  static Completer<void> initialLinkChecked = Completer<void>();
+
   @override
   State<MyApp> createState() => _MyAppState();
 }
@@ -29,14 +36,14 @@ class _MyAppState extends State<MyApp> {
   late AppLinks _appLinks;
   StreamSubscription? _linkSub;
 
-  /// Ilovada deep link orqali kelgan ma'lumot
-  /// Boshqa widgetlar bu qiymatni tekshirishi mumkin
-  static DeepLinkData? pendingDeepLink;
-
   @override
   void initState() {
     super.initState();
     _appLinks = AppLinks();
+    // Har safar yangi Completer (hot restart uchun)
+    if (MyApp.initialLinkChecked.isCompleted) {
+      MyApp.initialLinkChecked = Completer<void>();
+    }
     _initDeepLinks();
   }
 
@@ -45,41 +52,31 @@ class _MyAppState extends State<MyApp> {
     try {
       final initialUri = await _appLinks.getInitialLink();
       if (initialUri != null) {
-        _handleDeepLink(initialUri);
+        final data = parseDeepLink(initialUri);
+        if (data != null) {
+          MyApp.pendingDeepLink = data;
+        }
       }
     } catch (_) {}
 
+    // SplashScreen ga signal: initial link tekshirildi
+    if (!MyApp.initialLinkChecked.isCompleted) {
+      MyApp.initialLinkChecked.complete();
+    }
+
     // 2. Ilova ochiq holatda link bosilganda
     _linkSub = _appLinks.uriLinkStream.listen((uri) {
-      _handleDeepLink(uri);
+      final data = parseDeepLink(uri);
+      if (data == null) return;
+
+      final nav = navigatorKey.currentState;
+      if (nav != null) {
+        // Ustiga push qilamiz (remove emas) — ilova holatini buzmaydi
+        nav.push(
+          MaterialPageRoute(builder: (_) => DeepLinkPage(data: data)),
+        );
+      }
     });
-  }
-
-  void _handleDeepLink(Uri uri) {
-    final data = parseDeepLink(uri);
-    if (data == null) return;
-
-    debugPrint('🔗 Deep link: $data');
-
-    // Deep link ma'lumotini saqlab qo'yamiz
-    pendingDeepLink = data;
-
-    // Agar navigator tayyor bo'lsa — darhol AdminTaskUi ga o'tamiz
-    final nav = navigatorKey.currentState;
-    if (nav != null) {
-      // AdminTasksProvider ga sana o'rnatamiz
-      try {
-        final ctx = nav.context;
-        final provider = Provider.of<AdminTasksProvider>(ctx, listen: false);
-        final date = DateTime.tryParse(data.date);
-        if (date != null) {
-          provider.setSelectedDate(date);
-        }
-      } catch (_) {}
-
-      // AdminTaskUi sahifasiga o'tish (agar allaqachon u yerda bo'lmasa)
-      nav.pushNamedAndRemoveUntil('/admin', (_) => false);
-    }
   }
 
   @override

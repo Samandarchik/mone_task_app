@@ -34,6 +34,10 @@
 		</dict>
 	</array>
 
+	<!-- Flutter deep linking -->
+	<key>FlutterDeepLinkingEnabled</key>
+	<true/>
+
 	<!-- Bundle info -->
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>

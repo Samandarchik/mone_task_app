@@ -6,7 +6,9 @@
       "Bash(flutter analyze:*)",
       "Bash(find lib:*)",
       "Bash(grep:*)",
-      "Bash(ls -la /Users/samandar/Desktop/flutter_app/mone_task_app/lib/*/service/)"
+      "Bash(ls -la /Users/samandar/Desktop/flutter_app/mone_task_app/lib/*/service/)",
+      "Bash(find /Users/samandar/Desktop/flutter_app/mone_task_app/ios -name *.swift -path */app_links/*)",
+      "Bash(find /Users/samandar/Desktop/flutter_app/mone_task_app/ios/Pods -name AppLinks* -o -name app_links*)"
     ]
   }
 }
