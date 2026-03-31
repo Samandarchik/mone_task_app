@@ -1,5 +1,8 @@
+import 'dart:async';
 import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:media_kit/media_kit.dart' as mk;
+import 'package:media_kit_video/media_kit_video.dart' as mkv;
 import 'package:video_player/video_player.dart';
 
 class CircleVideoPlayer2 extends StatefulWidget {
@@ -20,7 +23,19 @@ class CircleVideoPlayer2 extends StatefulWidget {
 
 class _CircleVideoPlayer2State extends State<CircleVideoPlayer2>
     with SingleTickerProviderStateMixin {
-  late VideoPlayerController _controller;
+  static bool get _useMediaKit => Platform.isWindows;
+
+  // ── video_player (iOS/Android/macOS) ──
+  VideoPlayerController? _controller;
+
+  // ── media_kit (Windows) ──
+  mk.Player? _mkPlayer;
+  mkv.VideoController? _mkController;
+  StreamSubscription? _mkPlayingSub;
+  StreamSubscription? _mkPositionSub;
+  StreamSubscription? _mkDurationSub;
+  StreamSubscription? _mkErrorSub;
+
   bool _isInitialized = false;
   bool _isPlaying = false;
   bool _hasError = false;
@@ -31,6 +46,10 @@ class _CircleVideoPlayer2State extends State<CircleVideoPlayer2>
   // Video real ijro vaqtini hisoblash uchun
   Duration _watchedDuration = Duration.zero;
   DateTime? _lastTickTime;
+
+  // media_kit state
+  Duration _mkPosition = Duration.zero;
+  Duration _mkDuration = Duration.zero;
 
   late AnimationController _animationController;
 
@@ -75,22 +94,13 @@ class _CircleVideoPlayer2State extends State<CircleVideoPlayer2>
           });
           return;
         }
-        _controller = VideoPlayerController.file(file);
-      } else {
-        _controller = VideoPlayerController.networkUrl(Uri.parse(videoPath));
       }
 
-      await _controller.initialize();
-      await _controller.setLooping(true);
-      await _controller.play();
-
-      // ── 50% listener ─────────────────────────────────────────────────────
-      _controller.addListener(_onVideoProgress);
-
-      setState(() {
-        _isInitialized = true;
-        _isPlaying = true;
-      });
+      if (_useMediaKit) {
+        await _initMkPlayer(videoPath, isLocal);
+      } else {
+        await _initVideoPlayerController(videoPath, isLocal);
+      }
     } catch (e) {
       setState(() {
         _hasError = true;
@@ -99,21 +109,74 @@ class _CircleVideoPlayer2State extends State<CircleVideoPlayer2>
     }
   }
 
-  void _onVideoProgress() {
-    if (mounted) setState(() {});
+  Future<void> _initVideoPlayerController(String videoPath, bool isLocal) async {
+    if (isLocal) {
+      _controller = VideoPlayerController.file(File(videoPath));
+    } else {
+      _controller = VideoPlayerController.networkUrl(Uri.parse(videoPath));
+    }
 
+    await _controller!.initialize();
+    await _controller!.setLooping(true);
+    await _controller!.play();
+
+    _controller!.addListener(_onVideoProgress);
+
+    setState(() {
+      _isInitialized = true;
+      _isPlaying = true;
+    });
+  }
+
+  Future<void> _initMkPlayer(String videoPath, bool isLocal) async {
+    _mkPlayer = mk.Player();
+    _mkController = mkv.VideoController(_mkPlayer!);
+
+    _mkPlayingSub = _mkPlayer!.stream.playing.listen((playing) {
+      if (mounted) {
+        setState(() => _isPlaying = playing);
+        _updateHalfWatchMk();
+      }
+    });
+
+    _mkPositionSub = _mkPlayer!.stream.position.listen((pos) {
+      if (mounted) {
+        setState(() => _mkPosition = pos);
+        _updateHalfWatchMk();
+      }
+    });
+
+    _mkDurationSub = _mkPlayer!.stream.duration.listen((dur) {
+      if (mounted) setState(() => _mkDuration = dur);
+    });
+
+    _mkErrorSub = _mkPlayer!.stream.error.listen((error) {
+      if (error.isNotEmpty && mounted) {
+        setState(() {
+          _hasError = true;
+          _errorMessage = error;
+        });
+      }
+    });
+
+    final mediaUri = isLocal ? 'file://$videoPath' : videoPath;
+    await _mkPlayer!.open(mk.Media(mediaUri));
+    await _mkPlayer!.setPlaylistMode(mk.PlaylistMode.loop);
+
+    setState(() {
+      _isInitialized = true;
+      _isPlaying = true;
+    });
+  }
+
+  void _updateHalfWatchMk() {
     if (_halfWatchedFired) return;
-    if (!_controller.value.isInitialized) return;
+    if (_mkDuration.inMilliseconds == 0) return;
 
-    final duration = _controller.value.duration;
-    if (duration.inMilliseconds == 0) return;
-
-    // Faqat video ijro bo'layotganda vaqtni hisoblaymiz
-    if (_controller.value.isPlaying) {
+    if (_isPlaying) {
       final now = DateTime.now();
       if (_lastTickTime != null) {
         final delta = now.difference(_lastTickTime!);
-        // Delta juda katta bo'lsa (masalan pause dan keyin) — ignore
         if (delta.inMilliseconds < 500) {
           _watchedDuration += delta;
         }
@@ -123,7 +186,35 @@ class _CircleVideoPlayer2State extends State<CircleVideoPlayer2>
       _lastTickTime = null;
     }
 
-    // Video uzunligining yarmi ko'rilgan bo'lsa — chaqiramiz
+    final halfDuration = _mkDuration ~/ 2;
+    if (_watchedDuration >= halfDuration) {
+      _halfWatchedFired = true;
+      widget.onHalfWatched?.call();
+    }
+  }
+
+  void _onVideoProgress() {
+    if (mounted) setState(() {});
+
+    if (_halfWatchedFired) return;
+    if (!_controller!.value.isInitialized) return;
+
+    final duration = _controller!.value.duration;
+    if (duration.inMilliseconds == 0) return;
+
+    if (_controller!.value.isPlaying) {
+      final now = DateTime.now();
+      if (_lastTickTime != null) {
+        final delta = now.difference(_lastTickTime!);
+        if (delta.inMilliseconds < 500) {
+          _watchedDuration += delta;
+        }
+      }
+      _lastTickTime = now;
+    } else {
+      _lastTickTime = null;
+    }
+
     final halfDuration = duration ~/ 2;
     if (_watchedDuration >= halfDuration) {
       _halfWatchedFired = true;
@@ -133,8 +224,16 @@ class _CircleVideoPlayer2State extends State<CircleVideoPlayer2>
 
   @override
   void dispose() {
-    _controller.removeListener(_onVideoProgress);
-    _controller.dispose();
+    if (_useMediaKit) {
+      _mkPlayingSub?.cancel();
+      _mkPositionSub?.cancel();
+      _mkDurationSub?.cancel();
+      _mkErrorSub?.cancel();
+      _mkPlayer?.dispose();
+    } else {
+      _controller?.removeListener(_onVideoProgress);
+      _controller?.dispose();
+    }
     _animationController.dispose();
     super.dispose();
   }
@@ -144,9 +243,39 @@ class _CircleVideoPlayer2State extends State<CircleVideoPlayer2>
     return '${two(d.inMinutes)}:${two(d.inSeconds % 60)}';
   }
 
+  Duration get _currentPosition {
+    if (_useMediaKit) return _mkPosition;
+    return _controller?.value.position ?? Duration.zero;
+  }
+
+  Duration get _currentDuration {
+    if (_useMediaKit) return _mkDuration;
+    return _controller?.value.duration ?? Duration.zero;
+  }
+
+  Widget _buildVideoWidget() {
+    if (_useMediaKit && _mkController != null) {
+      return mkv.Video(
+        controller: _mkController!,
+        fill: Colors.black,
+      );
+    }
+    if (_controller != null) {
+      return FittedBox(
+        fit: BoxFit.cover,
+        child: SizedBox(
+          width: _controller!.value.size.width,
+          height: _controller!.value.size.height,
+          child: VideoPlayer(_controller!),
+        ),
+      );
+    }
+    return const SizedBox.shrink();
+  }
+
   Widget _buildProgressBar(double circleSize) {
-    final duration = _controller.value.duration;
-    final position = _controller.value.position;
+    final duration = _currentDuration;
+    final position = _currentPosition;
     final progress = duration.inMilliseconds == 0
         ? 0.0
         : position.inMilliseconds / duration.inMilliseconds;
@@ -226,15 +355,33 @@ class _CircleVideoPlayer2State extends State<CircleVideoPlayer2>
   }
 
   void _seekTo(double x, double width) {
-    final d = _controller.value.duration;
+    final d = _currentDuration;
     final ratio = (x - 16).clamp(0.0, width) / width;
-    _controller.seekTo(d * ratio);
+    if (_useMediaKit) {
+      _mkPlayer?.seek(d * ratio);
+    } else {
+      _controller?.seekTo(d * ratio);
+    }
+  }
+
+  void _toggleVolume() {
+    if (_useMediaKit) {
+      final currentVol = _mkPlayer?.state.volume ?? 100.0;
+      _mkPlayer?.setVolume(currentVol > 0 ? 0.0 : 100.0);
+    } else {
+      _controller?.setVolume((_controller!.value.volume > 0) ? 0 : 1);
+    }
+    setState(() {});
   }
 
   @override
   Widget build(BuildContext context) {
     final size = MediaQuery.of(context).size;
     final circleSize = size.width * 0.85;
+
+    final bool volumeOn = _useMediaKit
+        ? (_mkPlayer?.state.volume ?? 100.0) > 0
+        : (_controller?.value.volume ?? 1.0) > 0;
 
     return Scaffold(
       backgroundColor: Colors.transparent,
@@ -279,14 +426,7 @@ class _CircleVideoPlayer2State extends State<CircleVideoPlayer2>
                         fit: StackFit.expand,
                         children: [
                           if (_isInitialized && !_hasError)
-                            FittedBox(
-                              fit: BoxFit.cover,
-                              child: SizedBox(
-                                width: _controller.value.size.width,
-                                height: _controller.value.size.height,
-                                child: VideoPlayer(_controller),
-                              ),
-                            ),
+                            _buildVideoWidget(),
 
                           if (!_isInitialized && !_hasError)
                             const Center(
@@ -376,17 +516,11 @@ class _CircleVideoPlayer2State extends State<CircleVideoPlayer2>
               top: MediaQuery.of(context).padding.top + 16,
               left: 16,
               child: GestureDetector(
-                onTap: () {
-                  setState(() {
-                    _controller.setVolume(_controller.value.volume > 0 ? 0 : 1);
-                  });
-                },
+                onTap: _toggleVolume,
                 child: CircleAvatar(
                   backgroundColor: Colors.black54,
                   child: Icon(
-                    _controller.value.volume > 0
-                        ? Icons.volume_up
-                        : Icons.volume_off,
+                    volumeOn ? Icons.volume_up : Icons.volume_off,
                     color: Colors.white,
                   ),
                 ),

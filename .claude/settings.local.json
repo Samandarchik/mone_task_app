@@ -8,7 +8,9 @@
       "Bash(grep:*)",
       "Bash(ls -la /Users/samandar/Desktop/flutter_app/mone_task_app/lib/*/service/)",
       "Bash(find /Users/samandar/Desktop/flutter_app/mone_task_app/ios -name *.swift -path */app_links/*)",
-      "Bash(find /Users/samandar/Desktop/flutter_app/mone_task_app/ios/Pods -name AppLinks* -o -name app_links*)"
+      "Bash(find /Users/samandar/Desktop/flutter_app/mone_task_app/ios/Pods -name AppLinks* -o -name app_links*)",
+      "Bash(find /Users/samandar/Desktop/flutter_app/mone_task_app/windows -type f -name *.cpp -o -name *.h -o -name *.c)",
+      "Bash(find /Users/samandar/Desktop/flutter_app/mone_task_app -type f \\\\\\(-name *.plist -o -name *.gradle -o -name Podfile -o -name CMakeLists.txt \\\\\\))"
     ]
   }
 }

@@ -1,8 +1,10 @@
+import 'dart:async';
 import 'dart:io';
 import 'dart:math' as math;
 
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:media_kit/media_kit.dart' as mk;
+import 'package:media_kit_video/media_kit_video.dart' as mkv;
 import 'package:mone_task_app/checker/model/checker_check_task_model.dart';
 import 'package:mone_task_app/checker/service/task_worker_service.dart';
 import 'package:video_player/video_player.dart';
@@ -14,7 +16,18 @@ class VideoPlayerProvider extends ChangeNotifier {
   final void Function(int taskId)? onHalfWatched;
   final Future<bool> Function(int taskId, int status)? onUpdateStatus;
 
+  // ── video_player (iOS/Android/macOS) ──
   VideoPlayerController? _controller;
+
+  // ── media_kit (Windows) ──
+  mk.Player? _mkPlayer;
+  mkv.VideoController? _mkController;
+  StreamSubscription? _mkPlayingSub;
+  StreamSubscription? _mkPositionSub;
+  StreamSubscription? _mkDurationSub;
+  StreamSubscription? _mkCompletedSub;
+  StreamSubscription? _mkErrorSub;
+
   int _currentIndex;
   bool _isInitialized = false;
   bool _isPlaying = false;
@@ -27,6 +40,10 @@ class VideoPlayerProvider extends ChangeNotifier {
   double _playbackSpeed = 1.0;
   bool _isLoading = false;
 
+  // ── media_kit state tracking ──
+  Duration _mkPosition = Duration.zero;
+  Duration _mkDuration = Duration.zero;
+
   /// Status 1 bosilganda recording boshlash uchun signal
   bool _shouldStartRecording = false;
   bool get shouldStartRecording => _shouldStartRecording;
@@ -36,6 +53,8 @@ class VideoPlayerProvider extends ChangeNotifier {
   }
 
   static const List<double> speedOptions = [1.0, 1.5, 2.0];
+
+  static bool get _useMediaKit => Platform.isWindows;
 
   VideoPlayerProvider({
     required this.videoUrls,
@@ -50,6 +69,7 @@ class VideoPlayerProvider extends ChangeNotifier {
 
   // ── Getters ──────────────────────────────────────────────────────────────
   VideoPlayerController? get controller => _controller;
+  mkv.VideoController? get mkVideoController => _mkController;
   int get currentIndex => _currentIndex;
   bool get isInitialized => _isInitialized;
   bool get isPlaying => _isPlaying;
@@ -66,20 +86,50 @@ class VideoPlayerProvider extends ChangeNotifier {
       _currentIndex < tasks.length ? tasks[_currentIndex] : null;
 
   double get progress {
-    if (!_isInitialized || _hasError || _controller == null) return 0.0;
+    if (!_isInitialized || _hasError) return 0.0;
+    if (_useMediaKit) {
+      final total = _mkDuration.inMilliseconds;
+      final current = _mkPosition.inMilliseconds;
+      if (total <= 0) return 0.0;
+      return (current / total).clamp(0.0, 1.0);
+    }
+    if (_controller == null) return 0.0;
     final total = _controller!.value.duration.inMilliseconds;
     final current = _controller!.value.position.inMilliseconds;
     if (total <= 0) return 0.0;
     return (current / total).clamp(0.0, 1.0);
   }
 
-  Duration get duration => _controller?.value.duration ?? Duration.zero;
-  Duration get position => _controller?.value.position ?? Duration.zero;
+  Duration get duration {
+    if (_useMediaKit) return _mkDuration;
+    return _controller?.value.duration ?? Duration.zero;
+  }
+
+  Duration get position {
+    if (_useMediaKit) return _mkPosition;
+    return _controller?.value.position ?? Duration.zero;
+  }
 
   String get speedLabel {
     if (_playbackSpeed == 1.0) return 'x1';
     if (_playbackSpeed == 1.5) return 'x1.5';
     return 'x2';
+  }
+
+  // ── Video size (for FittedBox) ──
+  Size get videoSize {
+    if (_useMediaKit) {
+      final w = _mkPlayer?.state.width;
+      final h = _mkPlayer?.state.height;
+      if (w != null && h != null && w > 0 && h > 0) {
+        return Size(w.toDouble(), h.toDouble());
+      }
+      return const Size(1920, 1080);
+    }
+    if (_controller != null && _controller!.value.isInitialized) {
+      return _controller!.value.size;
+    }
+    return const Size(1920, 1080);
   }
 
   // ── Task status update ──────────────────────────────────────────────────
@@ -92,10 +142,8 @@ class VideoPlayerProvider extends ChangeNotifier {
       bool success = false;
 
       if (onUpdateStatus != null) {
-        // Provider orqali yangilash (local + backend, fetchTasks yo'q)
         success = await onUpdateStatus!(taskId, newStatus);
       } else {
-        // Fallback: to'g'ridan-to'g'ri service chaqirish
         success = await TaskViewService().updateTaskStatus(
           taskId,
           newStatus,
@@ -127,9 +175,14 @@ class VideoPlayerProvider extends ChangeNotifier {
     if (_isLoading) return;
     _isLoading = true;
 
-    if (_isInitialized && _controller != null) {
-      _controller!.removeListener(_onVideoListener);
-      await _controller!.dispose();
+    // Dispose previous
+    if (_useMediaKit) {
+      await _disposeMkPlayer();
+    } else {
+      if (_isInitialized && _controller != null) {
+        _controller!.removeListener(_onVideoListener);
+        await _controller!.dispose();
+      }
     }
 
     _isInitialized = false;
@@ -138,6 +191,8 @@ class VideoPlayerProvider extends ChangeNotifier {
     _halfWatchedFired = false;
     _accumulatedWatchMs = 0;
     _lastPositionMs = 0;
+    _mkPosition = Duration.zero;
+    _mkDuration = Duration.zero;
     notifyListeners();
 
     try {
@@ -164,26 +219,103 @@ class VideoPlayerProvider extends ChangeNotifier {
           _setError("Video fayl bo'sh");
           return;
         }
-        _controller = VideoPlayerController.file(file);
-      } else {
-        _controller = VideoPlayerController.networkUrl(Uri.parse(videoPath));
       }
 
-      await _controller!.initialize();
-      await _controller!.setLooping(false);
-      await _controller!.setVolume(_isMuted ? 0.0 : 1.0);
-      await _controller!.setPlaybackSpeed(_playbackSpeed);
-      await _controller!.play();
-
-      _controller!.addListener(_onVideoListener);
-
-      _isInitialized = true;
-      _isPlaying = true;
-      _isLoading = false;
-      notifyListeners();
+      if (_useMediaKit) {
+        await _initMkPlayer(videoPath, isLocal);
+      } else {
+        await _initVideoPlayer(videoPath, isLocal);
+      }
     } catch (e) {
       _setError(e.toString());
     }
+  }
+
+  // ── video_player initialization ──
+  Future<void> _initVideoPlayer(String videoPath, bool isLocal) async {
+    if (isLocal) {
+      _controller = VideoPlayerController.file(File(videoPath));
+    } else {
+      _controller = VideoPlayerController.networkUrl(Uri.parse(videoPath));
+    }
+
+    await _controller!.initialize();
+    await _controller!.setLooping(false);
+    await _controller!.setVolume(_isMuted ? 0.0 : 1.0);
+    await _controller!.setPlaybackSpeed(_playbackSpeed);
+    await _controller!.play();
+
+    _controller!.addListener(_onVideoListener);
+
+    _isInitialized = true;
+    _isPlaying = true;
+    _isLoading = false;
+    notifyListeners();
+  }
+
+  // ── media_kit initialization (Windows) ──
+  Future<void> _initMkPlayer(String videoPath, bool isLocal) async {
+    _mkPlayer = mk.Player();
+    _mkController = mkv.VideoController(_mkPlayer!);
+
+    // Subscribe to streams
+    _mkPlayingSub = _mkPlayer!.stream.playing.listen((playing) {
+      _isPlaying = playing;
+      notifyListeners();
+    });
+
+    _mkPositionSub = _mkPlayer!.stream.position.listen((pos) {
+      final current = pos.inMilliseconds;
+
+      // Haqiqiy ko'rish vaqtini hisoblash
+      if (_isPlaying && _lastPositionMs > 0) {
+        final delta = current - _lastPositionMs;
+        if (delta > 0 && delta < 500) {
+          _accumulatedWatchMs += delta;
+        }
+      }
+      _lastPositionMs = current;
+      _mkPosition = pos;
+
+      // 50% haqiqiy ko'rish vaqti
+      final total = _mkDuration.inMilliseconds;
+      if (!_halfWatchedFired && total > 0 && _accumulatedWatchMs >= total * 0.5) {
+        _halfWatchedFired = true;
+        if (onHalfWatched != null && _currentIndex < tasks.length) {
+          onHalfWatched!(tasks[_currentIndex].taskId);
+        }
+      }
+
+      notifyListeners();
+    });
+
+    _mkDurationSub = _mkPlayer!.stream.duration.listen((dur) {
+      _mkDuration = dur;
+      notifyListeners();
+    });
+
+    _mkCompletedSub = _mkPlayer!.stream.completed.listen((completed) {
+      if (completed) {
+        goToNext();
+      }
+    });
+
+    _mkErrorSub = _mkPlayer!.stream.error.listen((error) {
+      if (error.isNotEmpty) {
+        _setError(error);
+      }
+    });
+
+    // Open and play
+    final mediaUri = isLocal ? 'file://$videoPath' : videoPath;
+    await _mkPlayer!.open(mk.Media(mediaUri));
+    await _mkPlayer!.setVolume(_isMuted ? 0.0 : 100.0);
+    await _mkPlayer!.setRate(_playbackSpeed);
+
+    _isInitialized = true;
+    _isPlaying = true;
+    _isLoading = false;
+    notifyListeners();
   }
 
   void _setError(String message) {
@@ -200,20 +332,14 @@ class VideoPlayerProvider extends ChangeNotifier {
     final total = value.duration.inMilliseconds;
     final current = value.position.inMilliseconds;
 
-    // Haqiqiy ko'rish vaqtini hisoblash:
-    // Faqat video play bo'layotganda va position normal oldinga ketayotganda
-    // (seekbar surish hisobga olinmaydi)
     if (value.isPlaying && _lastPositionMs > 0) {
       final delta = current - _lastPositionMs;
-      // delta 0..500ms oralig'ida bo'lsa normal play (listener ~200-300ms da chaqiriladi)
-      // Katta jump (seek) bo'lsa hisobga olmaymiz
       if (delta > 0 && delta < 500) {
         _accumulatedWatchMs += delta;
       }
     }
     _lastPositionMs = current;
 
-    // 50% haqiqiy ko'rish vaqti to'lganda
     if (!_halfWatchedFired && total > 0 && _accumulatedWatchMs >= total * 0.5) {
       _halfWatchedFired = true;
       if (onHalfWatched != null && _currentIndex < tasks.length) {
@@ -230,7 +356,12 @@ class VideoPlayerProvider extends ChangeNotifier {
 
   // ── Playback controls ──────────────────────────────────────────────────
   void togglePlayPause() {
-    if (_controller == null || !_isInitialized) return;
+    if (!_isInitialized) return;
+    if (_useMediaKit) {
+      _mkPlayer?.playOrPause();
+      return;
+    }
+    if (_controller == null) return;
     if (_isPlaying) {
       _controller!.pause();
     } else {
@@ -242,7 +373,11 @@ class VideoPlayerProvider extends ChangeNotifier {
 
   void toggleMute() {
     _isMuted = !_isMuted;
-    _controller?.setVolume(_isMuted ? 0.0 : 1.0);
+    if (_useMediaKit) {
+      _mkPlayer?.setVolume(_isMuted ? 0.0 : 100.0);
+    } else {
+      _controller?.setVolume(_isMuted ? 0.0 : 1.0);
+    }
     notifyListeners();
   }
 
@@ -250,7 +385,11 @@ class VideoPlayerProvider extends ChangeNotifier {
     final nextIdx =
         (speedOptions.indexOf(_playbackSpeed) + 1) % speedOptions.length;
     _playbackSpeed = speedOptions[nextIdx];
-    _controller?.setPlaybackSpeed(_playbackSpeed);
+    if (_useMediaKit) {
+      _mkPlayer?.setRate(_playbackSpeed);
+    } else {
+      _controller?.setPlaybackSpeed(_playbackSpeed);
+    }
     notifyListeners();
   }
 
@@ -269,7 +408,7 @@ class VideoPlayerProvider extends ChangeNotifier {
   }
 
   void seekFromCircleTouch(Offset localPos, double circleSize) {
-    if (_controller == null || !_isInitialized) return;
+    if (!_isInitialized) return;
 
     final center = Offset(circleSize / 2, circleSize / 2);
     final dx = localPos.dx - center.dx;
@@ -279,7 +418,13 @@ class VideoPlayerProvider extends ChangeNotifier {
     if (angle < 0) angle += 2 * math.pi;
 
     final ratio = angle / (2 * math.pi);
-    _controller!.seekTo(_controller!.value.duration * ratio);
+
+    if (_useMediaKit) {
+      final target = _mkDuration * ratio;
+      _mkPlayer?.seek(target);
+    } else if (_controller != null) {
+      _controller!.seekTo(_controller!.value.duration * ratio);
+    }
   }
 
   String formatDuration(Duration d) {
@@ -287,10 +432,28 @@ class VideoPlayerProvider extends ChangeNotifier {
     return '${two(d.inMinutes)}:${two(d.inSeconds % 60)}';
   }
 
+  Future<void> _disposeMkPlayer() async {
+    _mkPlayingSub?.cancel();
+    _mkPositionSub?.cancel();
+    _mkDurationSub?.cancel();
+    _mkCompletedSub?.cancel();
+    _mkErrorSub?.cancel();
+    _mkPlayingSub = null;
+    _mkPositionSub = null;
+    _mkDurationSub = null;
+    _mkCompletedSub = null;
+    _mkErrorSub = null;
+    await _mkPlayer?.dispose();
+    _mkPlayer = null;
+    _mkController = null;
+  }
+
   @override
   void dispose() {
     WakelockPlus.disable();
-    if (_controller != null) {
+    if (_useMediaKit) {
+      _disposeMkPlayer();
+    } else if (_controller != null) {
       _controller!.removeListener(_onVideoListener);
       _controller!.dispose();
     }

@@ -12,6 +12,7 @@ import 'package:mone_task_app/core/constants/urls.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:provider/provider.dart';
 import 'package:record/record.dart';
+import 'package:media_kit_video/media_kit_video.dart' as mkv;
 import 'package:share_plus/share_plus.dart';
 import 'package:video_player/video_player.dart';
 
@@ -1033,20 +1034,29 @@ class _CircleVideoPlayerBodyState extends State<_CircleVideoPlayerBody>
                   child: Stack(
                     fit: StackFit.expand,
                     children: [
-                      // ✅ Race condition fix: ctrl o'zgaruvchisiga olamiz
                       Builder(
                         builder: (context) {
-                          final ctrl = provider.controller;
-                          if (!provider.isInitialized ||
-                              provider.hasError ||
-                              ctrl == null) {
+                          if (!provider.isInitialized || provider.hasError) {
                             return const SizedBox.shrink();
                           }
+                          // Windows: media_kit
+                          if (Platform.isWindows) {
+                            final mkCtrl = provider.mkVideoController;
+                            if (mkCtrl == null) return const SizedBox.shrink();
+                            return mkv.Video(
+                              controller: mkCtrl,
+                              fill: Colors.black,
+                            );
+                          }
+                          // iOS/Android/macOS: video_player
+                          final ctrl = provider.controller;
+                          if (ctrl == null) return const SizedBox.shrink();
+                          final vSize = provider.videoSize;
                           return FittedBox(
                             fit: BoxFit.cover,
                             child: SizedBox(
-                              width: ctrl.value.size.width,
-                              height: ctrl.value.size.height,
+                              width: vSize.width,
+                              height: vSize.height,
                               child: VideoPlayer(ctrl),
                             ),
                           );

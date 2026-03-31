@@ -1,5 +1,7 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:media_kit/media_kit.dart' as mk;
+import 'package:media_kit_video/media_kit_video.dart' as mkv;
 import 'package:video_player/video_player.dart';
 
 class VideoPreviewScreen extends StatefulWidget {
@@ -17,7 +19,15 @@ class VideoPreviewScreen extends StatefulWidget {
 }
 
 class _VideoPreviewScreenState extends State<VideoPreviewScreen> {
+  static bool get _useMediaKit => Platform.isWindows;
+
+  // video_player (iOS/Android/macOS)
   VideoPlayerController? _controller;
+
+  // media_kit (Windows)
+  mk.Player? _mkPlayer;
+  mkv.VideoController? _mkController;
+
   bool _isInitialized = false;
   bool _isPlaying = false;
   int _currentSegmentIndex = 0;
@@ -31,34 +41,57 @@ class _VideoPreviewScreenState extends State<VideoPreviewScreen> {
 
   Future<void> _initializeCurrentSegment() async {
     if (_currentSegmentIndex >= widget.videoSegments.length) {
-      // Barcha segmentlar tugadi, qaytadan boshidan
       _currentSegmentIndex = 0;
     }
 
     try {
-      // Avvalgi controllerni to'xtatish
-      await _controller?.dispose();
+      if (_useMediaKit) {
+        await _mkPlayer?.dispose();
+        _mkPlayer = mk.Player();
+        _mkController = mkv.VideoController(_mkPlayer!);
 
-      _controller = VideoPlayerController.file(
-        File(widget.videoSegments[_currentSegmentIndex]),
-      );
-
-      await _controller!.initialize();
-
-      if (mounted) {
-        setState(() {
-          _isInitialized = true;
-          _isLoadingNextSegment = false;
+        _mkPlayer!.stream.completed.listen((completed) {
+          if (completed && !_isLoadingNextSegment) {
+            _playNextSegment();
+          }
         });
 
-        // Avtomatik boshlash
-        _controller!.play();
-        setState(() {
-          _isPlaying = true;
+        _mkPlayer!.stream.playing.listen((playing) {
+          if (mounted) setState(() => _isPlaying = playing);
         });
 
-        // Video tugaganda keyingisiga o'tish
-        _controller!.addListener(_onVideoProgress);
+        final path = widget.videoSegments[_currentSegmentIndex];
+        await _mkPlayer!.open(mk.Media('file://$path'));
+
+        if (mounted) {
+          setState(() {
+            _isInitialized = true;
+            _isLoadingNextSegment = false;
+            _isPlaying = true;
+          });
+        }
+      } else {
+        await _controller?.dispose();
+
+        _controller = VideoPlayerController.file(
+          File(widget.videoSegments[_currentSegmentIndex]),
+        );
+
+        await _controller!.initialize();
+
+        if (mounted) {
+          setState(() {
+            _isInitialized = true;
+            _isLoadingNextSegment = false;
+          });
+
+          _controller!.play();
+          setState(() {
+            _isPlaying = true;
+          });
+
+          _controller!.addListener(_onVideoProgress);
+        }
       }
     } catch (e) {
       _showError("Video yuklashda xatolik: $e");
@@ -68,7 +101,6 @@ class _VideoPreviewScreenState extends State<VideoPreviewScreen> {
   void _onVideoProgress() {
     if (_controller == null || !_controller!.value.isInitialized) return;
 
-    // Video tugaganini tekshirish
     if (_controller!.value.position >= _controller!.value.duration) {
       if (!_isLoadingNextSegment) {
         _playNextSegment();
@@ -92,6 +124,10 @@ class _VideoPreviewScreenState extends State<VideoPreviewScreen> {
   }
 
   void _togglePlayPause() {
+    if (_useMediaKit) {
+      _mkPlayer?.playOrPause();
+      return;
+    }
     if (_controller == null) return;
 
     setState(() {
@@ -124,8 +160,12 @@ class _VideoPreviewScreenState extends State<VideoPreviewScreen> {
 
   @override
   void dispose() {
-    _controller?.removeListener(_onVideoProgress);
-    _controller?.dispose();
+    if (_useMediaKit) {
+      _mkPlayer?.dispose();
+    } else {
+      _controller?.removeListener(_onVideoProgress);
+      _controller?.dispose();
+    }
     super.dispose();
   }
 
@@ -139,16 +179,23 @@ class _VideoPreviewScreenState extends State<VideoPreviewScreen> {
       body: Stack(
         children: [
           // Video player (to'liq ekran)
-          if (_isInitialized && _controller != null)
+          if (_isInitialized)
             Positioned.fill(
-              child: FittedBox(
-                fit: BoxFit.cover,
-                child: SizedBox(
-                  width: _controller!.value.size.width,
-                  height: _controller!.value.size.height,
-                  child: VideoPlayer(_controller!),
-                ),
-              ),
+              child: _useMediaKit && _mkController != null
+                  ? mkv.Video(
+                      controller: _mkController!,
+                      fill: Colors.black,
+                    )
+                  : (_controller != null
+                      ? FittedBox(
+                          fit: BoxFit.cover,
+                          child: SizedBox(
+                            width: _controller!.value.size.width,
+                            height: _controller!.value.size.height,
+                            child: VideoPlayer(_controller!),
+                          ),
+                        )
+                      : const SizedBox.shrink()),
             ),
 
           // Yuklash indikatori

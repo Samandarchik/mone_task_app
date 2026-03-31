@@ -7,8 +7,10 @@ list(APPEND FLUTTER_PLUGIN_LIST
   file_selector_linux
   flutter_sound
   gtk
+  media_kit_video
   record_linux
   url_launcher_linux
+  volume_controller
 )
 
 list(APPEND FLUTTER_FFI_PLUGIN_LIST
