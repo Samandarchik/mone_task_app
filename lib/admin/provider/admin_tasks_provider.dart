@@ -37,7 +37,11 @@ class AdminTasksProvider extends ChangeNotifier {
   // ── Status filter ────────────────────────────────────────────────────────
   Set<int> _selectedStatuses = {};
   Set<int> get selectedStatuses => _selectedStatuses;
-  bool get isFilterActive => _selectedStatuses.isNotEmpty;
+
+  bool _filterNoVideo = false;
+  bool get filterNoVideo => _filterNoVideo;
+
+  bool get isFilterActive => _selectedStatuses.isNotEmpty || _filterNoVideo;
 
   void toggleStatusFilter(int status) {
     if (_selectedStatuses.contains(status)) {
@@ -48,8 +52,14 @@ class AdminTasksProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  void toggleNoVideoFilter() {
+    _filterNoVideo = !_filterNoVideo;
+    notifyListeners();
+  }
+
   void clearStatusFilter() {
     _selectedStatuses = {};
+    _filterNoVideo = false;
     notifyListeners();
   }
 
@@ -107,6 +117,12 @@ class AdminTasksProvider extends ChangeNotifier {
 
     if (_selectedStatuses.isNotEmpty) {
       filtered = filtered.where((t) => _selectedStatuses.contains(t.status));
+    }
+
+    if (_filterNoVideo) {
+      filtered = filtered.where(
+        (t) => t.videoUrl == null || t.videoUrl!.isEmpty,
+      );
     }
 
     return filtered.toList();

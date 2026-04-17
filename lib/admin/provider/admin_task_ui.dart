@@ -200,6 +200,7 @@ class _AdminTaskUiState extends State<AdminTaskUi>
             color: Colors.red,
             provider: tasksProvider,
           ),
+          _NoVideoFilterButton(provider: tasksProvider),
 
           // ── Filterni tozalash ──────────────────────────────────────────
           if (tasksProvider.isFilterActive)
@@ -328,6 +329,48 @@ class _StatusFilterButton extends StatelessWidget {
           child: isSelected
               ? const Icon(Icons.check, size: 32, color: Colors.white)
               : null,
+        ),
+      ),
+    );
+  }
+}
+
+// ─── No-video filter button ──────────────────────────────────────────────────
+
+class _NoVideoFilterButton extends StatelessWidget {
+  final AdminTasksProvider provider;
+
+  const _NoVideoFilterButton({required this.provider});
+
+  @override
+  Widget build(BuildContext context) {
+    final bool isSelected = provider.filterNoVideo;
+    const Color color = Colors.blueGrey;
+
+    return GestureDetector(
+      onTap: () => provider.toggleNoVideoFilter(),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 20),
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 200),
+          width: 50,
+          height: 50,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            color: isSelected ? color : color.withOpacity(0.2),
+            border: Border.all(
+              color: isSelected ? color : color.withOpacity(0.4),
+              width: isSelected ? 2.5 : 1.5,
+            ),
+            boxShadow: isSelected
+                ? [BoxShadow(color: color.withOpacity(0.4), blurRadius: 6)]
+                : [],
+          ),
+          child: Icon(
+            Icons.videocam_off,
+            size: 26,
+            color: isSelected ? Colors.white : color,
+          ),
         ),
       ),
     );
