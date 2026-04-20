@@ -99,12 +99,120 @@ class _TaskWorkerUiState extends State<TaskWorkerUi> {
   }
 
   Future<void> _pickDate() async {
-    final picked = await showDatePicker(
-      context: context,
-      firstDate: DateTime.now().subtract(const Duration(days: 6)),
-      initialDate: _selectedDate,
-      lastDate: DateTime.now(),
+    final now = DateTime.now();
+    final firstDate = DateTime(now.year, now.month - 1, now.day);
+    final lastDate = now;
+
+    const monthNames = [
+      'Yanvar', 'Fevral', 'Mart', 'Aprel', 'May', 'Iyun',
+      'Iyul', 'Avgust', 'Sentabr', 'Oktabr', 'Noyabr', 'Dekabr',
+    ];
+
+    final months = <DateTime>[];
+    var mCursor = DateTime(firstDate.year, firstDate.month);
+    final lastMonthStart = DateTime(lastDate.year, lastDate.month);
+    while (!mCursor.isAfter(lastMonthStart)) {
+      months.add(mCursor);
+      mCursor = DateTime(mCursor.year, mCursor.month + 1);
+    }
+
+    List<int> daysFor(DateTime month) {
+      final isFirst =
+          month.year == firstDate.year && month.month == firstDate.month;
+      final isLast =
+          month.year == lastDate.year && month.month == lastDate.month;
+      final startDay = isFirst ? firstDate.day : 1;
+      final endDay = isLast
+          ? lastDate.day
+          : DateTime(month.year, month.month + 1, 0).day;
+      return [for (int i = startDay; i <= endDay; i++) i];
+    }
+
+    int monthIdx = months.indexWhere(
+      (m) => m.year == _selectedDate.year && m.month == _selectedDate.month,
     );
+    if (monthIdx < 0) monthIdx = months.length - 1;
+
+    var days = daysFor(months[monthIdx]);
+    int dayIdx = days.indexOf(_selectedDate.day);
+    if (dayIdx < 0) dayIdx = days.length - 1;
+
+    final picked = await showCupertinoModalPopup<DateTime>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setSt) => Container(
+          height: 300,
+          color: CupertinoColors.systemBackground.resolveFrom(ctx),
+          child: SafeArea(
+            top: false,
+            child: Column(
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    CupertinoButton(
+                      onPressed: () => Navigator.of(ctx).pop(),
+                      child: const Text('Bekor'),
+                    ),
+                    CupertinoButton(
+                      onPressed: () {
+                        final m = months[monthIdx];
+                        Navigator.of(
+                          ctx,
+                        ).pop(DateTime(m.year, m.month, days[dayIdx]));
+                      },
+                      child: const Text('Tanlash'),
+                    ),
+                  ],
+                ),
+                Expanded(
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: CupertinoPicker(
+                          scrollController: FixedExtentScrollController(
+                            initialItem: monthIdx,
+                          ),
+                          itemExtent: 32,
+                          onSelectedItemChanged: (i) {
+                            setSt(() {
+                              monthIdx = i;
+                              days = daysFor(months[monthIdx]);
+                              if (dayIdx >= days.length) {
+                                dayIdx = days.length - 1;
+                              }
+                            });
+                          },
+                          children: [
+                            for (final m in months)
+                              Center(child: Text(monthNames[m.month - 1])),
+                          ],
+                        ),
+                      ),
+                      Expanded(
+                        child: CupertinoPicker(
+                          key: ValueKey(monthIdx),
+                          scrollController: FixedExtentScrollController(
+                            initialItem: dayIdx,
+                          ),
+                          itemExtent: 32,
+                          onSelectedItemChanged: (i) => setSt(() => dayIdx = i),
+                          children: [
+                            for (final d in days)
+                              Center(child: Text('$d')),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+
     if (picked != null && mounted) {
       setState(() => _selectedDate = picked);
       _fetchTasks(showLoading: true);

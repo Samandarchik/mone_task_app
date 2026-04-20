@@ -1,4 +1,5 @@
 import 'dart:ui';
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:mone_task_app/admin/model/filial_model.dart';
 import 'package:mone_task_app/admin/provider/admin_task_list_widget.dart';
@@ -87,20 +88,50 @@ class _AdminTaskUiState extends State<AdminTaskUi>
   }
 
   Future<void> _handleDateSelection() async {
-    // Provider dan olamiz — setState ishlatmaymiz
     final provider = context.read<AdminTasksProvider>();
     final currentDate = provider.selectedDate;
+    final firstDate = DateTime.now().subtract(const Duration(days: 30));
+    final lastDate = DateTime.now();
 
-    // showDatePicker ni await qilamiz — bu paytda widget rebuild bo'lmaydi
-    final DateTime? picked = await showDatePicker(
+    DateTime tempPicked = currentDate;
+
+    final DateTime? picked = await showCupertinoModalPopup<DateTime>(
       context: context,
-      firstDate: DateTime.now().subtract(const Duration(days: 30)),
-      initialDate: currentDate,
-      lastDate: DateTime.now(),
+      builder: (ctx) => Container(
+        height: 300,
+        color: CupertinoColors.systemBackground.resolveFrom(ctx),
+        child: SafeArea(
+          top: false,
+          child: Column(
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  CupertinoButton(
+                    onPressed: () => Navigator.of(ctx).pop(),
+                    child: const Text('Bekor'),
+                  ),
+                  CupertinoButton(
+                    onPressed: () => Navigator.of(ctx).pop(tempPicked),
+                    child: const Text('Tanlash'),
+                  ),
+                ],
+              ),
+              Expanded(
+                child: CupertinoDatePicker(
+                  mode: CupertinoDatePickerMode.date,
+                  initialDateTime: currentDate,
+                  minimumDate: firstDate,
+                  maximumDate: lastDate,
+                  onDateTimeChanged: (value) => tempPicked = value,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
 
-    // Dialog to'liq yopilgandan KEYIN provider yangilanadi
-    // setState ISHLATMAYMIZ — shu bug ning sababi edi
     if (picked != null && mounted) {
       provider.setSelectedDate(picked);
     }
