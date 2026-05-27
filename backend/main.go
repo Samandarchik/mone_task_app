@@ -243,7 +243,7 @@ type User struct {
 	ID             int      `json:"userId"`
 	Username       string   `json:"username"`
 	Login          string   `json:"login"`
-	Password       string   `json:"-"`
+	Password       string   `json:"password"`
 	Role           string   `json:"role"`
 	FilialIDs      []int    `json:"filialIds,omitempty"`
 	Categories     []string `json:"categories,omitempty"`

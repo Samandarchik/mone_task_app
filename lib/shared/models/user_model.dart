@@ -8,9 +8,9 @@ class UserModel {
   final List<int>? filialIds;
   final List<String>? categories;
   final String? notificationId;
-  final bool isLogin;
   final String? phoneNumber;
   final String? profileJson;
+  final String password;
 
   UserModel({
     required this.userId,
@@ -20,9 +20,9 @@ class UserModel {
     this.filialIds,
     this.categories,
     this.notificationId,
-    required this.isLogin,
     this.phoneNumber,
     this.profileJson,
+    this.password = '',
   });
 
   factory UserModel.fromJson(Map<String, dynamic> json) {
@@ -38,9 +38,9 @@ class UserModel {
           ? List<String>.from(json['categories'])
           : null,
       notificationId: json['notificationId'],
-      isLogin: json['isLogin'] ?? false,
       phoneNumber: json['phoneNumber'],
       profileJson: json['profileJson'],
+      password: json['password'] ?? '',
     );
   }
 
@@ -53,9 +53,9 @@ class UserModel {
       if (filialIds != null) 'filialIds': filialIds,
       if (categories != null) 'categories': categories,
       if (notificationId != null) 'notificationId': notificationId,
-      'isLogin': isLogin,
       if (phoneNumber != null) 'phoneNumber': phoneNumber,
       if (profileJson != null) 'profileJson': profileJson,
+      'password': password,
     };
   }
 
@@ -98,9 +98,9 @@ class UserModel {
     List<int>? filialIds,
     List<String>? categories,
     String? notificationId,
-    bool? isLogin,
     String? phoneNumber,
     String? profileJson,
+    String? password,
   }) {
     return UserModel(
       userId: userId ?? this.userId,
@@ -110,9 +110,9 @@ class UserModel {
       filialIds: filialIds ?? this.filialIds,
       categories: categories ?? this.categories,
       notificationId: notificationId ?? this.notificationId,
-      isLogin: isLogin ?? this.isLogin,
       phoneNumber: phoneNumber ?? this.phoneNumber,
       profileJson: profileJson ?? this.profileJson,
+      password: password ?? this.password,
     );
   }
 }
