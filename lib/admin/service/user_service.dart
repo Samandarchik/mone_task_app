@@ -23,11 +23,15 @@ class UserService {
     required int userId,
     required String username,
     required String role,
+    String? password,
     List<int>? filialIds,
     List<String>? categories,
   }) async {
     try {
       final Map<String, dynamic> data = {'username': username, 'role': role};
+      if (password != null && password.isNotEmpty) {
+        data['password'] = password;
+      }
       if (filialIds != null && filialIds.isNotEmpty) {
         data['filialIds'] = filialIds;
       }

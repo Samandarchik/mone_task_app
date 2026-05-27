@@ -10,7 +10,7 @@ class ApiService {
     try {
       final response = await dio.post(
         AppUrls.login,
-        data: {'login': loginModel.username, 'password': loginModel.password},
+        data: {'password': loginModel.password},
       );
 
       if (response.statusCode == 200) {
@@ -22,23 +22,16 @@ class ApiService {
         };
       }
     } on DioException catch (e) {
-      // 401, 409 va boshqa HTTP xatolarini tekshirish
       if (e.response != null) {
         final statusCode = e.response!.statusCode;
-
         if (statusCode == 401 || statusCode == 409) {
-          print("Xato status: $statusCode");
           return {
             'success': false,
-            'message':
-                e.response!.data['error'] ?? 'Login yoki parol noto\'g\'ri',
+            'message': e.response!.data['error'] ?? 'Parol noto\'g\'ri',
           };
         }
-
         return {'success': false, 'message': 'Server xatosi: $statusCode'};
       }
-
-      // Internet bilan bog'liq xatolar
       return {
         'success': false,
         'message': 'Internetga ulanishda xato: ${e.message}',

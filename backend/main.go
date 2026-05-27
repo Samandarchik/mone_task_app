@@ -460,6 +460,7 @@ func createMainDB() {
 		username TEXT NOT NULL,
 		login TEXT UNIQUE NOT NULL,
 		password_hash TEXT NOT NULL,
+		password TEXT DEFAULT '',
 		role TEXT NOT NULL,
 		filial_ids TEXT,
 		categories TEXT,
@@ -502,6 +503,7 @@ func createMainDB() {
 	db.Exec("ALTER TABLE task_templates ADD COLUMN order_index INTEGER DEFAULT 0")
 	db.Exec("ALTER TABLE users ADD COLUMN phone_number TEXT")
 	db.Exec("ALTER TABLE users ADD COLUMN profile_json TEXT")
+	db.Exec("ALTER TABLE users ADD COLUMN password TEXT DEFAULT ''")
 
 	var needsUpdate int
 	db.QueryRow("SELECT COUNT(*) FROM task_templates WHERE order_index = 0").Scan(&needsUpdate)
@@ -528,9 +530,9 @@ func createMainDB() {
 	db.QueryRow("SELECT COUNT(*) FROM users WHERE role = ?", RoleSuperAdmin).Scan(&count)
 	if count == 0 {
 		hash, _ := bcrypt.GenerateFromPassword([]byte("admin123"), bcrypt.DefaultCost)
-		db.Exec("INSERT INTO users (username, login, password_hash, role) VALUES (?, ?, ?, ?)",
-			"Super Admin", "admin", string(hash), RoleSuperAdmin)
-		log.Println("Super admin created: login=admin, password=admin123")
+		db.Exec("INSERT INTO users (username, login, password_hash, password, role) VALUES (?, ?, ?, ?, ?)",
+			"Super Admin", "admin", string(hash), "admin123", RoleSuperAdmin)
+		log.Println("Super admin created: password=admin123")
 	}
 
 	// Create filials
@@ -738,8 +740,8 @@ func register(w http.ResponseWriter, r *http.Request) {
 		filialIDsStr = strings.Trim(strings.Join(strings.Fields(fmt.Sprint(req.FilialIDs)), ","), "[]")
 	}
 
-	result, err := db.Exec("INSERT INTO users (username, login, password_hash, role, filial_ids, categories, notification_id, phone_number, profile_json) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
-		req.Username, req.Login, string(hash), req.Role, filialIDsStr, string(categoriesJSON), req.NotificationID, req.PhoneNumber, req.ProfileJSON)
+	result, err := db.Exec("INSERT INTO users (username, login, password_hash, password, role, filial_ids, categories, notification_id, phone_number, profile_json) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+		req.Username, req.Login, string(hash), req.Password, req.Role, filialIDsStr, string(categoriesJSON), req.NotificationID, req.PhoneNumber, req.ProfileJSON)
 	if err != nil {
 		respondJSON(w, http.StatusBadRequest, map[string]interface{}{
 			"success": false,
@@ -757,7 +759,6 @@ func register(w http.ResponseWriter, r *http.Request) {
 
 func login(w http.ResponseWriter, r *http.Request) {
 	var req struct {
-		Login          string  `json:"login"`
 		Password       string  `json:"password"`
 		NotificationID *string `json:"notificationId"`
 	}
@@ -778,22 +779,14 @@ func login(w http.ResponseWriter, r *http.Request) {
 	var categoriesStr, filialIDsStr sql.NullString
 	var notificationID, phoneNum, profileJSON sql.NullString
 	var isLogin int
-	err := db.QueryRow("SELECT id, username, login, password_hash, role, filial_ids, categories, notification_id, is_login, phone_number, profile_json FROM users WHERE login = ?",
-		req.Login).Scan(&user.ID, &user.Username, &user.Login, &passwordHash, &user.Role, &filialIDsStr, &categoriesStr, &notificationID, &isLogin, &phoneNum, &profileJSON)
+	err := db.QueryRow("SELECT id, username, login, password_hash, password, role, filial_ids, categories, notification_id, is_login, phone_number, profile_json FROM users WHERE password = ?",
+		req.Password).Scan(&user.ID, &user.Username, &user.Login, &passwordHash, &user.Password, &user.Role, &filialIDsStr, &categoriesStr, &notificationID, &isLogin, &phoneNum, &profileJSON)
 
 	if err != nil {
 		log.Printf("Login error: %v\n", err)
 		respondJSON(w, http.StatusUnauthorized, map[string]interface{}{
 			"success": false,
-			"error":   "Login yoki parol noto'g'ri",
-		})
-		return
-	}
-
-	if err := bcrypt.CompareHashAndPassword([]byte(passwordHash), []byte(req.Password)); err != nil {
-		respondJSON(w, http.StatusUnauthorized, map[string]interface{}{
-			"success": false,
-			"error":   "Login yoki parol noto'g'ri",
+			"error":   "Parol noto'g'ri",
 		})
 		return
 	}
@@ -3312,7 +3305,7 @@ func getUsers(w http.ResponseWriter, r *http.Request) {
 	db, _ := getMainDB()
 	defer db.Close()
 
-	query := "SELECT id, username, login, role, filial_ids, categories, notification_id, is_login, phone_number, profile_json FROM users WHERE 1=1"
+	query := "SELECT id, username, login, password, role, filial_ids, categories, notification_id, is_login, phone_number, profile_json FROM users WHERE 1=1"
 	args := []interface{}{}
 
 	if role != "" {
@@ -3340,7 +3333,7 @@ func getUsers(w http.ResponseWriter, r *http.Request) {
 		var categoriesStr, filialIDsStr sql.NullString
 		var notifID, phoneNum, profileJSON sql.NullString
 		var isLogin int
-		rows.Scan(&u.ID, &u.Username, &u.Login, &u.Role, &filialIDsStr, &categoriesStr, &notifID, &isLogin, &phoneNum, &profileJSON)
+		rows.Scan(&u.ID, &u.Username, &u.Login, &u.Password, &u.Role, &filialIDsStr, &categoriesStr, &notifID, &isLogin, &phoneNum, &profileJSON)
 
 		if categoriesStr.Valid && categoriesStr.String != "" {
 			json.Unmarshal([]byte(categoriesStr.String), &u.Categories)
@@ -3471,6 +3464,7 @@ func updateUser(w http.ResponseWriter, r *http.Request) {
 
 	var req struct {
 		Username   string   `json:"username"`
+		Password   string   `json:"password"`
 		Role       string   `json:"role"`
 		FilialIDs  []int    `json:"filialIds"`
 		Categories []string `json:"categories"`
@@ -3493,8 +3487,15 @@ func updateUser(w http.ResponseWriter, r *http.Request) {
 		filialIDsStr = strings.Trim(strings.Join(strings.Fields(fmt.Sprint(req.FilialIDs)), ","), "[]")
 	}
 
-	_, err := db.Exec("UPDATE users SET username = ?, role = ?, filial_ids = ?, categories = ? WHERE id = ?",
-		req.Username, req.Role, filialIDsStr, string(categoriesJSON), id)
+	var err error
+	if req.Password != "" {
+		hash, _ := bcrypt.GenerateFromPassword([]byte(req.Password), bcrypt.DefaultCost)
+		_, err = db.Exec("UPDATE users SET username = ?, role = ?, filial_ids = ?, categories = ?, password = ?, password_hash = ? WHERE id = ?",
+			req.Username, req.Role, filialIDsStr, string(categoriesJSON), req.Password, string(hash), id)
+	} else {
+		_, err = db.Exec("UPDATE users SET username = ?, role = ?, filial_ids = ?, categories = ? WHERE id = ?",
+			req.Username, req.Role, filialIDsStr, string(categoriesJSON), id)
+	}
 	if err != nil {
 		respondJSON(w, http.StatusInternalServerError, map[string]interface{}{
 			"success": false,

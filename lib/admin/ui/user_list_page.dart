@@ -280,13 +280,7 @@ class _UsersPageState extends State<UsersPage> {
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
       onLongPress: () => _deleteUser(u.userId),
-      onDoubleTap: () async {
-        final result = await Navigator.push(
-          context,
-          MaterialPageRoute(builder: (_) => EditUserPage(user: u, category: widget.filialModel)),
-        );
-        if (result == true) _load();
-      },
+      onDoubleTap: () => _showUserInfo(u),
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
         child: Row(
@@ -765,10 +759,7 @@ class _UsersPageState extends State<UsersPage> {
           GestureDetector(
             onTap: () => _showUserInfo(u),
             onLongPress: () => _deleteUser(u.userId),
-            onDoubleTap: () async {
-              final result = await Navigator.push(context, MaterialPageRoute(builder: (_) => EditUserPage(user: u, category: widget.filialModel)));
-              if (result == true) _load();
-            },
+            onDoubleTap: () => _showUserInfo(u),
             child: cardContent,
           ),
           if (!isWide) _phoneCategoriesPanel(u, cats),

@@ -10,390 +10,270 @@ import 'package:mone_task_app/home/model/login_model.dart';
 import 'package:mone_task_app/home/service/api_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+class _SavedAccount {
+  final String password;
+  final String fullName;
+  _SavedAccount(this.password, this.fullName);
+  Map<String, dynamic> toJson() => {'password': password, 'full_name': fullName};
+  static _SavedAccount fromJson(Map<String, dynamic> j) =>
+      _SavedAccount((j['password'] ?? '') as String, (j['full_name'] ?? '') as String);
+}
+
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
 
   @override
-  _LoginPageState createState() => _LoginPageState();
+  State<LoginPage> createState() => _LoginPageState();
 }
 
 class _LoginPageState extends State<LoginPage> {
-  final _formKey = GlobalKey<FormState>();
-  late final TextEditingController _phoneController;
-  late final TextEditingController _passwordController;
+  final _passCtrl = TextEditingController();
   TokenStorage tokenStorage = sl<TokenStorage>();
 
-  bool _isLoading = false;
-  bool _obscurePassword = true;
-  List<Map<String, String>> _savedAccounts = [];
+  bool _loading = false;
+  bool _obscure = true;
+  String? _error;
+  List<_SavedAccount> _savedAccounts = [];
+  static const _accountsKey = 'saved_accounts_v2';
 
   @override
   void initState() {
     super.initState();
-    _phoneController = TextEditingController();
-    _passwordController = TextEditingController();
     _loadSavedAccounts();
   }
 
+  @override
+  void dispose() {
+    _passCtrl.dispose();
+    super.dispose();
+  }
+
   Future<void> _loadSavedAccounts() async {
-    SharedPreferences prefs = await SharedPreferences.getInstance();
-    List<String>? accounts = prefs.getStringList('saved_accounts');
-    if (accounts != null) {
-      setState(() {
-        _savedAccounts = accounts
-            .map((account) => Map<String, String>.from(jsonDecode(account)))
-            .toList();
-      });
+    final prefs = await SharedPreferences.getInstance();
+    final raw = prefs.getString(_accountsKey);
+    if (raw == null || raw.isEmpty) return;
+    try {
+      final list = (jsonDecode(raw) as List)
+          .whereType<Map<String, dynamic>>()
+          .map(_SavedAccount.fromJson)
+          .toList();
+      if (!mounted) return;
+      setState(() => _savedAccounts = list);
+    } catch (_) {}
+  }
+
+  Future<void> _saveAccount(String password, String fullName) async {
+    final list = _savedAccounts.where((a) => a.password != password).toList();
+    list.insert(0, _SavedAccount(password, fullName));
+    if (list.length > 10) list.removeRange(10, list.length);
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_accountsKey, jsonEncode(list.map((a) => a.toJson()).toList()));
+    if (!mounted) return;
+    setState(() => _savedAccounts = list);
+  }
+
+  Future<void> _removeAccount(String password) async {
+    final list = _savedAccounts.where((a) => a.password != password).toList();
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_accountsKey, jsonEncode(list.map((a) => a.toJson()).toList()));
+    if (!mounted) return;
+    setState(() => _savedAccounts = list);
+  }
+
+  void _pickAccount(_SavedAccount acc) {
+    _passCtrl.text = acc.password;
+    _login();
+  }
+
+  Future<void> _login() async {
+    final password = _passCtrl.text.trim();
+    if (password.isEmpty) {
+      setState(() => _error = 'Parolni kiriting');
+      return;
     }
-  }
-
-  Future<void> _saveAccount(String phone, String password) async {
-    SharedPreferences prefs = await SharedPreferences.getInstance();
-
-    // Agar akkaunt allaqachon mavjud bo'lsa, uni o'chirish
-    _savedAccounts.removeWhere((account) => account['phone'] == phone);
-
-    // Yangi akkauntni boshiga qo'shish
-    _savedAccounts.insert(0, {'phone': phone, 'password': password});
-
-    // Faqat oxirgi 7 ta akkauntni saqlash
-    if (_savedAccounts.length > 7) {
-      _savedAccounts = _savedAccounts.sublist(0, 7);
-    }
-
-    List<String> accountsToSave = _savedAccounts
-        .map((account) => jsonEncode(account))
-        .toList();
-
-    await prefs.setStringList('saved_accounts', accountsToSave);
-  }
-
-  Future<void> _deleteAccount(int index) async {
-    setState(() {
-      _savedAccounts.removeAt(index);
-    });
-
-    SharedPreferences prefs = await SharedPreferences.getInstance();
-    List<String> accountsToSave = _savedAccounts
-        .map((account) => jsonEncode(account))
-        .toList();
-    await prefs.setStringList('saved_accounts', accountsToSave);
-  }
-
-  void _selectAccount(Map<String, String> account) {
-    setState(() {
-      _phoneController.text = account['phone']!;
-      _passwordController.text = account['password']!;
-    });
-  }
-
-  Future<void> _login(String phone, String password) async {
-    // if (!_formKey.currentState!.validate()) return;
-
-    setState(() => _isLoading = true);
+    setState(() { _loading = true; _error = null; });
 
     try {
-      final result = await ApiService().login(
-        LoginModel(username: phone, password: password),
-      );
+      final result = await ApiService().login(LoginModel(password: password));
 
-      setState(() => _isLoading = false);
-      if (result["success"] == false) {
-        _showError(result["message"] ?? "Login yoki parol noto'g'ri");
-        return;
-      }
-      // 🔍 SUCCESSNI TEKSHIRISH
-      if (result["success"] == true && result["token"] != null) {
-        await tokenStorage.putToken(result["token"]);
+      if (!mounted) return;
+      setState(() => _loading = false);
+
+      if (result['success'] == true && result['token'] != null) {
+        await tokenStorage.putToken(result['token']);
         await tokenStorage.putUserData(result['user']);
 
-        // Login ma'lumotlarini saqlash
-        await _saveAccount(
-          _phoneController.text.trim(),
-          _passwordController.text.trim(),
-        );
+        final fullName = result['user']['username'] ?? '';
+        await _saveAccount(password, fullName);
 
-        // 🔄 Role bo‘yicha navigatsiya
-        final role = result["user"]["role"];
-
-        if (role == "super_admin" || role == "checker") {
+        if (!mounted) return;
+        final role = result['user']['role'];
+        if (role == 'super_admin' || role == 'checker') {
           context.pushAndRemove(AdminTaskUi());
         } else {
           context.pushAndRemove(TaskWorkerUi());
         }
       } else {
-        _showError(result["error"] ?? "Login yoki parol noto'g'ri");
+        setState(() => _error = result['message'] ?? result['error'] ?? 'Parol noto\'g\'ri');
       }
     } catch (e) {
-      setState(() => _isLoading = false);
-      _showError("Xatolik: $e");
+      if (!mounted) return;
+      setState(() { _loading = false; _error = 'Xatolik: $e'; });
     }
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.blue.shade50,
-      body: SafeArea(
+      body: Container(
+        decoration: const BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [Color(0xFF1e1e2d), Color(0xFF2a2a3d), Color(0xFF1e1e2d)],
+          ),
+        ),
         child: Center(
           child: SingleChildScrollView(
-            padding: EdgeInsets.all(20),
-            child: Card(
-              elevation: 15,
-              shadowColor: Colors.blue.withOpacity(0.3),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(20),
+            padding: const EdgeInsets.all(24),
+            child: Container(
+              width: 420,
+              padding: const EdgeInsets.all(36),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(24),
+                boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.3), blurRadius: 60, offset: const Offset(0, 20))],
               ),
-              child: Padding(
-                padding: EdgeInsets.all(30),
-                child: AutofillGroup(
-                  child: Form(
-                    key: _formKey,
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Container(
-                          padding: EdgeInsets.all(15),
-                          decoration: BoxDecoration(
-                            color: Colors.blue.shade100,
-                            shape: BoxShape.circle,
-                          ),
-                          child: Icon(
-                            Icons.person,
-                            size: 40,
-                            color: Colors.blue.shade700,
-                          ),
-                        ),
-                        SizedBox(height: 20),
-                        Text(
-                          "Login",
-                          style: TextStyle(
-                            fontSize: 26,
-                            fontWeight: FontWeight.bold,
-                            color: Colors.blue.shade800,
-                          ),
-                        ),
-                        SizedBox(height: 30),
-                        TextFormField(
-                          controller: _phoneController,
-                          keyboardType: TextInputType.emailAddress,
-                          autofillHints: const [AutofillHints.username],
-                          decoration: InputDecoration(
-                            labelText: "Login",
-                            prefixIcon: Icon(Icons.person, color: Colors.blue),
-                            border: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                            focusedBorder: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(12),
-                              borderSide: BorderSide(
-                                color: Colors.blue,
-                                width: 2,
-                              ),
-                            ),
-                          ),
-                        ),
-                        SizedBox(height: 20),
-                        TextFormField(
-                          controller: _passwordController,
-                          keyboardType: TextInputType.visiblePassword,
-                          autofillHints: const [AutofillHints.password],
-                          obscureText: _obscurePassword,
-                          decoration: InputDecoration(
-                            labelText: 'Password',
-                            prefixIcon: Icon(Icons.lock, color: Colors.blue),
-                            suffixIcon: IconButton(
-                              icon: Icon(
-                                _obscurePassword
-                                    ? Icons.visibility
-                                    : Icons.visibility_off,
-                                color: Colors.blue,
-                              ),
-                              onPressed: () {
-                                setState(() {
-                                  _obscurePassword = !_obscurePassword;
-                                });
-                              },
-                            ),
-                            border: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                            focusedBorder: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(12),
-                              borderSide: BorderSide(
-                                color: Colors.blue,
-                                width: 2,
-                              ),
-                            ),
-                          ),
-                          validator: (value) {
-                            if (value == null || value.isEmpty) {
-                              return 'Введите пароль';
-                            }
-                            return null;
-                          },
-                        ),
-                        SizedBox(height: 30),
-                        SizedBox(
-                          width: double.infinity,
-                          height: 55,
-                          child: ElevatedButton(
-                            onPressed: _isLoading
-                                ? null
-                                : () => _login(
-                                    _phoneController.text.trim(),
-                                    _passwordController.text.trim(),
-                                  ),
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: Colors.blue,
-                              foregroundColor: Colors.white,
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                              elevation: 5,
-                            ),
-                            child: _isLoading
-                                ? Row(
-                                    mainAxisAlignment: MainAxisAlignment.center,
-                                    children: [
-                                      SizedBox(
-                                        width: 20,
-                                        height: 20,
-                                        child:
-                                            CircularProgressIndicator.adaptive(),
-                                      ),
-                                      SizedBox(width: 10),
-                                      Text('Loading...'),
-                                    ],
-                                  )
-                                : Text(
-                                    'Login',
-                                    style: TextStyle(
-                                      fontSize: 18,
-                                      fontWeight: FontWeight.bold,
-                                    ),
-                                  ),
-                          ),
-                        ),
-                        SizedBox(height: 20),
-                        SizedBox(
-                          width: double.infinity,
-                          height: 55,
-                          child: ElevatedButton(
-                            onPressed: _isLoading
-                                ? null
-                                : () => _login("770451117", "112233"),
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: Colors.green,
-                              foregroundColor: Colors.white,
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                              elevation: 5,
-                            ),
-                            child: _isLoading
-                                ? Row(
-                                    mainAxisAlignment: MainAxisAlignment.center,
-                                    children: [
-                                      SizedBox(
-                                        width: 20,
-                                        height: 20,
-                                        child:
-                                            CircularProgressIndicator.adaptive(),
-                                      ),
-                                      SizedBox(width: 10),
-                                      Text('Loading...'),
-                                    ],
-                                  )
-                                : Text(
-                                    'Попробуйте!',
-                                    style: TextStyle(
-                                      fontSize: 18,
-                                      fontWeight: FontWeight.bold,
-                                    ),
-                                  ),
-                          ),
-                        ),
-                        SizedBox(height: 20),
-                        // Saqlangan akkauntlar ro'yxati
-                        if (_savedAccounts.isNotEmpty) ...[
-                          Align(
-                            alignment: Alignment.centerLeft,
-                            child: Text(
-                              'Ранее вошедшие в систему учетные записи:',
-                              style: TextStyle(
-                                fontSize: 14,
-                                fontWeight: FontWeight.w500,
-                                color: Colors.grey.shade700,
-                              ),
-                            ),
-                          ),
-                          SizedBox(height: 10),
-                          Container(
-                            decoration: BoxDecoration(
-                              border: Border.all(color: Colors.grey.shade300),
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                            child: ListView.separated(
-                              shrinkWrap: true,
-                              physics: NeverScrollableScrollPhysics(),
-                              itemCount: _savedAccounts.length,
-                              separatorBuilder: (context, index) =>
-                                  Divider(height: 1),
-                              itemBuilder: (context, index) {
-                                final account = _savedAccounts[index];
-                                return ListTile(
-                                  leading: CircleAvatar(
-                                    backgroundColor: Colors.blue.shade100,
-                                    child: Icon(
-                                      Icons.person,
-                                      color: Colors.blue,
-                                    ),
-                                  ),
-                                  title: Text(
-                                    account['phone']!,
-                                    style: TextStyle(
-                                      fontWeight: FontWeight.w500,
-                                    ),
-                                  ),
-                                  trailing: IconButton(
-                                    icon: Icon(Icons.delete, color: Colors.red),
-                                    onPressed: () => _deleteAccount(index),
-                                  ),
-                                  onTap: () => _selectAccount(account),
-                                );
-                              },
-                            ),
-                          ),
-                          SizedBox(height: 20),
-                        ],
-                        Text(
-                          "app version: 0.1.1",
-                          style: TextStyle(fontSize: 12),
-                        ),
-                        SizedBox(height: 20),
-                      ],
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  ShaderMask(
+                    shaderCallback: (bounds) => const LinearGradient(
+                      colors: [Color(0xFF3699ff), Color(0xFF8b5cf6)],
+                    ).createShader(bounds),
+                    child: const Text(
+                      'MONE TASK',
+                      style: TextStyle(fontSize: 32, fontWeight: FontWeight.w800, color: Colors.white),
                     ),
                   ),
-                ),
+                  const SizedBox(height: 4),
+                  Text('Parol bilan tizimga kiring', style: TextStyle(color: Colors.grey[500], fontSize: 14)),
+                  const SizedBox(height: 32),
+
+                  if (_error != null) ...[
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(14),
+                      decoration: BoxDecoration(color: const Color(0xFFFEE2E2), borderRadius: BorderRadius.circular(12)),
+                      child: Text(_error!, style: const TextStyle(color: Color(0xFF991B1B), fontSize: 13, fontWeight: FontWeight.w500)),
+                    ),
+                    const SizedBox(height: 16),
+                  ],
+
+                  if (_savedAccounts.isNotEmpty) ...[
+                    Text(
+                      'Saqlangan akkauntlar',
+                      style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: Colors.grey[500], letterSpacing: 0.5),
+                    ),
+                    const SizedBox(height: 8),
+                    ..._savedAccounts.map((a) => Padding(
+                      padding: const EdgeInsets.only(bottom: 8),
+                      child: InkWell(
+                        onTap: _loading ? null : () => _pickAccount(a),
+                        borderRadius: BorderRadius.circular(12),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFFAFAFA),
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(color: const Color(0xFFE5E7EB)),
+                          ),
+                          child: Row(
+                            children: [
+                              Container(
+                                width: 36, height: 36,
+                                decoration: const BoxDecoration(
+                                  shape: BoxShape.circle,
+                                  gradient: LinearGradient(colors: [Color(0xFF3699ff), Color(0xFF8b5cf6)]),
+                                ),
+                                alignment: Alignment.center,
+                                child: Text(
+                                  a.fullName.isEmpty ? '?' : a.fullName[0].toUpperCase(),
+                                  style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700),
+                                ),
+                              ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: Text(
+                                  a.fullName.isEmpty ? '••••••' : a.fullName,
+                                  style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14, color: Color(0xFF1A1A2E)),
+                                ),
+                              ),
+                              IconButton(
+                                icon: const Icon(Icons.close, size: 18, color: Color(0xFF9CA3AF)),
+                                onPressed: () => _removeAccount(a.password),
+                                padding: EdgeInsets.zero,
+                                constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    )),
+                    const SizedBox(height: 16),
+                  ],
+
+                  Text('Parol', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: Colors.grey[700])),
+                  const SizedBox(height: 6),
+                  TextField(
+                    controller: _passCtrl,
+                    obscureText: _obscure,
+                    decoration: InputDecoration(
+                      hintText: 'Parolni kiriting',
+                      hintStyle: TextStyle(color: Colors.grey[400]),
+                      filled: true,
+                      fillColor: const Color(0xFFF9FAFB),
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: Color(0xFFE5E7EB))),
+                      enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: Color(0xFFE5E7EB))),
+                      focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: Color(0xFF3699ff), width: 2)),
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+                      suffixIcon: IconButton(
+                        icon: Icon(_obscure ? Icons.visibility_off : Icons.visibility, color: Colors.grey),
+                        onPressed: () => setState(() => _obscure = !_obscure),
+                      ),
+                    ),
+                    onSubmitted: (_) => _login(),
+                  ),
+                  const SizedBox(height: 28),
+                  SizedBox(
+                    width: double.infinity,
+                    height: 54,
+                    child: DecoratedBox(
+                      decoration: BoxDecoration(
+                        gradient: const LinearGradient(colors: [Color(0xFF3699ff), Color(0xFF8b5cf6)]),
+                        borderRadius: BorderRadius.circular(14),
+                        boxShadow: [BoxShadow(color: const Color(0xFF3699ff).withValues(alpha: 0.4), blurRadius: 16, offset: const Offset(0, 4))],
+                      ),
+                      child: ElevatedButton(
+                        onPressed: _loading ? null : _login,
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.transparent,
+                          shadowColor: Colors.transparent,
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                        ),
+                        child: _loading
+                            ? const SizedBox(width: 22, height: 22, child: CircularProgressIndicator(strokeWidth: 2.5, color: Colors.white))
+                            : const Text('Kirish', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: Colors.white)),
+                      ),
+                    ),
+                  ),
+                ],
               ),
             ),
           ),
         ),
       ),
     );
-  }
-
-  @override
-  void dispose() {
-    _phoneController.dispose();
-    _passwordController.dispose();
-    super.dispose();
-  }
-
-  void _showError(String text) {
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(SnackBar(content: Text(text), backgroundColor: Colors.red));
   }
 }
