@@ -3,19 +3,9 @@ import 'package:flutter/material.dart';
 import 'package:mone_task_app/admin/model/add_admin_task.dart';
 import 'package:mone_task_app/admin/model/filial_model.dart';
 import 'package:mone_task_app/admin/service/task_worker_service.dart';
-
-// ---------- CategoryModel ----------
-// Agar sizda alrady CategoryModel bo'lsa, bu classni o'chirting.
-class CategoryModel {
-  final int id;
-  final String name;
-
-  CategoryModel({required this.id, required this.name});
-
-  factory CategoryModel.fromJson(Map<String, dynamic> json) {
-    return CategoryModel(id: json['categoryId'], name: json['name']);
-  }
-}
+import 'package:mone_task_app/admin/ui/widgets/category_selector.dart';
+import 'package:mone_task_app/admin/ui/widgets/filial_selector.dart';
+import 'package:mone_task_app/admin/ui/widgets/task_type_selector.dart';
 
 class AddAdminTask extends StatefulWidget {
   const AddAdminTask({super.key});
@@ -25,199 +15,79 @@ class AddAdminTask extends StatefulWidget {
 }
 
 class _AddAdminTaskState extends State<AddAdminTask> {
-  TemplateService taskService = TemplateService();
-  late TextEditingController controller;
-  late Future<List<FilialModel>> filialsFuture;
+  final TemplateService _taskService = TemplateService();
+  final TextEditingController _controller = TextEditingController();
+  final GlobalKey<CategorySelectorState> _categoryKey = GlobalKey();
+  late Future<List<FilialModel>> _filialsFuture;
 
-  int type = 1;
-  List<int> selectedFilials = [];
-  List<int> selectedWeekDays = [];
-  List<int> selectedDays = [];
+  int _type = 1;
+  List<int> _selectedFilials = [];
+  List<int> _selectedWeekDays = [];
+  List<int> _selectedDays = [];
+  int? _selectedCategoryId;
+  DateTime? _selectedTime;
 
-  // --- Category state ---
-  List<CategoryModel> categories = [];
-  int? selectedCategoryId;
-  bool categoriesLoading = true;
-  String? categoriesError;
   @override
   void initState() {
     super.initState();
-    controller = TextEditingController();
-    filialsFuture = TemplateService().fetchFilials();
-    _loadCategories();
+    _filialsFuture = TemplateService().fetchFilials();
   }
 
-  // --- Category API calls ---
-  Future<void> _loadCategories() async {
-    setState(() {
-      categoriesLoading = true;
-      categoriesError = null;
-    });
-    try {
-      final list = await taskService.fetchCategoriesList();
-      setState(() {
-        categories = list;
-        categoriesLoading = false;
-      });
-    } catch (e) {
-      setState(() {
-        categoriesError = e.toString();
-        categoriesLoading = false;
-      });
-    }
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
   }
 
-  Future<void> _addCategory(String name) async {
-    await taskService.addCategory(name);
-    await _loadCategories(); // <-- uncomment — list yangilanadi
-  }
-
-  Future<void> _deleteCategory(int id) async {
-    final success = await taskService.deleteCategory(id);
-    if (success) {
-      setState(() {
-        if (selectedCategoryId == id) {
-          selectedCategoryId = null;
-        }
-      });
-      await _loadCategories();
-    } else {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text(
-              "Ошибка при удалении категории. Возможно, к ней привязаны пользователи.",
-            ),
-          ),
-        );
-      }
-    }
-  }
-
-  // --- Dialog: Yangi category qo'shish ---
-  Future<void> _showAddCategoryDialog() async {
-    // Local controller yaratamiz — class-level `nameController` o'chiring
-    final TextEditingController dialogController = TextEditingController();
-
-    await showDialog<void>(
-      context: context,
-      builder: (ctx) {
-        return AlertDialog(
-          title: const Text("Новая категория"),
-          content: TextField(
-            controller: dialogController,
-            autofocus: true,
-            decoration: const InputDecoration(
-              labelText: "Название категории",
-              border: OutlineInputBorder(),
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(ctx),
-              child: const Text("Отмена"),
-            ),
-            TextButton(
-              onPressed: () async {
-                final name = dialogController.text.trim();
-                if (name.isEmpty) {
-                  ScaffoldMessenger.of(ctx).showSnackBar(
-                    const SnackBar(content: Text("Пожалуйста, введите имя.")),
-                  );
-                  return;
-                }
-                Navigator.pop(ctx);
-                await _addCategory(name);
-              },
-              child: const Text("Добавить"),
-            ),
-          ],
-        );
-      },
-    );
-  }
-
-  // --- Confirm delete dialog ---
-  Future<void> _confirmDeleteCategory(CategoryModel category) async {
-    final bool? confirmed = await showDialog<bool>(
-      context: context,
-      builder: (ctx) {
-        return AlertDialog(
-          title: const Text("Удалить"),
-          content: Text("\"${category.name}\" Вы хотите удалить категорию?"),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(ctx, false),
-              child: const Text("Неверный"),
-            ),
-            TextButton(
-              onPressed: () => Navigator.pop(ctx, true),
-              style: TextButton.styleFrom(foregroundColor: Colors.red),
-              child: const Text("Удалить"),
-            ),
-          ],
-        );
-      },
-    );
-
-    if (confirmed == true) {
-      await _deleteCategory(category.id);
-    }
-  }
-
-  // --- Submit ---
   void _submitTask() {
-    if (controller.text.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Пожалуйста, введите задание.")),
-      );
+    if (_controller.text.isEmpty) {
+      _showError("Пожалуйста, введите задание.");
+      return;
+    }
+    if (_selectedFilials.isEmpty) {
+      _showError("Пожалуйста, выберите филиалы.");
+      return;
+    }
+    if (_type == 2 && _selectedWeekDays.isEmpty) {
+      _showError("Пожалуйста, выберите дни недели.");
+      return;
+    }
+    if (_type == 3 && _selectedDays.isEmpty) {
+      _showError("Пожалуйста, выберите даты.");
+      return;
+    }
+    if (_selectedCategoryId == null) {
+      _showError("Пожалуйста, выберите категорию.");
       return;
     }
 
-    if (selectedFilials.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Пожалуйста, выберите филиалы.")),
-      );
+    final categoryName = _categoryKey.currentState?.getCategoryName(_selectedCategoryId!);
+    if (categoryName == null) {
+      _showError("Категория не найдена.");
       return;
     }
 
-    if (type == 2 && selectedWeekDays.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Пожалуйста, выберите дни недели.")),
-      );
-      return;
-    }
-
-    if (type == 3 && selectedDays.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Пожалуйста, выберите даты.")),
-      );
-      return;
-    }
-
-    AddAdminTaskModel model = AddAdminTaskModel(
-      taskType: type,
-      filialsId: selectedFilials,
-      task: controller.text,
-      days: type == 1
-          ? null
-          : type == 2
-          ? selectedWeekDays
-          : selectedDays,
-      category: categories[selectedCategoryId!].name,
+    final model = AddAdminTaskModel(
+      taskType: _type,
+      filialsId: _selectedFilials,
+      task: _controller.text,
+      days: _type == 1 ? null : _type == 2 ? _selectedWeekDays : _selectedDays,
+      category: categoryName,
     );
-    taskService.addTask(model);
+    _taskService.addTask(model);
     Navigator.pop(context, true);
   }
 
-  DateTime? selectedDate;
+  void _showError(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+  }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: const Text("Добавить задачу")),
       body: FutureBuilder<List<FilialModel>>(
-        future: filialsFuture,
+        future: _filialsFuture,
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
             return const Center(child: CircularProgressIndicator.adaptive());
@@ -233,13 +103,10 @@ class _AddAdminTaskState extends State<AddAdminTask> {
                   const SizedBox(height: 16),
                   ElevatedButton(
                     onPressed: () {
-                      Future.microtask(() {
-                        setState(() {
-                          filialsFuture = TemplateService().fetchFilials();
-                        });
+                      setState(() {
+                        _filialsFuture = TemplateService().fetchFilials();
                       });
                     },
-
                     child: const Text('Повторить попытку'),
                   ),
                 ],
@@ -247,358 +114,84 @@ class _AddAdminTaskState extends State<AddAdminTask> {
             );
           }
 
-          if (!snapshot.hasData || snapshot.data!.isEmpty) {
-            return const Center(child: Text("Ветви не найдены"));
+          final filials = snapshot.data ?? [];
+          if (filials.isEmpty) {
+            return const Center(child: Text("Филиалы не найдены"));
           }
 
-          final filials = snapshot.data!;
-
           return SingleChildScrollView(
-            child: Padding(
-              padding: const EdgeInsets.all(16.0),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // Vazifa kiritish
-                  TextField(
-                    controller: controller,
-                    decoration: const InputDecoration(
-                      labelText: 'Задача',
-                      border: OutlineInputBorder(),
-                    ),
-                    maxLines: 3,
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                TextField(
+                  controller: _controller,
+                  decoration: const InputDecoration(
+                    labelText: 'Задача',
+                    border: OutlineInputBorder(),
                   ),
-                  const SizedBox(height: 20),
+                  maxLines: 3,
+                ),
+                const SizedBox(height: 20),
 
-                  // ==================== CATEGORY DROPDOWN ====================
-                  const Text(
-                    "Категория:",
-                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-                  ),
-                  const SizedBox(height: 8),
+                CategorySelector(
+                  key: _categoryKey,
+                  selectedCategoryId: _selectedCategoryId,
+                  onChanged: (id) => setState(() => _selectedCategoryId = id),
+                ),
+                const SizedBox(height: 12),
 
-                  if (categoriesLoading)
-                    const Center(child: CircularProgressIndicator.adaptive())
-                  else if (categoriesError != null)
-                    Row(
-                      children: [
-                        Text(
-                          "Ошибка: $categoriesError",
-                          style: const TextStyle(color: Colors.red),
-                        ),
-                        const SizedBox(width: 8),
-                        TextButton(
-                          onPressed: _loadCategories,
-                          child: const Text("Снова"),
-                        ),
-                      ],
-                    )
-                  else
-                    _buildCategoryDropdown(),
-
-                  const SizedBox(height: 8),
-
-                  // "Yangi category qo'shish" tugmasi
-                  Align(
-                    alignment: Alignment.centerLeft,
-                    child: TextButton.icon(
-                      onPressed: _showAddCategoryDialog,
-                      icon: const Icon(Icons.add_circle_outline, size: 18),
-                      label: const Text("Добавить новую категорию"),
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  // ==================== END CATEGORY ====================
-
-                  // Tip tanlash
-                  const Text(
-                    "Тип задачи:",
-                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-                  ),
-                  const SizedBox(height: 8),
-                  DropdownButtonFormField<int>(
-                    value: type,
-                    isExpanded: true,
-                    decoration: const InputDecoration(
-                      border: OutlineInputBorder(),
-                    ),
-                    items: types
-                        .map(
-                          (e) => DropdownMenuItem<int>(
-                            value: e['id'],
-                            child: Text(e['name']),
-                          ),
-                        )
-                        .toList(),
-                    onChanged: (value) {
-                      if (value != null) {
-                        setState(() {
-                          type = value;
-                          selectedWeekDays.clear();
-                          selectedDays.clear();
-                        });
-                      }
-                    },
-                  ),
-                  const SizedBox(height: 20),
-
-                  // Hafta kunlari (type == 2)
-                  if (type == 2)
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Text(
-                          "Будни:",
-                          style: TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                        const SizedBox(height: 10),
-                        ...week.map((weekDay) {
-                          final bool isSelected = selectedWeekDays.contains(
-                            weekDay['id'],
-                          );
-                          return Card(
-                            margin: const EdgeInsets.only(bottom: 8),
-                            child: Padding(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 16,
-                                vertical: 8,
-                              ),
-                              child: Row(
-                                mainAxisAlignment:
-                                    MainAxisAlignment.spaceBetween,
-                                children: [
-                                  Text(
-                                    weekDay['name'],
-                                    style: const TextStyle(fontSize: 16),
-                                  ),
-                                  CupertinoSwitch(
-                                    value: isSelected,
-                                    onChanged: (bool value) {
-                                      setState(() {
-                                        if (value) {
-                                          selectedWeekDays.add(weekDay['id']);
-                                        } else {
-                                          selectedWeekDays.remove(
-                                            weekDay['id'],
-                                          );
-                                        }
-                                      });
-                                    },
-                                  ),
-                                ],
-                              ),
-                            ),
-                          );
-                        }),
-                        const SizedBox(height: 20),
-                      ],
-                    ),
-
-                  // Oyning kunlari (type == 3)
-                  if (type == 3)
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Text(
-                          "Выберите дни:",
-                          style: TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                        const SizedBox(height: 10),
-                        Wrap(
-                          spacing: 8,
-                          runSpacing: 8,
-                          children: List.generate(31, (index) {
-                            int day = index + 1;
-                            bool isSelected = selectedDays.contains(day);
-                            return FilterChip(
-                              label: Text(day.toString()),
-                              selected: isSelected,
-                              selectedColor: Colors.blue.shade200,
-                              onSelected: (bool selected) {
-                                setState(() {
-                                  if (selected) {
-                                    selectedDays.add(day);
-                                  } else {
-                                    selectedDays.remove(day);
-                                  }
-                                });
-                              },
-                            );
-                          }),
-                        ),
-                        const SizedBox(height: 10),
-                        if (selectedDays.isNotEmpty)
-                          Text(
-                            "Выбранные дни: ${selectedDays.join(', ')}",
-                            style: const TextStyle(fontWeight: FontWeight.w500),
-                          ),
-                        const SizedBox(height: 20),
-                      ],
-                    ),
-
-                  // Filiallar tanlash
-                  const Text(
-                    "Филиалы:",
-                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-                  ),
-                  const SizedBox(height: 10),
-                  ...filials.map((filial) {
-                    final bool isSelected = selectedFilials.contains(
-                      filial.filialId,
-                    );
-                    return Card(
-                      margin: const EdgeInsets.only(bottom: 8),
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 16,
-                          vertical: 8,
-                        ),
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            Text(
-                              filial.name,
-                              style: const TextStyle(fontSize: 16),
-                            ),
-                            CupertinoSwitch(
-                              value: isSelected,
-                              onChanged: (bool value) {
-                                setState(() {
-                                  if (value) {
-                                    selectedFilials.add(filial.filialId);
-                                  } else {
-                                    selectedFilials.remove(filial.filialId);
-                                  }
-                                });
-                              },
-                            ),
-                          ],
-                        ),
-                      ),
-                    );
+                TaskTypeSelector(
+                  selectedType: _type,
+                  onTypeChanged: (value) => setState(() {
+                    _type = value;
+                    _selectedWeekDays.clear();
+                    _selectedDays.clear();
                   }),
-                  const SizedBox(height: 20),
+                  selectedWeekDays: _selectedWeekDays,
+                  onWeekDaysChanged: (days) => setState(() => _selectedWeekDays = days),
+                  selectedDays: _selectedDays,
+                  onDaysChanged: (days) => setState(() => _selectedDays = days),
+                ),
 
-                  // Vaqt tanlash
-                  const Text(
-                    "Время:",
-                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                FilialSelector(
+                  filials: filials,
+                  selectedIds: _selectedFilials,
+                  onChanged: (ids) => setState(() => _selectedFilials = ids),
+                ),
+                const SizedBox(height: 20),
+
+                const Text(
+                  "Время:",
+                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                ),
+                const SizedBox(height: 10),
+                SizedBox(
+                  height: 216,
+                  child: CupertinoDatePicker(
+                    mode: CupertinoDatePickerMode.time,
+                    initialDateTime: DateTime.now(),
+                    onDateTimeChanged: (value) => _selectedTime = value,
                   ),
-                  const SizedBox(height: 10),
-                  SizedBox(
-                    height: 216,
-                    child: CupertinoDatePicker(
-                      mode: CupertinoDatePickerMode.time,
-                      initialDateTime: DateTime.now(),
-                      onDateTimeChanged: (DateTime value) {
-                        setState(() {
-                          selectedDate = value;
-                        });
-                      },
+                ),
+                const SizedBox(height: 30),
+
+                SizedBox(
+                  width: double.infinity,
+                  child: CupertinoButton.filled(
+                    onPressed: _submitTask,
+                    child: const Text(
+                      "Добавить задачу",
+                      style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
                     ),
                   ),
-                  const SizedBox(height: 30),
-
-                  // Qo'shish tugmasi
-                  Center(
-                    child: SizedBox(
-                      width: double.infinity,
-                      child: CupertinoButton.filled(
-                        onPressed: _submitTask,
-                        child: const Text(
-                          "Добавить задачу",
-                          style: TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 20),
-                ],
-              ),
+                ),
+                const SizedBox(height: 20),
+              ],
             ),
           );
         },
       ),
     );
   }
-
-  // --- Category Dropdown builder ---
-  Widget _buildCategoryDropdown() {
-    return Row(
-      children: [
-        Expanded(
-          child: DropdownButtonFormField<int>(
-            value: selectedCategoryId,
-            isExpanded: true,
-            decoration: const InputDecoration(border: OutlineInputBorder()),
-            hint: const Text("Выбирать"),
-            items: categories
-                .map(
-                  (cat) => DropdownMenuItem<int>(
-                    value: cat.id,
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Text(cat.name),
-                        // O'chirish ikona — dropdown ichida
-                        GestureDetector(
-                          onTap: () {
-                            // Dropdown yashirish uchun focus bo'shating
-                            FocusManager.instance.primaryFocus?.unfocus();
-                            // Bir frame delay berib confirm dialog ochish
-                            WidgetsBinding.instance.addPostFrameCallback((_) {
-                              _confirmDeleteCategory(cat);
-                            });
-                          },
-                          child: const Icon(
-                            Icons.delete_outline,
-                            size: 18,
-                            color: Colors.red,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                )
-                .toList(),
-            onChanged: (value) {
-              setState(() {
-                selectedCategoryId = value;
-              });
-            },
-          ),
-        ),
-      ],
-    );
-  }
 }
-
-// ==================== Service extension ====================
-// Sizning TemplateService'ga qo'shing shu methodlarni:
-//
-// Types ma'lumotlari
-const List<Map<String, dynamic>> types = [
-  {'id': 1, 'name': 'Ежедневно'},
-  {'id': 2, 'name': 'Еженедельно'},
-  {'id': 3, 'name': 'Ежемесячно'},
-];
-
-// Hafta kunlari
-const List<Map<String, dynamic>> week = [
-  {'id': 1, 'name': 'Понедельник'},
-  {'id': 2, 'name': 'Вторник'},
-  {'id': 3, 'name': 'Среда'},
-  {'id': 4, 'name': 'Четверг'},
-  {'id': 5, 'name': 'Пятница'},
-  {'id': 6, 'name': 'Суббота'},
-  {'id': 7, 'name': 'Воскресенье'},
-];

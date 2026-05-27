@@ -249,6 +249,8 @@ type User struct {
 	Categories     []string `json:"categories,omitempty"`
 	NotificationID *string  `json:"notificationId,omitempty"`
 	IsLogin        bool     `json:"isLogin"`
+	PhoneNumber    *string  `json:"phoneNumber,omitempty"`
+	ProfileJSON    *string  `json:"profileJson,omitempty"`
 }
 
 type Filial struct {
@@ -463,6 +465,8 @@ func createMainDB() {
 		categories TEXT,
 		notification_id TEXT,
 		is_login INTEGER DEFAULT 0,
+		phone_number TEXT,
+		profile_json TEXT,
 		created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 	);
 
@@ -496,6 +500,8 @@ func createMainDB() {
 	}
 
 	db.Exec("ALTER TABLE task_templates ADD COLUMN order_index INTEGER DEFAULT 0")
+	db.Exec("ALTER TABLE users ADD COLUMN phone_number TEXT")
+	db.Exec("ALTER TABLE users ADD COLUMN profile_json TEXT")
 
 	var needsUpdate int
 	db.QueryRow("SELECT COUNT(*) FROM task_templates WHERE order_index = 0").Scan(&needsUpdate)
@@ -702,6 +708,8 @@ func register(w http.ResponseWriter, r *http.Request) {
 		FilialIDs      []int    `json:"filialIds"`
 		Categories     []string `json:"categories"`
 		NotificationID *string  `json:"notificationId"`
+		PhoneNumber    *string  `json:"phoneNumber"`
+		ProfileJSON    *string  `json:"profileJson"`
 	}
 
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -730,8 +738,8 @@ func register(w http.ResponseWriter, r *http.Request) {
 		filialIDsStr = strings.Trim(strings.Join(strings.Fields(fmt.Sprint(req.FilialIDs)), ","), "[]")
 	}
 
-	result, err := db.Exec("INSERT INTO users (username, login, password_hash, role, filial_ids, categories, notification_id) VALUES (?, ?, ?, ?, ?, ?, ?)",
-		req.Username, req.Login, string(hash), req.Role, filialIDsStr, string(categoriesJSON), req.NotificationID)
+	result, err := db.Exec("INSERT INTO users (username, login, password_hash, role, filial_ids, categories, notification_id, phone_number, profile_json) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+		req.Username, req.Login, string(hash), req.Role, filialIDsStr, string(categoriesJSON), req.NotificationID, req.PhoneNumber, req.ProfileJSON)
 	if err != nil {
 		respondJSON(w, http.StatusBadRequest, map[string]interface{}{
 			"success": false,
@@ -768,10 +776,10 @@ func login(w http.ResponseWriter, r *http.Request) {
 	var user User
 	var passwordHash string
 	var categoriesStr, filialIDsStr sql.NullString
-	var notificationID sql.NullString
+	var notificationID, phoneNum, profileJSON sql.NullString
 	var isLogin int
-	err := db.QueryRow("SELECT id, username, login, password_hash, role, filial_ids, categories, notification_id, is_login FROM users WHERE login = ?",
-		req.Login).Scan(&user.ID, &user.Username, &user.Login, &passwordHash, &user.Role, &filialIDsStr, &categoriesStr, &notificationID, &isLogin)
+	err := db.QueryRow("SELECT id, username, login, password_hash, role, filial_ids, categories, notification_id, is_login, phone_number, profile_json FROM users WHERE login = ?",
+		req.Login).Scan(&user.ID, &user.Username, &user.Login, &passwordHash, &user.Role, &filialIDsStr, &categoriesStr, &notificationID, &isLogin, &phoneNum, &profileJSON)
 
 	if err != nil {
 		log.Printf("Login error: %v\n", err)
@@ -796,6 +804,13 @@ func login(w http.ResponseWriter, r *http.Request) {
 
 	if filialIDsStr.Valid && filialIDsStr.String != "" {
 		user.FilialIDs = parseFilialIDs(filialIDsStr.String)
+	}
+
+	if phoneNum.Valid {
+		user.PhoneNumber = &phoneNum.String
+	}
+	if profileJSON.Valid {
+		user.ProfileJSON = &profileJSON.String
 	}
 
 	if req.NotificationID != nil {
@@ -3297,7 +3312,7 @@ func getUsers(w http.ResponseWriter, r *http.Request) {
 	db, _ := getMainDB()
 	defer db.Close()
 
-	query := "SELECT id, username, login, role, filial_ids, categories, notification_id, is_login FROM users WHERE 1=1"
+	query := "SELECT id, username, login, role, filial_ids, categories, notification_id, is_login, phone_number, profile_json FROM users WHERE 1=1"
 	args := []interface{}{}
 
 	if role != "" {
@@ -3323,9 +3338,9 @@ func getUsers(w http.ResponseWriter, r *http.Request) {
 	for rows.Next() {
 		var u User
 		var categoriesStr, filialIDsStr sql.NullString
-		var notifID sql.NullString
+		var notifID, phoneNum, profileJSON sql.NullString
 		var isLogin int
-		rows.Scan(&u.ID, &u.Username, &u.Login, &u.Role, &filialIDsStr, &categoriesStr, &notifID, &isLogin)
+		rows.Scan(&u.ID, &u.Username, &u.Login, &u.Role, &filialIDsStr, &categoriesStr, &notifID, &isLogin, &phoneNum, &profileJSON)
 
 		if categoriesStr.Valid && categoriesStr.String != "" {
 			json.Unmarshal([]byte(categoriesStr.String), &u.Categories)
@@ -3336,15 +3351,109 @@ func getUsers(w http.ResponseWriter, r *http.Request) {
 		if notifID.Valid {
 			u.NotificationID = &notifID.String
 		}
+		if phoneNum.Valid {
+			u.PhoneNumber = &phoneNum.String
+		}
+		if profileJSON.Valid {
+			u.ProfileJSON = &profileJSON.String
+		}
 		u.IsLogin = isLogin == 1
 
 		users = append(users, u)
 	}
 
+	// profile_json bo'sh userlar uchun HR API'dan rezume olish va DB ga saqlash
+	fillMissingProfiles(users)
+
 	respondJSON(w, http.StatusOK, map[string]interface{}{
 		"success": true,
 		"data":    users,
 	})
+}
+
+func fillMissingProfiles(users []User) {
+	db, err := getMainDB()
+	if err != nil {
+		return
+	}
+	defer db.Close()
+
+	client := &http.Client{Timeout: 15 * time.Second}
+
+	for i := range users {
+		u := &users[i]
+		if u.ProfileJSON != nil && *u.ProfileJSON != "" {
+			continue
+		}
+
+		phone := normalizePhone(u.Login)
+		if phone == "" {
+			if u.PhoneNumber != nil {
+				phone = normalizePhone(*u.PhoneNumber)
+			}
+		}
+		if phone == "" {
+			continue
+		}
+
+		rezumeURL := fmt.Sprintf("https://hr.monebakeryuz.uz/api/public/rezume-by-phone/%s", phone)
+		resp, err := client.Get(rezumeURL)
+		if err != nil || resp.StatusCode != 200 {
+			if resp != nil {
+				resp.Body.Close()
+			}
+			continue
+		}
+
+		body, err := io.ReadAll(resp.Body)
+		resp.Body.Close()
+		if err != nil {
+			continue
+		}
+
+		var rezume map[string]interface{}
+		if err := json.Unmarshal(body, &rezume); err != nil {
+			continue
+		}
+
+		delete(rezume, "interviews")
+
+		profileBytes, _ := json.Marshal(rezume)
+		profileStr := string(profileBytes)
+
+		db.Exec("UPDATE users SET profile_json = ?, phone_number = ? WHERE id = ?",
+			profileStr, phone, u.ID)
+
+		u.ProfileJSON = &profileStr
+		u.PhoneNumber = &phone
+
+		log.Printf("Auto-filled profile for user %d (%s) from HR API", u.ID, u.Login)
+	}
+}
+
+func normalizePhone(input string) string {
+	digits := ""
+	for _, c := range input {
+		if c >= '0' && c <= '9' {
+			digits += string(c)
+		}
+	}
+	if len(digits) == 0 {
+		return ""
+	}
+	if len(digits) == 9 {
+		return "998" + digits
+	}
+	if len(digits) == 12 && strings.HasPrefix(digits, "998") {
+		return digits
+	}
+	if len(digits) >= 9 {
+		if !strings.HasPrefix(digits, "998") {
+			return "998" + digits
+		}
+		return digits
+	}
+	return ""
 }
 
 func updateUser(w http.ResponseWriter, r *http.Request) {

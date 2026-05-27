@@ -87,54 +87,152 @@ class _AdminTaskUiState extends State<AdminTaskUi>
     );
   }
 
+  String _buildDateLabel(DateTime selectedDate) {
+    final now = DateTime.now();
+    final isToday = selectedDate.year == now.year &&
+        selectedDate.month == now.month &&
+        selectedDate.day == now.day;
+    if (isToday) return "Сегодня";
+    final day = selectedDate.day.toString().padLeft(2, '0');
+    final month = selectedDate.month.toString().padLeft(2, '0');
+    if (selectedDate.year != now.year || selectedDate.month == 12) {
+      return "$day/$month/${selectedDate.year}";
+    }
+    return "$day/$month";
+  }
+
   Future<void> _handleDateSelection() async {
     final provider = context.read<AdminTasksProvider>();
     final currentDate = provider.selectedDate;
     final firstDate = DateTime.now().subtract(const Duration(days: 30));
     final lastDate = DateTime.now();
 
-    DateTime tempPicked = currentDate;
+    const monthNames = [
+      'Январь', 'Февраль', 'Март', 'Апрель', 'Май', 'Июнь',
+      'Июль', 'Август', 'Сентябрь', 'Октябрь', 'Ноябрь', 'Декабрь',
+    ];
 
-    final DateTime? picked = await showCupertinoModalPopup<DateTime>(
+    final months = <DateTime>[];
+    var mCursor = DateTime(firstDate.year, firstDate.month);
+    final lastMonthStart = DateTime(lastDate.year, lastDate.month);
+    while (!mCursor.isAfter(lastMonthStart)) {
+      months.add(mCursor);
+      mCursor = DateTime(mCursor.year, mCursor.month + 1);
+    }
+
+    List<int> daysFor(DateTime month) {
+      final isFirst =
+          month.year == firstDate.year && month.month == firstDate.month;
+      final isLast =
+          month.year == lastDate.year && month.month == lastDate.month;
+      final startDay = isFirst ? firstDate.day : 1;
+      final endDay = isLast
+          ? lastDate.day
+          : DateTime(month.year, month.month + 1, 0).day;
+      return [for (int i = startDay; i <= endDay; i++) i];
+    }
+
+    int monthIdx = months.indexWhere(
+      (m) => m.year == currentDate.year && m.month == currentDate.month,
+    );
+    if (monthIdx < 0) monthIdx = months.length - 1;
+
+    var days = daysFor(months[monthIdx]);
+    int dayIdx = days.indexOf(currentDate.day);
+    if (dayIdx < 0) dayIdx = days.length - 1;
+
+    void applySelection() {
+      final m = months[monthIdx];
+      provider.setSelectedDate(DateTime(m.year, m.month, days[dayIdx]));
+    }
+
+    await showCupertinoModalPopup<void>(
       context: context,
-      builder: (ctx) => Container(
-        height: 300,
-        color: CupertinoColors.systemBackground.resolveFrom(ctx),
-        child: SafeArea(
-          top: false,
-          child: Column(
-            children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setSt) {
+          final selectedMonth = months[monthIdx];
+          final showYearCol =
+              months.first.year != months.last.year ||
+              selectedMonth.month == 12;
+          return Container(
+            height: 260,
+            color: CupertinoColors.systemBackground.resolveFrom(ctx),
+            child: SafeArea(
+              top: false,
+              child: Row(
                 children: [
-                  CupertinoButton(
-                    onPressed: () => Navigator.of(ctx).pop(),
-                    child: const Text('Bekor'),
+                  Expanded(
+                    flex: 1,
+                    child: CupertinoPicker(
+                      scrollController: FixedExtentScrollController(
+                        initialItem: monthIdx,
+                      ),
+                      itemExtent: 36,
+                      looping: months.length > 1,
+                      onSelectedItemChanged: (i) {
+                        setSt(() {
+                          monthIdx = i;
+                          days = daysFor(months[monthIdx]);
+                          if (dayIdx >= days.length) {
+                            dayIdx = days.length - 1;
+                          }
+                        });
+                        applySelection();
+                      },
+                      children: [
+                        for (final m in months)
+                          Center(
+                            child: Text(
+                              monthNames[m.month - 1],
+                              style: const TextStyle(fontSize: 18),
+                            ),
+                          ),
+                      ],
+                    ),
                   ),
-                  CupertinoButton(
-                    onPressed: () => Navigator.of(ctx).pop(tempPicked),
-                    child: const Text('Tanlash'),
+                  Expanded(
+                    flex: 1,
+                    child: CupertinoPicker(
+                      key: ValueKey('day-$monthIdx'),
+                      scrollController: FixedExtentScrollController(
+                        initialItem: dayIdx,
+                      ),
+                      itemExtent: 40,
+                      onSelectedItemChanged: (i) {
+                        setSt(() => dayIdx = i);
+                        applySelection();
+                      },
+                      children: [
+                        for (final d in days)
+                          Center(
+                            child: Text(
+                              '$d',
+                              style: const TextStyle(
+                                fontSize: 28,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ),
+                      ],
+                    ),
                   ),
+                  if (showYearCol)
+                    SizedBox(
+                      width: 70,
+                      child: Center(
+                        child: Text(
+                          '${selectedMonth.year}',
+                          style: const TextStyle(fontSize: 18),
+                        ),
+                      ),
+                    ),
                 ],
               ),
-              Expanded(
-                child: CupertinoDatePicker(
-                  mode: CupertinoDatePickerMode.date,
-                  initialDateTime: currentDate,
-                  minimumDate: firstDate,
-                  maximumDate: lastDate,
-                  onDateTimeChanged: (value) => tempPicked = value,
-                ),
-              ),
-            ],
-          ),
-        ),
+            ),
+          );
+        },
       ),
     );
-
-    if (picked != null && mounted) {
-      provider.setSelectedDate(picked);
-    }
   }
 
   Future<void> _handleLogout() async {
@@ -215,7 +313,6 @@ class _AdminTaskUiState extends State<AdminTaskUi>
       appBar: AppBar(
         title: Text(_user?.username ?? ""),
         actions: [
-          // ── Status filter tugmalari ────────────────────────────────────
           _StatusFilterButton(
             status: 3,
             color: Colors.green,
@@ -233,25 +330,23 @@ class _AdminTaskUiState extends State<AdminTaskUi>
           ),
           _NoVideoFilterButton(provider: tasksProvider),
 
-          // ── Filterni tozalash ──────────────────────────────────────────
           if (tasksProvider.isFilterActive)
             IconButton(
               onPressed: () => tasksProvider.clearStatusFilter(),
-              icon: const Icon(Icons.filter_alt_off, size: 20),
+              icon: const Icon(Icons.filter_alt_off, size: 18),
               tooltip: 'Filterni tozalash',
+              padding: EdgeInsets.zero,
+              constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
             ),
 
-          // ── Sana tanlash ───────────────────────────────────────────────
           GestureDetector(
             onTap: _handleDateSelection,
             child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 12),
+              padding: const EdgeInsets.symmetric(horizontal: 8),
               child: Center(
                 child: Text(
-                  selectedDate.day == DateTime.now().day
-                      ? "Сегодня"
-                      : "${selectedDate.day}/${selectedDate.month.toString().padLeft(2, '0')}/${selectedDate.year}",
-                  style: const TextStyle(fontSize: 14),
+                  _buildDateLabel(selectedDate),
+                  style: const TextStyle(fontSize: 13),
                 ),
               ),
             ),
@@ -337,28 +432,32 @@ class _StatusFilterButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final bool isSelected = provider.selectedStatuses.contains(status);
+    final isPhone = MediaQuery.of(context).size.shortestSide < 600;
+    final double size = isPhone ? 30 : 50;
+    final double iconSize = isPhone ? 18 : 32;
+    final double hPadding = isPhone ? 6 : 20;
 
     return GestureDetector(
       onTap: () => provider.toggleStatusFilter(status),
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 20),
+        padding: EdgeInsets.symmetric(horizontal: hPadding),
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 200),
-          width: 50,
-          height: 50,
+          width: size,
+          height: size,
           decoration: BoxDecoration(
             shape: BoxShape.circle,
-            color: isSelected ? color : color.withOpacity(0.2),
+            color: isSelected ? color : color.withValues(alpha: 0.2),
             border: Border.all(
-              color: isSelected ? color : color.withOpacity(0.4),
+              color: isSelected ? color : color.withValues(alpha: 0.4),
               width: isSelected ? 2.5 : 1.5,
             ),
             boxShadow: isSelected
-                ? [BoxShadow(color: color.withOpacity(0.4), blurRadius: 6)]
+                ? [BoxShadow(color: color.withValues(alpha: 0.4), blurRadius: 6)]
                 : [],
           ),
           child: isSelected
-              ? const Icon(Icons.check, size: 32, color: Colors.white)
+              ? Icon(Icons.check, size: iconSize, color: Colors.white)
               : null,
         ),
       ),
@@ -377,29 +476,33 @@ class _NoVideoFilterButton extends StatelessWidget {
   Widget build(BuildContext context) {
     final bool isSelected = provider.filterNoVideo;
     const Color color = Colors.blueGrey;
+    final isPhone = MediaQuery.of(context).size.shortestSide < 600;
+    final double size = isPhone ? 30 : 50;
+    final double iconSize = isPhone ? 16 : 26;
+    final double hPadding = isPhone ? 6 : 20;
 
     return GestureDetector(
       onTap: () => provider.toggleNoVideoFilter(),
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 20),
+        padding: EdgeInsets.symmetric(horizontal: hPadding),
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 200),
-          width: 50,
-          height: 50,
+          width: size,
+          height: size,
           decoration: BoxDecoration(
             shape: BoxShape.circle,
-            color: isSelected ? color : color.withOpacity(0.2),
+            color: isSelected ? color : color.withValues(alpha: 0.2),
             border: Border.all(
-              color: isSelected ? color : color.withOpacity(0.4),
+              color: isSelected ? color : color.withValues(alpha: 0.4),
               width: isSelected ? 2.5 : 1.5,
             ),
             boxShadow: isSelected
-                ? [BoxShadow(color: color.withOpacity(0.4), blurRadius: 6)]
+                ? [BoxShadow(color: color.withValues(alpha: 0.4), blurRadius: 6)]
                 : [],
           ),
           child: Icon(
             Icons.videocam_off,
-            size: 26,
+            size: iconSize,
             color: isSelected ? Colors.white : color,
           ),
         ),

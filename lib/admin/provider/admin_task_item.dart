@@ -115,6 +115,13 @@ class _AdminTaskListItemState extends State<AdminTaskListItem>
               if (task.videoUrl != null && task.videoUrl!.isNotEmpty) ...[
                 _buildVideoStatusBadge(),
                 const SizedBox(width: 4),
+              ] else ...[
+                const Icon(
+                  Icons.videocam_off,
+                  size: 20,
+                  color: Colors.blueGrey,
+                ),
+                const SizedBox(width: 4),
               ],
               _buildShareButton(context),
             ],
@@ -127,13 +134,16 @@ class _AdminTaskListItemState extends State<AdminTaskListItem>
   // ── Task info ─────────────────────────────────────────────────────────────
 
   Widget _buildTaskInfo(BuildContext context, {required bool showBadge}) {
+    final isPhone = !_isTablet(context);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // Sarlavha
         Text(
           "${widget.index}. ${task.task}",
-          style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+          style: TextStyle(
+            fontSize: isPhone ? 16 : 20,
+            fontWeight: FontWeight.bold,
+          ),
         ),
         // Kim yubordi + vaqt
         if (task.submittedBy != null)
@@ -152,11 +162,18 @@ class _AdminTaskListItemState extends State<AdminTaskListItem>
                 style: const TextStyle(fontSize: 12, color: Colors.black),
               ),
             ),
-            if (showBadge &&
-                task.videoUrl != null &&
-                task.videoUrl!.isNotEmpty) ...[
-              _buildVideoStatusBadge(),
-              const SizedBox(width: 8),
+            if (showBadge) ...[
+              if (task.videoUrl != null && task.videoUrl!.isNotEmpty) ...[
+                _buildVideoStatusBadge(),
+                const SizedBox(width: 8),
+              ] else ...[
+                const Icon(
+                  Icons.videocam_off,
+                  size: 20,
+                  color: Colors.blueGrey,
+                ),
+                const SizedBox(width: 8),
+              ],
             ],
             _buildStatusIndicator(),
           ],
@@ -172,16 +189,16 @@ class _AdminTaskListItemState extends State<AdminTaskListItem>
 
   Widget _buildStatusIndicator() {
     final bool hasVideo = task.videoUrl != null && task.videoUrl!.isNotEmpty;
+    final isPhone = !_isTablet(context);
+    final double gap = isPhone ? 12 : 30;
 
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        // Status 3 (yashil) — faqat ko'rsatish uchun, qo'lda o'zgartirib bo'lmaydi
-        // Checker uchun 50% video ko'rganda avtomatik o'rnatiladi
         _statusCircleButton(3, task.status, Colors.green, enabled: false),
-        const SizedBox(width: 30),
+        SizedBox(width: gap),
         _statusCircleButton(2, task.status, Colors.orange, enabled: hasVideo),
-        const SizedBox(width: 30),
+        SizedBox(width: gap),
         _statusCircleButton(1, task.status, Colors.red, enabled: hasVideo),
       ],
     );
@@ -195,8 +212,10 @@ class _AdminTaskListItemState extends State<AdminTaskListItem>
   }) {
     final bool isActive = currentStatus == level;
     final bool hasVideo = task.videoUrl != null && task.videoUrl!.isNotEmpty;
-    // Video yuborilgan lekin hali tekshirmagan (status null)
     final bool isWaiting = hasVideo && currentStatus == null;
+    final isPhone = !_isTablet(context);
+    final double size = isPhone ? 30 : 40;
+    final double iconSize = isPhone ? 16 : 20;
 
     return GestureDetector(
       onTap: enabled
@@ -213,8 +232,8 @@ class _AdminTaskListItemState extends State<AdminTaskListItem>
           : null,
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 100),
-        width: 40,
-        height: 40,
+        width: size,
+        height: size,
         decoration: BoxDecoration(
           shape: BoxShape.circle,
           color: isActive
@@ -231,9 +250,9 @@ class _AdminTaskListItemState extends State<AdminTaskListItem>
               : [],
         ),
         child: isActive
-            ? const Icon(Icons.check, size: 20, color: Colors.white)
+            ? Icon(Icons.check, size: iconSize, color: Colors.white)
             : isWaiting
-                ? Icon(Icons.check, size: 20, color: activeColor.withValues(alpha: 0.5))
+                ? Icon(Icons.check, size: iconSize, color: activeColor.withValues(alpha: 0.5))
                 : null,
       ),
     );

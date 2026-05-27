@@ -1,11 +1,11 @@
-// lib/admin/ui/users_page.dart
 import 'package:flutter/material.dart';
 import 'package:mone_task_app/admin/model/filial_model.dart';
 import 'package:mone_task_app/admin/ui/add_worker.dart';
 import 'package:mone_task_app/admin/ui/dialog.dart';
 import 'package:mone_task_app/admin/ui/edit.dart';
-import 'package:mone_task_app/admin/ui/user_servise.dart';
+import 'package:mone_task_app/admin/service/user_service.dart';
 import 'package:mone_task_app/worker/model/user_model.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 class UsersPage extends StatefulWidget {
   final List<FilialModel> filialModel;
@@ -16,286 +16,348 @@ class UsersPage extends StatefulWidget {
 }
 
 class _UsersPageState extends State<UsersPage> {
-  late Future<List<UserModel>> usersFuture;
+  bool _loading = true;
+  List<UserModel> _users = [];
   final UserService _userService = UserService();
 
   @override
   void initState() {
     super.initState();
-    usersFuture = _userService.fetchUsers();
+    _load();
   }
 
-  void _refreshUsers() {
-    setState(() {
-      usersFuture = _userService.fetchUsers();
-    });
-  }
-
-  String _getRoleText(String role) {
-    switch (role) {
-      case 'super_admin':
-        return 'Super Admin';
-      case 'checker':
-        return 'Checker';
-      case 'worker':
-        return 'Worker';
-      default:
-        return role;
+  Future<void> _load() async {
+    setState(() => _loading = true);
+    try {
+      final users = await _userService.fetchUsers();
+      users.sort((a, b) => _roleOrder(a.role).compareTo(_roleOrder(b.role)));
+      if (mounted) setState(() { _users = users; _loading = false; });
+    } catch (e) {
+      if (mounted) setState(() => _loading = false);
     }
   }
 
-  Color _getRoleColor(String role) {
+  int _roleOrder(String role) {
     switch (role) {
-      case 'super_admin':
-        return Colors.purple.shade100;
-      case 'checker':
-        return Colors.orange.shade100;
-      case 'worker':
-        return Colors.green.shade100;
-      default:
-        return Colors.grey.shade100;
+      case 'super_admin': return 0;
+      case 'checker': return 1;
+      case 'worker': return 2;
+      default: return 3;
     }
+  }
+
+  String _roleLabel(String role) {
+    switch (role) {
+      case 'super_admin': return 'Супер админ';
+      case 'checker': return 'Корректор';
+      case 'worker': return 'Ревизор';
+      default: return role;
+    }
+  }
+
+  Future<void> _deleteUser(int id) async {
+    final confirm = await NativeDialog.showDeleteDialog();
+    if (!confirm) return;
+    final success = await _userService.deleteUser(id);
+    if (success) {
+      _load();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Пользователь удалён'), backgroundColor: Colors.green),
+        );
+      }
+    }
+  }
+
+  Future<void> _callPhone(String phone) async {
+    final digits = phone.replaceAll(RegExp(r'[^\d+]'), '');
+    if (digits.isEmpty) return;
+    final uri = Uri(scheme: 'tel', path: digits);
+    await launchUrl(uri);
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Пользователи'),
-        actions: [
-          IconButton(onPressed: _refreshUsers, icon: const Icon(Icons.refresh)),
-        ],
-      ),
-      body: FutureBuilder<List<UserModel>>(
-        future: usersFuture,
-        builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting) {
-            return const Center(child: CircularProgressIndicator.adaptive());
-          }
-
-          if (snapshot.hasError) {
-            return Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  const Icon(Icons.error_outline, color: Colors.red, size: 48),
-                  const SizedBox(height: 16),
-                  Text('Xatolik: ${snapshot.error}'),
-                  const SizedBox(height: 16),
-                  ElevatedButton(
-                    onPressed: _refreshUsers,
-                    child: const Text('Повторить попытку'),
-                  ),
-                ],
-              ),
-            );
-          }
-
-          if (!snapshot.hasData || snapshot.data!.isEmpty) {
-            return const Center(child: Text("Foydalanuvchilar topilmadi"));
-          }
-
-          final users = snapshot.data!;
-
-          return RefreshIndicator(
-            onRefresh: () async {
-              _refreshUsers();
-            },
-            child: ListView.builder(
-              padding: const EdgeInsets.all(8),
-              itemCount: users.length,
-              itemBuilder: (context, index) {
-                final user = users[index];
-                return UserListItem(
-                  user: user,
-                  onDelete: () async {
-                    final isDelete = await NativeDialog.showDeleteDialog();
-                    if (isDelete) {
-                      final success = await _userService.deleteUser(
-                        user.userId,
-                      );
-                      if (success) {
-                        _refreshUsers();
-                        if (mounted) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(
-                              content: Text('Foydalanuvchi o\'chirildi'),
-                            ),
-                          );
-                        }
-                      }
-                    }
-                  },
-                  onEdit: () async {
-                    final result = await Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (context) => EditUserPage(
-                          user: user,
-                          category: widget.filialModel,
-                        ),
-                      ),
-                    );
-
-                    if (result == true) {
-                      _refreshUsers();
-                    }
-                  },
-
-                  getRoleText: _getRoleText,
-                  getRoleColor: _getRoleColor,
-                );
-              },
-            ),
-          );
-        },
-      ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: () {
-          Navigator.push(
-            context,
-            MaterialPageRoute(builder: (context) => const AddWorkerPage()),
-          ).then((result) {
-            if (result == true) {
-              _refreshUsers();
-            }
-          });
-        },
-        child: const Icon(Icons.add),
-      ),
-    );
-  }
-}
-
-class UserListItem extends StatelessWidget {
-  final UserModel user;
-  final VoidCallback onDelete;
-  final VoidCallback onEdit;
-  final String Function(String) getRoleText;
-  final Color Function(String) getRoleColor;
-
-  const UserListItem({
-    super.key,
-    required this.user,
-    required this.onDelete,
-    required this.onEdit,
-    required this.getRoleText,
-    required this.getRoleColor,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Card(
-      margin: const EdgeInsets.only(bottom: 12),
-      elevation: 2,
-      color: getRoleColor(user.role),
-      child: InkWell(
-        onTap: onEdit,
-        onLongPress: onDelete,
-        child: Padding(
-          padding: const EdgeInsets.all(12),
+      backgroundColor: const Color(0xFFF0F2F5),
+      appBar: AppBar(title: const Text('Пользователи')),
+      body: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Container(
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(16),
+            boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.04), blurRadius: 4)],
+          ),
           child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          user.username,
-                          style: const TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
-                          'Login: ${user.login}',
-                          style: const TextStyle(
-                            fontSize: 14,
-                            color: Colors.black54,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 12,
-                      vertical: 6,
-                    ),
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: Colors.black12),
-                    ),
-                    child: Text(
-                      getRoleText(user.role),
-                      style: const TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-              if (user.categories != null && user.categories!.isNotEmpty) ...[
-                const SizedBox(height: 8),
-                Wrap(
-                  spacing: 8,
-                  runSpacing: 4,
-                  children: user.categories!.map((category) {
-                    return Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 8,
-                        vertical: 4,
-                      ),
-                      decoration: BoxDecoration(
-                        color: Colors.blue.shade50,
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: Text(
-                        category,
-                        style: const TextStyle(
-                          fontSize: 12,
-                          color: Colors.blue,
-                        ),
-                      ),
-                    );
-                  }).toList(),
-                ),
-              ],
-              if (user.isLogin) ...[
-                const SizedBox(height: 8),
-                Row(
+              // Header
+              Padding(
+                padding: const EdgeInsets.all(16),
+                child: Row(
                   children: [
-                    Container(
-                      width: 8,
-                      height: 8,
-                      decoration: const BoxDecoration(
-                        color: Colors.green,
-                        shape: BoxShape.circle,
-                      ),
+                    Text(
+                      '${_users.length} пользователей',
+                      style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: Colors.grey[700]),
                     ),
-                    const SizedBox(width: 4),
-                    const Text(
-                      'Online',
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: Colors.green,
-                        fontWeight: FontWeight.bold,
-                      ),
+                    const Spacer(),
+                    FilledButton.icon(
+                      onPressed: () async {
+                        final result = await Navigator.push(
+                          context,
+                          MaterialPageRoute(builder: (_) => const AddWorkerPage()),
+                        );
+                        if (result == true) _load();
+                      },
+                      icon: const Icon(Icons.add, size: 18),
+                      label: const Text('Новый пользователь'),
                     ),
+                    const SizedBox(width: 8),
+                    IconButton(icon: const Icon(Icons.refresh_rounded), onPressed: _load),
                   ],
                 ),
-              ],
+              ),
+              const Divider(height: 1),
+
+              // Table header
+              Container(
+                color: const Color(0xFFF9FAFB),
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                child: Row(
+                  children: [
+                    _th('#', 36),
+                    const SizedBox(width: 60),
+                    _thFlex('Имя', 2),
+                    _th('Роль', 150),
+                    _thFlex('Категории', 2),
+                  ],
+                ),
+              ),
+              const Divider(height: 1),
+
+              // Table body
+              Expanded(
+                child: _loading
+                    ? const Center(child: CircularProgressIndicator())
+                    : _users.isEmpty
+                        ? const Center(child: Text('Пользователи не найдены'))
+                        : RefreshIndicator(
+                            onRefresh: _load,
+                            child: ListView.separated(
+                              itemCount: _users.length,
+                              separatorBuilder: (_, __) => const Divider(height: 1),
+                              itemBuilder: (_, i) => _row(_users[i]),
+                            ),
+                          ),
+              ),
             ],
           ),
         ),
       ),
+    );
+  }
+
+  Widget _th(String text, double width) {
+    return SizedBox(
+      width: width,
+      child: Text(
+        text,
+        style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: Colors.grey[600], letterSpacing: 0.5),
+      ),
+    );
+  }
+
+  Widget _thFlex(String text, int flex) {
+    return Expanded(
+      flex: flex,
+      child: Text(
+        text,
+        style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: Colors.grey[600], letterSpacing: 0.5),
+      ),
+    );
+  }
+
+  Widget _row(UserModel u) {
+    final photoUrl = u.photoUrl;
+    final phone = u.phoneNumber ?? u.login;
+
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onLongPress: () => _deleteUser(u.userId),
+      onDoubleTap: () async {
+        final result = await Navigator.push(
+          context,
+          MaterialPageRoute(builder: (_) => EditUserPage(user: u, category: widget.filialModel)),
+        );
+        if (result == true) _load();
+      },
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        child: Row(
+          children: [
+            // #
+            SizedBox(
+              width: 36,
+              child: Text('${u.userId}', style: TextStyle(fontSize: 13, color: Colors.grey[500])),
+            ),
+
+            // Avatar
+            SizedBox(
+              width: 60,
+              child: Container(
+                width: 48,
+                height: 48,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: const Color(0xFFE0E7FF),
+                  border: Border.all(color: const Color(0xFFE5E7EB), width: 1),
+                  image: photoUrl != null
+                      ? DecorationImage(
+                          image: NetworkImage(photoUrl),
+                          fit: BoxFit.cover,
+                          onError: (_, __) {},
+                        )
+                      : null,
+                ),
+                alignment: Alignment.center,
+                child: photoUrl == null
+                    ? Text(
+                        u.fullName.isNotEmpty ? u.fullName[0].toUpperCase() : '?',
+                        style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w700, color: Color(0xFF3730A3)),
+                      )
+                    : null,
+              ),
+            ),
+
+            // Name + phone
+            Expanded(
+              flex: 2,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    u.fullName,
+                    style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 15, color: Color(0xFF111827)),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  if (phone.isNotEmpty) ...[
+                    const SizedBox(height: 4),
+                    GestureDetector(
+                      onTap: () => _callPhone(phone),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(Icons.phone_rounded, size: 13, color: Color(0xFF2563EB)),
+                          const SizedBox(width: 4),
+                          Flexible(
+                            child: Text(
+                              phone,
+                              style: const TextStyle(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w600,
+                                color: Color(0xFF2563EB),
+                                decoration: TextDecoration.underline,
+                                decorationColor: Color(0xFF2563EB),
+                              ),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+
+            // Role badge
+            SizedBox(
+              width: 150,
+              child: Align(
+                alignment: Alignment.centerLeft,
+                child: _roleBadge(u.role),
+              ),
+            ),
+
+            // Categories
+            Expanded(
+              flex: 2,
+              child: _categoriesCell(u),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _roleBadge(String role) {
+    final isSuper = role == 'super_admin';
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
+      decoration: BoxDecoration(
+        color: isSuper ? const Color(0xFFFEF3C7) : const Color(0xFFE0E7FF),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(
+          color: isSuper ? const Color(0xFFFDE68A) : const Color(0xFFC7D2FE),
+        ),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (!isSuper) ...[
+            Container(
+              width: 7, height: 7,
+              decoration: const BoxDecoration(color: Color(0xFF22C55E), shape: BoxShape.circle),
+            ),
+            const SizedBox(width: 6),
+          ],
+          Text(
+            _roleLabel(role),
+            style: TextStyle(
+              color: isSuper ? const Color(0xFF92400E) : const Color(0xFF3730A3),
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _categoriesCell(UserModel u) {
+    final cats = u.categories;
+    if (u.role == 'super_admin') {
+      return const Text('—', style: TextStyle(color: Colors.grey));
+    }
+    if (cats == null || cats.isEmpty) {
+      return Text('Нет категорий', style: TextStyle(fontSize: 13, color: Colors.grey[400]));
+    }
+
+    final text = cats.join(' / ');
+    return Row(
+      children: [
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+          decoration: BoxDecoration(
+            color: const Color(0xFFDCFCE7),
+            borderRadius: BorderRadius.circular(20),
+          ),
+          child: Text(
+            '${cats.length}',
+            style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: Color(0xFF166534)),
+          ),
+        ),
+        const SizedBox(width: 8),
+        Expanded(
+          child: Text(
+            text,
+            style: TextStyle(fontSize: 13, color: Colors.grey[700]),
+            overflow: TextOverflow.ellipsis,
+            maxLines: 1,
+          ),
+        ),
+      ],
     );
   }
 }

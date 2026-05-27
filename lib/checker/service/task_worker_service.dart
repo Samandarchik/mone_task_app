@@ -2,7 +2,7 @@ import 'dart:io';
 
 import 'package:dio/dio.dart';
 import 'package:mone_task_app/admin/model/filial_model.dart';
-import 'package:mone_task_app/admin/ui/add_admin_task.dart';
+import 'package:mone_task_app/admin/model/category_model.dart';
 import 'package:mone_task_app/checker/model/checker_check_task_model.dart';
 import 'package:mone_task_app/core/constants/urls.dart';
 import 'package:mone_task_app/core/di/di.dart';

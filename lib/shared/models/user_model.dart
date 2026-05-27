@@ -1,4 +1,5 @@
-// lib/admin/model/user_model.dart
+import 'dart:convert';
+
 class UserModel {
   final int userId;
   final String username;
@@ -8,6 +9,8 @@ class UserModel {
   final List<String>? categories;
   final String? notificationId;
   final bool isLogin;
+  final String? phoneNumber;
+  final String? profileJson;
 
   UserModel({
     required this.userId,
@@ -18,6 +21,8 @@ class UserModel {
     this.categories,
     this.notificationId,
     required this.isLogin,
+    this.phoneNumber,
+    this.profileJson,
   });
 
   factory UserModel.fromJson(Map<String, dynamic> json) {
@@ -34,6 +39,8 @@ class UserModel {
           : null,
       notificationId: json['notificationId'],
       isLogin: json['isLogin'] ?? false,
+      phoneNumber: json['phoneNumber'],
+      profileJson: json['profileJson'],
     );
   }
 
@@ -47,8 +54,41 @@ class UserModel {
       if (categories != null) 'categories': categories,
       if (notificationId != null) 'notificationId': notificationId,
       'isLogin': isLogin,
+      if (phoneNumber != null) 'phoneNumber': phoneNumber,
+      if (profileJson != null) 'profileJson': profileJson,
     };
   }
+
+  Map<String, dynamic>? get profile {
+    if (profileJson == null || profileJson!.isEmpty) return null;
+    try {
+      return jsonDecode(profileJson!) as Map<String, dynamic>;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  String get fullName {
+    final p = profile;
+    if (p == null) return username;
+    final familiya = (p['familiya'] ?? '').toString().trim();
+    final ism = (p['ism'] ?? '').toString().trim();
+    final sharif = (p['sharif'] ?? '').toString().trim();
+    final fio = [familiya, ism, sharif].where((s) => s.isNotEmpty).join(' ');
+    return fio.isNotEmpty ? fio : username;
+  }
+
+  String? get photoUrl {
+    final p = profile;
+    if (p == null) return null;
+    final rasm = (p['rasm_url'] ?? '').toString();
+    if (rasm.isEmpty) return null;
+    if (rasm.startsWith('http')) return rasm;
+    return 'https://hr.monebakeryuz.uz$rasm';
+  }
+
+  String? get position => profile?['lavozim']?.toString();
+  String? get telegram => profile?['tg_username']?.toString();
 
   UserModel copyWith({
     int? userId,
@@ -59,6 +99,8 @@ class UserModel {
     List<String>? categories,
     String? notificationId,
     bool? isLogin,
+    String? phoneNumber,
+    String? profileJson,
   }) {
     return UserModel(
       userId: userId ?? this.userId,
@@ -69,6 +111,8 @@ class UserModel {
       categories: categories ?? this.categories,
       notificationId: notificationId ?? this.notificationId,
       isLogin: isLogin ?? this.isLogin,
+      phoneNumber: phoneNumber ?? this.phoneNumber,
+      profileJson: profileJson ?? this.profileJson,
     );
   }
 }
@@ -81,8 +125,7 @@ class UsersResponse {
 
   factory UsersResponse.fromJson(Map<String, dynamic> json) {
     return UsersResponse(
-      data:
-          (json['data'] as List?)
+      data: (json['data'] as List?)
               ?.map((user) => UserModel.fromJson(user))
               .toList() ??
           [],
