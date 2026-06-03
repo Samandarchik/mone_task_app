@@ -54,6 +54,30 @@ class UserService {
     }
   }
 
+  /// Bitta foydalanuvchiga login ma'lumotlarini (ism + login + parol + ilova
+  /// linklari) Telegram orqali yuboradi. Xatoda server xabari bilan exception.
+  Future<void> sendCredentials(int userId) async {
+    try {
+      await _dio.post('${AppUrls.users}/$userId/send-credentials');
+    } on DioException catch (e) {
+      final data = e.response?.data;
+      final msg = (data is Map && data['error'] != null)
+          ? data['error'].toString()
+          : 'Не удалось отправить';
+      throw Exception(msg);
+    }
+  }
+
+  /// super_admin'dan boshqa barcha foydalanuvchilarga login ma'lumotlarini
+  /// (ism + login + parol + ilova iOS/Android linklari) bittada Telegram orqali
+  /// yuboradi. Server javobi: {sent, skipped: [...], failed: [...]}.
+  Future<Map<String, dynamic>> sendAllCredentials() async {
+    final response = await _dio.post('${AppUrls.users}/send-all-credentials');
+    final data = response.data;
+    if (data is Map<String, dynamic>) return data;
+    return <String, dynamic>{};
+  }
+
   Future<bool> createUser({
     required String username,
     required String login,

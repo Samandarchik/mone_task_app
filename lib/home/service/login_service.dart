@@ -88,7 +88,7 @@ class _LoginPageState extends State<LoginPage> {
   Future<void> _login() async {
     final password = _passCtrl.text.trim();
     if (password.isEmpty) {
-      setState(() => _error = 'Parolni kiriting');
+      setState(() => _error = 'Введите пароль');
       return;
     }
     setState(() { _loading = true; _error = null; });
@@ -114,11 +114,11 @@ class _LoginPageState extends State<LoginPage> {
           context.pushAndRemove(TaskWorkerUi());
         }
       } else {
-        setState(() => _error = result['message'] ?? result['error'] ?? 'Parol noto\'g\'ri');
+        setState(() => _error = result['message'] ?? result['error'] ?? 'Неверный пароль');
       }
     } catch (e) {
       if (!mounted) return;
-      setState(() { _loading = false; _error = 'Xatolik: $e'; });
+      setState(() { _loading = false; _error = 'Ошибка: $e'; });
     }
   }
 
@@ -158,7 +158,7 @@ class _LoginPageState extends State<LoginPage> {
                     ),
                   ),
                   const SizedBox(height: 4),
-                  Text('Parol bilan tizimga kiring', style: TextStyle(color: Colors.grey[500], fontSize: 14)),
+                  Text('Войдите по паролю', style: TextStyle(color: Colors.grey[500], fontSize: 14)),
                   const SizedBox(height: 32),
 
                   if (_error != null) ...[
@@ -173,7 +173,7 @@ class _LoginPageState extends State<LoginPage> {
 
                   if (_savedAccounts.isNotEmpty) ...[
                     Text(
-                      'Saqlangan akkauntlar',
+                      'Сохранённые аккаунты',
                       style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: Colors.grey[500], letterSpacing: 0.5),
                     ),
                     const SizedBox(height: 8),
@@ -224,13 +224,13 @@ class _LoginPageState extends State<LoginPage> {
                     const SizedBox(height: 16),
                   ],
 
-                  Text('Parol', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: Colors.grey[700])),
+                  Text('Пароль', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: Colors.grey[700])),
                   const SizedBox(height: 6),
                   TextField(
                     controller: _passCtrl,
                     obscureText: _obscure,
                     decoration: InputDecoration(
-                      hintText: 'Parolni kiriting',
+                      hintText: 'Введите пароль',
                       hintStyle: TextStyle(color: Colors.grey[400]),
                       filled: true,
                       fillColor: const Color(0xFFF9FAFB),
@@ -264,7 +264,7 @@ class _LoginPageState extends State<LoginPage> {
                         ),
                         child: _loading
                             ? const SizedBox(width: 22, height: 22, child: CircularProgressIndicator(strokeWidth: 2.5, color: Colors.white))
-                            : const Text('Kirish', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: Colors.white)),
+                            : const Text('Войти', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: Colors.white)),
                       ),
                     ),
                   ),

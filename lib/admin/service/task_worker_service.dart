@@ -18,13 +18,13 @@ class TemplateService {
       final response = await _dio.get(AppUrls.tasks);
 
       if (response.data == null) {
-        throw Exception("Task ma'lumotlari mavjud emas");
+        throw Exception("Данные задачи отсутствуют");
       }
 
       final data = response.data["data"];
 
       if (data is! List) {
-        throw Exception("Server noto‘g‘ri format qaytardi");
+        throw Exception("Сервер вернул неверный формат");
       }
 
       return data.map((e) => AdminTaskModel.fromJson(e)).toList();
@@ -74,13 +74,13 @@ class TemplateService {
       final response = await _dio.get(AppUrls.tasksAll);
 
       if (response.data == null) {
-        throw Exception("Task ma'lumotlari mavjud emas");
+        throw Exception("Данные задачи отсутствуют");
       }
 
       final data = response.data["data"];
 
       if (data is! List) {
-        throw Exception("Server noto‘g‘ri format qaytardi");
+        throw Exception("Сервер вернул неверный формат");
       }
 
       return data.map((e) => TemplateTaskModel.fromJson(e)).toList();

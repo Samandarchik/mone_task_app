@@ -18,7 +18,7 @@ class ApiService {
       } else {
         return {
           'success': false,
-          'message': 'Server xatosi: ${response.statusCode}',
+          'message': 'Ошибка сервера: ${response.statusCode}',
         };
       }
     } on DioException catch (e) {
@@ -27,17 +27,17 @@ class ApiService {
         if (statusCode == 401 || statusCode == 409) {
           return {
             'success': false,
-            'message': e.response!.data['error'] ?? 'Parol noto\'g\'ri',
+            'message': e.response!.data['error'] ?? 'Неверный пароль',
           };
         }
-        return {'success': false, 'message': 'Server xatosi: $statusCode'};
+        return {'success': false, 'message': 'Ошибка сервера: $statusCode'};
       }
       return {
         'success': false,
-        'message': 'Internetga ulanishda xato: ${e.message}',
+        'message': 'Ошибка подключения к интернету: ${e.message}',
       };
     } catch (e) {
-      return {'success': false, 'message': 'Kutilmagan xato: $e'};
+      return {'success': false, 'message': 'Непредвиденная ошибка: $e'};
     }
   }
 }

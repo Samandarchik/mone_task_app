@@ -56,7 +56,7 @@ class _TemplateTaskAdminUiState extends State<TemplateTaskAdminUi> {
   }
 
   String getFilialNames(List<int> filialIds, List<FilialModel> categories) {
-    if (filialIds.isEmpty) return "Barcha filiallar";
+    if (filialIds.isEmpty) return "Все филиалы";
     final names = {for (var filial in categories) filial.filialId: filial.name};
     return filialIds.map((id) => names[id] ?? "?").join(", ");
   }
@@ -165,7 +165,7 @@ class _TemplateTaskAdminUiState extends State<TemplateTaskAdminUi> {
                                 size: 48,
                               ),
                               const SizedBox(height: 16),
-                              Text('Xatolik: ${snapshot.error}'),
+                              Text('Ошибка: ${snapshot.error}'),
                               const SizedBox(height: 16),
                               ElevatedButton(
                                 onPressed: () {
@@ -174,7 +174,7 @@ class _TemplateTaskAdminUiState extends State<TemplateTaskAdminUi> {
                                         .fetchTemplates();
                                   });
                                 },
-                                child: const Text('Qayta urinish'),
+                                child: const Text('Повторить'),
                               ),
                             ],
                           ),
@@ -192,7 +192,7 @@ class _TemplateTaskAdminUiState extends State<TemplateTaskAdminUi> {
                       ...List.generate(
                         categoryCount,
                         (_) => const Center(
-                          child: Text("Hech qanday shablon topilmadi"),
+                          child: Text("Шаблоны не найдены"),
                         ),
                       ),
                       const SizedBox.shrink(),
@@ -227,19 +227,19 @@ class _TemplateTaskAdminUiState extends State<TemplateTaskAdminUi> {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text("Filial qo'shish"),
+        title: const Text("Добавить филиал"),
         content: TextField(
           controller: _filialController,
           autofocus: true,
           decoration: const InputDecoration(
-            labelText: "Filial nomi",
+            labelText: "Название филиала",
             border: OutlineInputBorder(),
           ),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: const Text("Bekor qilish"),
+            child: const Text("Отмена"),
           ),
           TextButton(
             onPressed: () async {
@@ -248,7 +248,7 @@ class _TemplateTaskAdminUiState extends State<TemplateTaskAdminUi> {
               if (filialName.isEmpty) {
                 ScaffoldMessenger.of(context).showSnackBar(
                   const SnackBar(
-                    content: Text('Filial nomini kiriting!'),
+                    content: Text('Введите название филиала!'),
                     backgroundColor: Colors.orange,
                   ),
                 );
@@ -271,7 +271,7 @@ class _TemplateTaskAdminUiState extends State<TemplateTaskAdminUi> {
                 }
               } catch (e) {}
             },
-            child: const Text("Qo'shish"),
+            child: const Text("Добавить"),
           ),
         ],
       ),
@@ -283,7 +283,7 @@ class _TemplateTaskAdminUiState extends State<TemplateTaskAdminUi> {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text("Filialni tahrirlash"),
+        title: const Text("Редактировать филиал"),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -291,7 +291,7 @@ class _TemplateTaskAdminUiState extends State<TemplateTaskAdminUi> {
               controller: _filialController,
               autofocus: true,
               decoration: const InputDecoration(
-                labelText: "Filial nomi",
+                labelText: "Название филиала",
                 border: OutlineInputBorder(),
               ),
             ),
@@ -300,7 +300,7 @@ class _TemplateTaskAdminUiState extends State<TemplateTaskAdminUi> {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: const Text("Bekor qilish"),
+            child: const Text("Отмена"),
           ),
           TextButton(
             onPressed: () async {
@@ -308,12 +308,12 @@ class _TemplateTaskAdminUiState extends State<TemplateTaskAdminUi> {
               final confirm = await showDialog<bool>(
                 context: context,
                 builder: (context) => AlertDialog(
-                  title: const Text("Ishonchingiz komilmi?"),
-                  content: Text("${filial.name} ni o'chirmoqchimisiz?"),
+                  title: const Text("Вы уверены?"),
+                  content: Text("Удалить ${filial.name}?"),
                   actions: [
                     TextButton(
                       onPressed: () => Navigator.pop(context, false),
-                      child: const Text("Yo'q"),
+                      child: const Text("Нет"),
                     ),
                     TextButton(
                       onPressed: () {
@@ -321,7 +321,7 @@ class _TemplateTaskAdminUiState extends State<TemplateTaskAdminUi> {
                         Navigator.pop(context, true);
                       },
                       style: TextButton.styleFrom(foregroundColor: Colors.red),
-                      child: const Text("Ha, o'chirish"),
+                      child: const Text("Да, удалить"),
                     ),
                   ],
                 ),
@@ -338,7 +338,7 @@ class _TemplateTaskAdminUiState extends State<TemplateTaskAdminUi> {
               }
             },
             style: TextButton.styleFrom(foregroundColor: Colors.red),
-            child: const Text("O'chirish"),
+            child: const Text("Удалить"),
           ),
           TextButton(
             onPressed: () async {
@@ -347,7 +347,7 @@ class _TemplateTaskAdminUiState extends State<TemplateTaskAdminUi> {
               if (newName.isEmpty) {
                 ScaffoldMessenger.of(context).showSnackBar(
                   const SnackBar(
-                    content: Text('Filial nomini kiriting!'),
+                    content: Text('Введите название филиала!'),
                     backgroundColor: Colors.orange,
                   ),
                 );
@@ -360,7 +360,7 @@ class _TemplateTaskAdminUiState extends State<TemplateTaskAdminUi> {
                 categoriesFuture = TemplateService().fetchFilials();
               });
             },
-            child: const Text("Saqlash"),
+            child: const Text("Сохранить"),
           ),
         ],
       ),
@@ -382,7 +382,7 @@ class _TemplateTaskAdminUiState extends State<TemplateTaskAdminUi> {
     }
 
     if (filtered.isEmpty) {
-      return const Center(child: Text("Ushbu filial uchun shablon yo'q"));
+      return const Center(child: Text("Для этого филиала нет шаблонов"));
     }
 
     return RefreshIndicator(
@@ -434,7 +434,7 @@ class _TemplateTaskAdminUiState extends State<TemplateTaskAdminUi> {
             if (mounted) {
               ScaffoldMessenger.of(context).showSnackBar(
                 const SnackBar(
-                  content: Text('Tartibni o\'zgartirishda xatolik'),
+                  content: Text('Ошибка при изменении порядка'),
                   backgroundColor: Colors.red,
                 ),
               );

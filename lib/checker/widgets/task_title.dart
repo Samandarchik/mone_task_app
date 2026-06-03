@@ -198,7 +198,7 @@ class _TaskListWidgetState extends State<TaskListWidget> {
         .toList();
 
     if (filtered.isEmpty) {
-      return const Center(child: Text("Ushbu filial uchun task yo'q"));
+      return const Center(child: Text("Для этого филиала нет задач"));
     }
 
     return RefreshIndicator(
@@ -414,7 +414,7 @@ class _TaskListItemState extends State<TaskListItem> {
                             } else {
                               ScaffoldMessenger.of(context).showSnackBar(
                                 const SnackBar(
-                                  content: Text('Video mavjud emas'),
+                                  content: Text('Видео отсутствует'),
                                 ),
                               );
                             }

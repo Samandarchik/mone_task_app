@@ -235,7 +235,7 @@ class _CircleVideoPlayerBodyState extends State<_CircleVideoPlayerBody>
     if (!await _recorder.hasPermission()) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Mikrofon ruxsati berilmagan')),
+          const SnackBar(content: Text('Доступ к микрофону не предоставлен')),
         );
       }
       return false;
@@ -313,7 +313,7 @@ class _CircleVideoPlayerBodyState extends State<_CircleVideoPlayerBody>
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(success ? 'Audio yuborildi ✓' : 'Xato yuz berdi'),
+            content: Text(success ? 'Аудио отправлено ✓' : 'Произошла ошибка'),
             backgroundColor: success ? Colors.green : Colors.red,
             duration: const Duration(milliseconds: 800),
           ),
@@ -322,7 +322,7 @@ class _CircleVideoPlayerBodyState extends State<_CircleVideoPlayerBody>
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Xato: $e'), backgroundColor: Colors.red),
+          SnackBar(content: Text('Ошибка: $e'), backgroundColor: Colors.red),
         );
       }
     } finally {
@@ -842,7 +842,7 @@ class _CircleVideoPlayerBodyState extends State<_CircleVideoPlayerBody>
         ] else ...[
           SizedBox(width: _isTablet ? 8 : 4),
           Text(
-            _pressedInside ? 'Qo\'yib yuboring →' : '↑ Tepaga — davom etadi',
+            _pressedInside ? 'Отпустите →' : '↑ Вверх — продолжит',
             style: TextStyle(
               fontSize: _recordingSubFontSize,
               color: _pressedInside ? Colors.white70 : Colors.orange,
@@ -869,7 +869,7 @@ class _CircleVideoPlayerBodyState extends State<_CircleVideoPlayerBody>
         ),
         const SizedBox(width: 10),
         Text(
-          'Yuborilmoqda...',
+          'Отправка...',
           style: TextStyle(
             fontSize: _recordingSubFontSize,
             color: Colors.white70,
@@ -1107,7 +1107,7 @@ class _CircleVideoPlayerBodyState extends State<_CircleVideoPlayerBody>
             const Icon(Icons.error_outline, color: Colors.red, size: 48),
             const SizedBox(height: 16),
             const Text(
-              'Video yuklanmadi',
+              'Видео не загрузилось',
               style: TextStyle(
                 color: Colors.white,
                 fontSize: 16,

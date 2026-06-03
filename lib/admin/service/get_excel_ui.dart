@@ -75,10 +75,10 @@ class _ExcelReportPageState extends State<ExcelReportPage> {
       });
     } catch (e) {
       setState(() {
-        errorMessage = 'Filiallarni yuklashda xatolik: $e';
+        errorMessage = 'Ошибка при загрузке филиалов: $e';
         isLoadingFilials = false;
       });
-      _showSnackBar('Filiallarni yuklashda xatolik', isError: true);
+      _showSnackBar('Ошибка при загрузке филиалов', isError: true);
     }
   }
 
@@ -108,12 +108,12 @@ class _ExcelReportPageState extends State<ExcelReportPage> {
 
   Future<void> _downloadAndShareExcel() async {
     if (selectedFilial == null) {
-      _showSnackBar('Filialni tanlang', isError: true);
+      _showSnackBar('Выберите филиал', isError: true);
       return;
     }
 
     if (selectedDateRange == null) {
-      _showSnackBar('Sana oralig\'ini tanlang', isError: true);
+      _showSnackBar('Выберите период', isError: true);
       return;
     }
 
@@ -140,15 +140,15 @@ class _ExcelReportPageState extends State<ExcelReportPage> {
 
       final result = await Share.shareXFiles(
         [XFile(filePath)],
-        subject: 'Hisobot - ${selectedFilial!.name}',
-        text: 'Sana: $startDate dan $endDate gacha',
+        subject: 'Отчёт - ${selectedFilial!.name}',
+        text: 'Период: с $startDate по $endDate',
       );
 
       if (result.status == ShareResultStatus.success) {
-        _showSnackBar('Muvaffaqiyatli yuborildi');
+        _showSnackBar('Успешно отправлено');
       }
     } catch (e) {
-      _showSnackBar('Xatolik: $e', isError: true);
+      _showSnackBar('Ошибка: $e', isError: true);
     } finally {
       setState(() {
         isLoading = false;
@@ -169,7 +169,7 @@ class _ExcelReportPageState extends State<ExcelReportPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Excel Hisobot'), centerTitle: true),
+      appBar: AppBar(title: const Text('Excel отчёт'), centerTitle: true),
       body: isLoadingFilials
           ? const Center(child: CircularProgressIndicator())
           : errorMessage != null
@@ -185,7 +185,7 @@ class _ExcelReportPageState extends State<ExcelReportPage> {
                   const SizedBox(height: 16),
                   ElevatedButton(
                     onPressed: _fetchFilials,
-                    child: const Text('Qayta urinish'),
+                    child: const Text('Повторить'),
                   ),
                 ],
               ),
@@ -193,7 +193,7 @@ class _ExcelReportPageState extends State<ExcelReportPage> {
           : _availableFilials == null || _availableFilials!.isEmpty
           ? const Center(
               child: Text(
-                'Sizda ko\'rish uchun ruxsat berilgan filiallar yo\'q',
+                'У вас нет филиалов, доступных для просмотра',
                 textAlign: TextAlign.center,
                 style: TextStyle(fontSize: 16),
               ),
@@ -213,7 +213,7 @@ class _ExcelReportPageState extends State<ExcelReportPage> {
                     child: DropdownButtonHideUnderline(
                       child: DropdownButton<FilialModel>(
                         isExpanded: true,
-                        hint: const Text('Filialni tanlang'),
+                        hint: const Text('Выберите филиал'),
                         value: selectedFilial,
                         items: _availableFilials?.map((filial) {
                           return DropdownMenuItem<FilialModel>(
@@ -248,7 +248,7 @@ class _ExcelReportPageState extends State<ExcelReportPage> {
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Text(
-                                'Sana oralig\'i',
+                                'Период',
                                 style: TextStyle(
                                   color: Colors.grey.shade600,
                                   fontSize: 12,
@@ -257,7 +257,7 @@ class _ExcelReportPageState extends State<ExcelReportPage> {
                               const SizedBox(height: 4),
                               Text(
                                 selectedDateRange == null
-                                    ? 'Tanlang'
+                                    ? 'Выберите'
                                     : '${_formatDate(selectedDateRange!.start)} - ${_formatDate(selectedDateRange!.end)}',
                                 style: const TextStyle(
                                   fontSize: 16,
@@ -291,7 +291,7 @@ class _ExcelReportPageState extends State<ExcelReportPage> {
                           )
                         : const Icon(Icons.share),
                     label: Text(
-                      isLoading ? 'Yuklanmoqda...' : 'Yuklab Yuborish',
+                      isLoading ? 'Загрузка...' : 'Скачать и отправить',
                       style: const TextStyle(fontSize: 16),
                     ),
                     style: ElevatedButton.styleFrom(

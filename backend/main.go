@@ -357,6 +357,11 @@ func main() {
 
 	// Users
 	r.HandleFunc("/api/users", authMiddleware(getUsers)).Methods("GET")
+	// super_admin'dan boshqa barcha foydalanuvchilarga login ma'lumotlarini
+	// bittada Telegram orqali yuborish (faqat super_admin — handler ichida tekshiriladi).
+	r.HandleFunc("/api/users/send-all-credentials", authMiddleware(sendAllCredentials)).Methods("POST")
+	// Bitta foydalanuvchiga login ma'lumotlarini Telegram orqali yuborish.
+	r.HandleFunc("/api/users/{id}/send-credentials", authMiddleware(sendCredentials)).Methods("POST")
 	r.HandleFunc("/api/users/{id}", authMiddleware(updateUser)).Methods("PUT")
 	r.HandleFunc("/api/users/{id}", authMiddleware(deleteUser)).Methods("DELETE")
 

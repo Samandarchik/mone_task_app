@@ -24,13 +24,13 @@ class TaskWorkerService {
       );
 
       if (response.data == null) {
-        throw Exception("Task ma'lumotlari mavjud emas");
+        throw Exception("Данные задачи отсутствуют");
       }
 
       final data = response.data["data"];
 
       if (data is! List) {
-        throw Exception("Server noto'g'ri format qaytardi");
+        throw Exception("Сервер вернул неверный формат");
       }
 
       return data.map((e) => TaskModel.fromJson(e)).toList();
@@ -98,7 +98,7 @@ class TaskWorkerService {
     required List<XFile> segments,
   }) async {
     try {
-      if (segments.isEmpty) throw Exception('Segmentlar mavjud emas');
+      if (segments.isEmpty) throw Exception('Сегменты отсутствуют');
 
       Map<String, dynamic> formDataMap = {'segment_count': segments.length};
 

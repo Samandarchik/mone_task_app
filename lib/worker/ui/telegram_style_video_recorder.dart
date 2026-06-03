@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'dart:io';
-import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:camera/camera.dart';
@@ -60,7 +59,7 @@ class _TelegramStyleVideoRecorderState
     try {
       _cameras = await availableCameras();
       if (_cameras.isEmpty) {
-        _showError("Kamera topilmadi");
+        _showError("Камера не найдена");
         return;
       }
       if (Platform.isIOS) {
@@ -71,7 +70,7 @@ class _TelegramStyleVideoRecorderState
       await _openCamera(_getInitialCameraIndex());
       if (mounted) setState(() => _isInitialized = true);
     } catch (e) {
-      _showError("Kamera xatoligi: $e");
+      _showError("Ошибка камеры: $e");
     }
   }
 
@@ -206,7 +205,7 @@ class _TelegramStyleVideoRecorderState
       if (mounted) setState(() => _isSwitchingCamera = false);
     } catch (e) {
       if (mounted) setState(() => _isSwitchingCamera = false);
-      _showError("Lensni almashtirishda xatolik: $e");
+      _showError("Ошибка при смене объектива: $e");
     }
   }
 
@@ -239,7 +238,7 @@ class _TelegramStyleVideoRecorderState
       if (mounted) setState(() => _isSwitchingCamera = false);
     } catch (e) {
       if (mounted) setState(() => _isSwitchingCamera = false);
-      _showError("Kamerani almashtirishda xatolik: $e");
+      _showError("Ошибка при смене камеры: $e");
     }
   }
 
@@ -339,7 +338,7 @@ class _TelegramStyleVideoRecorderState
         }
       });
     } catch (e) {
-      _showError("Yozishni boshlab bo'lmadi: $e");
+      _showError("Не удалось начать запись: $e");
     }
   }
 
@@ -354,7 +353,7 @@ class _TelegramStyleVideoRecorderState
         setState(() => _isPaused = true);
       }
     } catch (e) {
-      _showError("Pause/Resume xatoligi: $e");
+      _showError("Ошибка паузы/возобновления: $e");
     }
   }
 
@@ -391,7 +390,7 @@ class _TelegramStyleVideoRecorderState
         }
       }
     } catch (e) {
-      _showError("Videoni saqlashda xatolik: $e");
+      _showError("Ошибка при сохранении видео: $e");
     }
   }
 
@@ -445,87 +444,93 @@ class _TelegramStyleVideoRecorderState
     }
 
     final size = MediaQuery.of(context).size;
-    final double circleDiameter = size.width * 0.9;
+    final mediaPadding = MediaQuery.of(context).padding;
+    // Pastdagi tugmalar (record + zoom + bottom gap) uchun zarur joy
+    const double bottomControlsHeight = 80 + 16 + 44 + 16 + 50;
+    final double topPadding = mediaPadding.top + 50;
+    final double availableHeight =
+        size.height - topPadding - mediaPadding.bottom - bottomControlsHeight;
+    // iPad/landshaftda aylana ekranga sig'sin: width va height ichida kichigi
+    // tanlanadi, planshetda esa maksimal 680pt bilan cheklanadi
+    final bool isTablet = size.shortestSide >= 600;
+    final double maxCircle = isTablet ? 680.0 : double.infinity;
+    final double circleDiameter = [
+      size.width * 0.9,
+      availableHeight,
+      maxCircle,
+    ].reduce((a, b) => a < b ? a : b);
     final double circleLeft = (size.width - circleDiameter) / 2;
-    // ✅ SafeArea top + 50
-    final double topPadding = MediaQuery.of(context).padding.top + 50;
+    final double circleTop = topPadding;
 
     final previewSize = _controller!.value.previewSize!;
     final double cameraW = previewSize.height;
     final double cameraH = previewSize.width;
-    final double cameraAspect = cameraW / cameraH;
-    final double fittedH = circleDiameter / cameraAspect;
 
     return Material(
-      color: Colors.white,
+      color: Colors.black,
       child: Stack(
         fit: StackFit.expand,
         children: [
-          // ── 1. BLUR ──
+          // ── 1. FULLSCREEN KAMERA (orqa fon) ──
           Positioned.fill(
-            child: ClipRect(
-              child: BackdropFilter(
-                filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
-                child: Container(color: Colors.transparent),
-              ),
-            ),
-          ),
-
-          // ── 2. KAMERA (pinch-to-zoom) ──
-          Positioned(
-            top: topPadding,
-            left: circleLeft,
-            width: circleDiameter,
-            height: circleDiameter,
             child: Listener(
               onPointerDown: _handlePointerDown,
               onPointerMove: _handlePointerMove,
               onPointerUp: _handlePointerUp,
               behavior: HitTestBehavior.translucent,
-              child: ClipOval(
-                child: _isSwitchingCamera
-                    ? Container(
-                        color: Colors.black26,
-                        child: const Center(
-                          child: CircularProgressIndicator.adaptive(),
-                        ),
-                      )
-                    : OverflowBox(
-                        alignment: Alignment.center,
-                        maxWidth: circleDiameter,
-                        maxHeight: fittedH,
+              child: _isSwitchingCamera
+                  ? Container(
+                      color: Colors.black,
+                      child: const Center(
+                        child: CircularProgressIndicator.adaptive(),
+                      ),
+                    )
+                  : ClipRect(
+                      child: FittedBox(
+                        fit: BoxFit.cover,
                         child: SizedBox(
-                          width: circleDiameter,
-                          height: fittedH,
-                          child: FittedBox(
-                            fit: BoxFit.cover,
-                            child: SizedBox(
-                              width: cameraW,
-                              height: cameraH,
-                              child: CameraPreview(_controller!),
-                            ),
-                          ),
+                          width: cameraW,
+                          height: cameraH,
+                          child: CameraPreview(_controller!),
                         ),
                       ),
+                    ),
+            ),
+          ),
+
+          // ── 2. AYLANA TASHQARISINI QORAYTIRISH ──
+          Positioned.fill(
+            child: IgnorePointer(
+              child: CustomPaint(
+                painter: CircleDimMaskPainter(
+                  circleCenter: Offset(
+                    size.width / 2,
+                    circleTop + circleDiameter / 2,
+                  ),
+                  circleRadius: circleDiameter / 2,
+                  overlayColor: Colors.black.withOpacity(0.55),
+                ),
               ),
             ),
           ),
 
           // ── 3. BORDER + PROGRESS ──
           Positioned(
-            top: topPadding,
+            top: circleTop,
             left: circleLeft,
             width: circleDiameter,
             height: circleDiameter,
-            child: CustomPaint(
-              painter: CircleBorderPainter(
-                borderColor: Colors.white,
-                borderWidth: 0.9,
-                progressColor: _isPaused ? Colors.orange : Colors.red,
-                progressWidth: 4.0,
-                progress: _isRecording
-                    ? (_recordedSeconds / 40).clamp(0.0, 1.0)
-                    : 0.0,
+            child: IgnorePointer(
+              child: CustomPaint(
+                painter: CircleBorderPainter(
+                  borderColor: Colors.white,
+                  borderWidth: 0.9,
+                  progressColor: _isPaused ? Colors.orange : Colors.red,
+                  progressWidth: 4.0,
+                  progress: _isRecording
+                      ? (_recordedSeconds / 40).clamp(0.0, 1.0)
+                      : 0.0,
+                ),
               ),
             ),
           ),
@@ -717,6 +722,35 @@ class _TelegramStyleVideoRecorderState
         child: child,
       ),
     );
+  }
+}
+
+class CircleDimMaskPainter extends CustomPainter {
+  final Offset circleCenter;
+  final double circleRadius;
+  final Color overlayColor;
+
+  CircleDimMaskPainter({
+    required this.circleCenter,
+    required this.circleRadius,
+    required this.overlayColor,
+  });
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()..color = overlayColor;
+    final path = Path()
+      ..addRect(Rect.fromLTWH(0, 0, size.width, size.height))
+      ..addOval(Rect.fromCircle(center: circleCenter, radius: circleRadius))
+      ..fillType = PathFillType.evenOdd;
+    canvas.drawPath(path, paint);
+  }
+
+  @override
+  bool shouldRepaint(CircleDimMaskPainter old) {
+    return old.circleCenter != circleCenter ||
+        old.circleRadius != circleRadius ||
+        old.overlayColor != overlayColor;
   }
 }
 

@@ -212,11 +212,11 @@ class VideoPlayerProvider extends ChangeNotifier {
       if (isLocal) {
         final file = File(videoPath);
         if (!await file.exists()) {
-          _setError('Fayl topilmadi: $videoPath');
+          _setError('Файл не найден: $videoPath');
           return;
         }
         if (await file.length() == 0) {
-          _setError("Video fayl bo'sh");
+          _setError("Видеофайл пуст");
           return;
         }
       }

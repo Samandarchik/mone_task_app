@@ -35,13 +35,13 @@ class ExcelReportService {
       if (response.statusCode == 200) {
         return response.data as List<int>;
       } else {
-        throw Exception('Excel yuklab olishda xatolik: ${response.statusCode}');
+        throw Exception('Ошибка при скачивании Excel: ${response.statusCode}');
       }
     } on DioException catch (e) {
       if (e.response != null) {
-        throw Exception('Server xatosi: ${e.response?.statusCode}');
+        throw Exception('Ошибка сервера: ${e.response?.statusCode}');
       } else {
-        throw Exception('Internet bilan bog\'lanishda xatolik');
+        throw Exception('Ошибка подключения к интернету');
       }
     } catch (e) {
       rethrow;
@@ -74,7 +74,7 @@ class ExcelReportService {
         onReceiveProgress: (received, total) {
           if (total != -1) {
             final progress = (received / total * 100).toStringAsFixed(0);
-            print('Yuklanmoqda: $progress%');
+            print('Загрузка: $progress%');
           }
         },
       );
@@ -82,17 +82,17 @@ class ExcelReportService {
       if (response.statusCode == 200) {
         return savePath;
       } else {
-        throw Exception('Excel yuklab olishda xatolik: ${response.statusCode}');
+        throw Exception('Ошибка при скачивании Excel: ${response.statusCode}');
       }
     } on DioException catch (e) {
       if (e.response != null) {
-        throw Exception('Server xatosi: ${e.response?.statusCode}');
+        throw Exception('Ошибка сервера: ${e.response?.statusCode}');
       } else if (e.type == DioExceptionType.connectionTimeout) {
-        throw Exception('Ulanish vaqti tugadi');
+        throw Exception('Время ожидания подключения истекло');
       } else if (e.type == DioExceptionType.receiveTimeout) {
-        throw Exception('Ma\'lumot qabul qilish vaqti tugadi');
+        throw Exception('Время ожидания получения данных истекло');
       } else {
-        throw Exception('Internet bilan bog\'lanishda xatolik');
+        throw Exception('Ошибка подключения к интернету');
       }
     } catch (e) {
       rethrow;

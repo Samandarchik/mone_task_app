@@ -83,14 +83,14 @@ class _CircleVideoPlayer2State extends State<CircleVideoPlayer2>
         if (!await file.exists()) {
           setState(() {
             _hasError = true;
-            _errorMessage = 'Fayl topilmadi: $videoPath';
+            _errorMessage = 'Файл не найден: $videoPath';
           });
           return;
         }
         if (await file.length() == 0) {
           setState(() {
             _hasError = true;
-            _errorMessage = 'Video fayl bo\'sh';
+            _errorMessage = 'Видеофайл пуст';
           });
           return;
         }
@@ -447,7 +447,7 @@ class _CircleVideoPlayer2State extends State<CircleVideoPlayer2>
                                     ),
                                     const SizedBox(height: 16),
                                     const Text(
-                                      "Video yuklanmadi",
+                                      "Видео не загрузилось",
                                       style: TextStyle(
                                         color: Colors.white,
                                         fontSize: 16,

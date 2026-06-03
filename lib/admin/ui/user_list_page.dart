@@ -5,6 +5,8 @@ import 'package:mone_task_app/admin/ui/add_worker.dart';
 import 'package:mone_task_app/admin/ui/edit.dart';
 import 'package:mone_task_app/admin/service/user_service.dart';
 import 'package:mone_task_app/checker/service/task_worker_service.dart';
+import 'package:mone_task_app/core/data/local/token_storage.dart';
+import 'package:mone_task_app/core/di/di.dart';
 import 'package:mone_task_app/worker/model/user_model.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -110,11 +112,124 @@ class _UsersPageState extends State<UsersPage> {
 
   // ── Build ──────────────────────────────────────────────────────────────
 
+  /// Bitta foydalanuvchiga login ma'lumotlarini (ism + login + parol + ilova
+  /// linklari) Telegram orqali yuboradi. Avval tasdiqlash so'raladi.
+  Future<void> _sendCredentials(UserModel u) async {
+    final messenger = ScaffoldMessenger.of(context);
+    final name = u.fullName.isNotEmpty ? u.fullName : u.username;
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Text('Отправить в Telegram'),
+        content: Text('$name — отправить логин и пароль через Telegram?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Нет'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Отправить'),
+          ),
+        ],
+      ),
+    );
+    if (ok != true) return;
+    messenger.showSnackBar(const SnackBar(content: Text('Отправляется...')));
+    try {
+      await _userService.sendCredentials(u.userId);
+      if (!mounted) return;
+      messenger.hideCurrentSnackBar();
+      messenger.showSnackBar(
+        const SnackBar(
+          content: Text('Отправлено в Telegram'),
+          backgroundColor: Colors.green,
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      messenger.hideCurrentSnackBar();
+      final msg = e.toString().replaceFirst('Exception: ', '');
+      messenger.showSnackBar(
+        SnackBar(content: Text(msg), backgroundColor: Colors.red),
+      );
+    }
+  }
+
+  /// super_admin'dan boshqa barcha foydalanuvchilarga login ma'lumotlarini
+  /// (ism + login + parol + ilova linklari) bittada Telegram orqali yuboradi.
+  /// Avval tasdiqlash so'raladi, so'ng natija snackbar'da ko'rsatiladi.
+  Future<void> _sendAllCredentials() async {
+    final messenger = ScaffoldMessenger.of(context);
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Text('Отправить всем'),
+        content: const Text(
+          'Отправить логин и пароль всем пользователям через Telegram?',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Нет'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Отправить'),
+          ),
+        ],
+      ),
+    );
+    if (ok != true) return;
+    messenger.showSnackBar(
+      const SnackBar(content: Text('Отправляется...')),
+    );
+    try {
+      final res = await _userService.sendAllCredentials();
+      if (!mounted) return;
+      final sent = (res['sent'] as num?)?.toInt() ?? 0;
+      final skipped = (res['skipped'] as List?)?.length ?? 0;
+      final failed = (res['failed'] as List?)?.length ?? 0;
+      final parts = <String>['$sent отправлено'];
+      if (skipped > 0) parts.add('$skipped без Telegram');
+      if (failed > 0) parts.add('$failed ошибок');
+      messenger.hideCurrentSnackBar();
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text(parts.join(' · ')),
+          backgroundColor: failed > 0 ? Colors.orange : Colors.green,
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      messenger.hideCurrentSnackBar();
+      messenger.showSnackBar(
+        SnackBar(content: Text('Ошибка: $e'), backgroundColor: Colors.red),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
+    final isSuperAdmin =
+        sl<TokenStorage>().getUserData()?.role == 'super_admin';
     return Scaffold(
       backgroundColor: const Color(0xFFF0F2F5),
-      appBar: AppBar(title: const Text('Пользователи')),
+      appBar: AppBar(
+        title: const Text('Пользователи'),
+        actions: [
+          // Barcha foydalanuvchilarga login ma'lumotlarini bittada Telegram
+          // orqali yuborish — faqat super_admin ko'radi.
+          if (isSuperAdmin)
+            IconButton(
+              icon: const Icon(Icons.send_rounded),
+              tooltip: 'Отправить всем в Telegram',
+              onPressed: _sendAllCredentials,
+            ),
+        ],
+      ),
       body: Padding(
         padding: const EdgeInsets.all(16),
         child: Container(
@@ -363,6 +478,14 @@ class _UsersPageState extends State<UsersPage> {
             SizedBox(width: 140, child: Align(alignment: Alignment.centerLeft, child: _roleSelector(u))),
             Expanded(flex: 2, child: _filialSelector(u)),
             Expanded(flex: 2, child: _categoriesSelector(u)),
+            // Bitta foydalanuvchiga login ma'lumotlarini Telegram orqali yuborish.
+            if (u.role != 'super_admin' &&
+                sl<TokenStorage>().getUserData()?.role == 'super_admin')
+              IconButton(
+                tooltip: 'Отправить в Telegram',
+                icon: const Icon(Icons.send_rounded, size: 20, color: Color(0xFF2563EB)),
+                onPressed: () => _sendCredentials(u),
+              ),
           ],
         ),
       ),
@@ -1048,6 +1171,20 @@ class _UsersPageState extends State<UsersPage> {
                   child: SingleChildScrollView(
                     padding: const EdgeInsets.only(right: 8),
                     child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                      if (sl<TokenStorage>().getUserData()?.role == 'super_admin') ...[
+                        SizedBox(
+                          width: double.infinity,
+                          child: FilledButton.icon(
+                            onPressed: () {
+                              Navigator.pop(ctx);
+                              _sendCredentials(u);
+                            },
+                            icon: const Icon(Icons.send_rounded, size: 18),
+                            label: const Text('Отправить логин в Telegram'),
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                      ],
                       if (phone.isNotEmpty) _infoRow('Телефон', phone, onTap: () => _callPhone(phone), valueColor: const Color(0xFF2563EB)),
                       _infoRow('Логин', u.login),
                       if (u.password.isNotEmpty) _infoRow('Пароль', u.password),

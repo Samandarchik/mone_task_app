@@ -77,19 +77,19 @@ class _VideoCacheManagerPageState extends State<VideoCacheManagerPage> {
     final confirm = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Barcha cache\'ni o\'chirish'),
+        title: const Text('Очистить весь кэш'),
         content: Text(
-          'Haqiqatan ham ${_totalVideos} ta videoni (${_totalSize.toStringAsFixed(2)} MB) o\'chirmoqchimisiz?',
+          'Действительно удалить ${_totalVideos} видео (${_totalSize.toStringAsFixed(2)} MB)?',
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
-            child: const Text('Bekor qilish'),
+            child: const Text('Отмена'),
           ),
           TextButton(
             onPressed: () => Navigator.pop(context, true),
             style: TextButton.styleFrom(foregroundColor: Colors.red),
-            child: const Text('O\'chirish'),
+            child: const Text('Удалить'),
           ),
         ],
       ),
@@ -111,7 +111,7 @@ class _VideoCacheManagerPageState extends State<VideoCacheManagerPage> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('Cache muvaffaqiyatli tozalandi'),
+            content: Text('Кэш успешно очищен'),
             backgroundColor: Colors.green,
           ),
         );
@@ -123,7 +123,7 @@ class _VideoCacheManagerPageState extends State<VideoCacheManagerPage> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Xatolik: $e'),
+            content: Text('Ошибка: $e'),
             backgroundColor: Colors.red,
           ),
         );
@@ -136,17 +136,17 @@ class _VideoCacheManagerPageState extends State<VideoCacheManagerPage> {
     final confirm = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Videoni o\'chirish'),
-        content: Text('${video.name} ni o\'chirmoqchimisiz?'),
+        title: const Text('Удалить видео'),
+        content: Text('Удалить ${video.name}?'),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
-            child: const Text('Bekor qilish'),
+            child: const Text('Отмена'),
           ),
           TextButton(
             onPressed: () => Navigator.pop(context, true),
             style: TextButton.styleFrom(foregroundColor: Colors.red),
-            child: const Text('O\'chirish'),
+            child: const Text('Удалить'),
           ),
         ],
       ),
@@ -163,7 +163,7 @@ class _VideoCacheManagerPageState extends State<VideoCacheManagerPage> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('Video o\'chirildi'),
+            content: Text('Видео удалено'),
             backgroundColor: Colors.green,
           ),
         );
@@ -175,7 +175,7 @@ class _VideoCacheManagerPageState extends State<VideoCacheManagerPage> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Xatolik: $e'),
+            content: Text('Ошибка: $e'),
             backgroundColor: Colors.red,
           ),
         );
@@ -188,11 +188,11 @@ class _VideoCacheManagerPageState extends State<VideoCacheManagerPage> {
     final difference = now.difference(date);
 
     if (difference.inDays == 0) {
-      return 'Bugun ${date.hour.toString().padLeft(2, '0')}:${date.minute.toString().padLeft(2, '0')}';
+      return 'Сегодня ${date.hour.toString().padLeft(2, '0')}:${date.minute.toString().padLeft(2, '0')}';
     } else if (difference.inDays == 1) {
-      return 'Kecha ${date.hour.toString().padLeft(2, '0')}:${date.minute.toString().padLeft(2, '0')}';
+      return 'Вчера ${date.hour.toString().padLeft(2, '0')}:${date.minute.toString().padLeft(2, '0')}';
     } else if (difference.inDays < 7) {
-      return '${difference.inDays} kun oldin';
+      return '${difference.inDays} дн. назад';
     } else {
       return '${date.day}.${date.month}.${date.year}';
     }
@@ -202,18 +202,18 @@ class _VideoCacheManagerPageState extends State<VideoCacheManagerPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Video Cache Boshqaruvi'),
+        title: const Text('Управление кэшем видео'),
         actions: [
           if (_totalVideos > 0)
             IconButton(
               onPressed: _clearAllCache,
               icon: const Icon(CupertinoIcons.trash),
-              tooltip: 'Barchasini o\'chirish',
+              tooltip: 'Удалить всё',
             ),
           IconButton(
             onPressed: _loadCacheInfo,
             icon: const Icon(CupertinoIcons.refresh),
-            tooltip: 'Yangilash',
+            tooltip: 'Обновить',
           ),
         ],
       ),
@@ -248,8 +248,8 @@ class _VideoCacheManagerPageState extends State<VideoCacheManagerPage> {
                         children: [
                           _StatCard(
                             icon: CupertinoIcons.videocam_fill,
-                            label: 'Videolar',
-                            value: '$_totalVideos ta',
+                            label: 'Видео',
+                            value: '$_totalVideos шт.',
                           ),
                           Container(
                             width: 1,
@@ -258,7 +258,7 @@ class _VideoCacheManagerPageState extends State<VideoCacheManagerPage> {
                           ),
                           _StatCard(
                             icon: CupertinoIcons.arrow_down_circle_fill,
-                            label: 'Hajmi',
+                            label: 'Размер',
                             value: '${_totalSize.toStringAsFixed(2)} MB',
                           ),
                         ],
@@ -286,7 +286,7 @@ class _VideoCacheManagerPageState extends State<VideoCacheManagerPage> {
                               const SizedBox(width: 8),
                               Flexible(
                                 child: Text(
-                                  'O\'rtacha har bir video: ${(_totalSize / _totalVideos).toStringAsFixed(2)} MB',
+                                  'В среднем на видео: ${(_totalSize / _totalVideos).toStringAsFixed(2)} MB',
                                   style: const TextStyle(
                                     color: Colors.white,
                                     fontSize: 13,
@@ -315,7 +315,7 @@ class _VideoCacheManagerPageState extends State<VideoCacheManagerPage> {
                               ),
                               const SizedBox(height: 16),
                               Text(
-                                'Hech qanday video yuklanmagan',
+                                'Видео не загружены',
                                 style: TextStyle(
                                   fontSize: 16,
                                   color: Colors.grey.shade600,
@@ -401,7 +401,7 @@ class _VideoCacheManagerPageState extends State<VideoCacheManagerPage> {
                                     CupertinoIcons.trash,
                                     color: Colors.red,
                                   ),
-                                  tooltip: 'O\'chirish',
+                                  tooltip: 'Удалить',
                                 ),
                               ),
                             );

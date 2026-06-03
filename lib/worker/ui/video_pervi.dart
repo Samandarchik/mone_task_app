@@ -94,7 +94,7 @@ class _VideoPreviewScreenState extends State<VideoPreviewScreen> {
         }
       }
     } catch (e) {
-      _showError("Video yuklashda xatolik: $e");
+      _showError("Ошибка при загрузке видео: $e");
     }
   }
 
@@ -321,7 +321,7 @@ class _VideoPreviewScreenState extends State<VideoPreviewScreen> {
                     // Qaytadan olish
                     _buildActionButton(
                       icon: Icons.refresh,
-                      label: 'Qaytadan',
+                      label: 'Заново',
                       onTap: _retakeVideo,
                       color: Colors.white,
                     ),
@@ -329,7 +329,7 @@ class _VideoPreviewScreenState extends State<VideoPreviewScreen> {
                     // Yuborish
                     _buildActionButton(
                       icon: Icons.send,
-                      label: 'Yuborish',
+                      label: 'Отправить',
                       onTap: _sendVideo,
                       color: Colors.blue,
                       isPrimary: true,

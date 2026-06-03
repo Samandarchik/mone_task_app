@@ -104,8 +104,8 @@ class _TaskWorkerUiState extends State<TaskWorkerUi> {
     final lastDate = now;
 
     const monthNames = [
-      'Yanvar', 'Fevral', 'Mart', 'Aprel', 'May', 'Iyun',
-      'Iyul', 'Avgust', 'Sentabr', 'Oktabr', 'Noyabr', 'Dekabr',
+      'Январь', 'Февраль', 'Март', 'Апрель', 'Май', 'Июнь',
+      'Июль', 'Август', 'Сентябрь', 'Октябрь', 'Ноябрь', 'Декабрь',
     ];
 
     final months = <DateTime>[];
@@ -152,7 +152,7 @@ class _TaskWorkerUiState extends State<TaskWorkerUi> {
                   children: [
                     CupertinoButton(
                       onPressed: () => Navigator.of(ctx).pop(),
-                      child: const Text('Bekor'),
+                      child: const Text('Отмена'),
                     ),
                     CupertinoButton(
                       onPressed: () {
@@ -161,7 +161,7 @@ class _TaskWorkerUiState extends State<TaskWorkerUi> {
                           ctx,
                         ).pop(DateTime(m.year, m.month, days[dayIdx]));
                       },
-                      child: const Text('Tanlash'),
+                      child: const Text('Выбрать'),
                     ),
                   ],
                 ),
@@ -259,7 +259,7 @@ class _TaskWorkerUiState extends State<TaskWorkerUi> {
             content: Text(
               success
                   ? "✅ Отправка успешно завершена!"
-                  : "❌ Yuborishda xatolik!",
+                  : "❌ Ошибка при отправке!",
             ),
             backgroundColor: success ? Colors.green : Colors.red,
           ),
@@ -269,7 +269,7 @@ class _TaskWorkerUiState extends State<TaskWorkerUi> {
       Future.delayed(const Duration(seconds: 2), _refresh);
       if (mounted)
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text("❌ Xatolik: $e"), backgroundColor: Colors.red),
+          SnackBar(content: Text("❌ Ошибка: $e"), backgroundColor: Colors.red),
         );
     }
   }
@@ -283,7 +283,7 @@ class _TaskWorkerUiState extends State<TaskWorkerUi> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
-              success ? "✅ Muvaffaqiyatli yuborildi!" : "❌ Yuborishda xatolik!",
+              success ? "✅ Успешно отправлено!" : "❌ Ошибка при отправке!",
             ),
             backgroundColor: success ? Colors.green : Colors.red,
           ),
@@ -293,7 +293,7 @@ class _TaskWorkerUiState extends State<TaskWorkerUi> {
       Future.delayed(const Duration(seconds: 2), _refresh);
       if (mounted)
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text("❌ Xatolik: $e"), backgroundColor: Colors.red),
+          SnackBar(content: Text("❌ Ошибка: $e"), backgroundColor: Colors.red),
         );
     }
   }
@@ -356,12 +356,12 @@ class _TaskWorkerUiState extends State<TaskWorkerUi> {
   Widget _buildBody() {
     if (_isLoading)
       return const Center(child: CircularProgressIndicator.adaptive());
-    if (_hasError) return Center(child: Text("Xatolik: $_errorMessage"));
+    if (_hasError) return Center(child: Text("Ошибка: $_errorMessage"));
 
     return RefreshIndicator(
       onRefresh: () => _fetchTasks(showLoading: false),
       child: _tasks.isEmpty
-          ? const Center(child: Text("Vazifalar yo'q"))
+          ? const Center(child: Text("Нет задач"))
           : ListView.builder(
               itemCount: _tasks.length,
               itemBuilder: (_, i) {

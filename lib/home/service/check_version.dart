@@ -1,7 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
-import 'package:http/http.dart' as http;
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -18,13 +18,18 @@ class VersionChecker {
   /// agar backend versiyasi katta bo‘lsa → update majburiy
   static Future<bool> checkVersion(BuildContext context) async {
     try {
-      final response = await http.get(Uri.parse(_endpoint));
+      final response = await Dio().get(
+        _endpoint,
+        options: Options(validateStatus: (_) => true),
+      );
       if (response.statusCode != 200) {
         debugPrint("⚠️ Server status: ${response.statusCode}");
         return false;
       }
 
-      final decoded = jsonDecode(response.body);
+      final decoded = response.data is String
+          ? jsonDecode(response.data as String)
+          : response.data;
       final data = decoded['data'];
       if (data == null) return false;
 

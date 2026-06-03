@@ -279,13 +279,13 @@ class _AdminTaskUiState extends State<AdminTaskUi>
               const Icon(Icons.error_outline, color: Colors.red, size: 48),
               const SizedBox(height: 16),
               Text(
-                'Kategoriyalarni yuklashda xatolik:\n${tasksProvider.filialsError}',
+                'Ошибка при загрузке категорий:\n${tasksProvider.filialsError}',
                 textAlign: TextAlign.center,
               ),
               const SizedBox(height: 16),
               ElevatedButton(
                 onPressed: () => tasksProvider.fetchFilials(),
-                child: const Text('Qayta urinish'),
+                child: const Text('Повторить'),
               ),
             ],
           ),
@@ -297,7 +297,7 @@ class _AdminTaskUiState extends State<AdminTaskUi>
     if (tasksProvider.filials.isEmpty) {
       return Scaffold(
         appBar: AppBar(title: Text(_user?.username ?? "")),
-        body: const Center(child: Text("Hech qanday filial topilmadi")),
+        body: const Center(child: Text("Филиалы не найдены")),
       );
     }
 
@@ -334,7 +334,7 @@ class _AdminTaskUiState extends State<AdminTaskUi>
             IconButton(
               onPressed: () => tasksProvider.clearStatusFilter(),
               icon: const Icon(Icons.filter_alt_off, size: 18),
-              tooltip: 'Filterni tozalash',
+              tooltip: 'Сбросить фильтр',
               padding: EdgeInsets.zero,
               constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
             ),
@@ -381,7 +381,7 @@ class _AdminTaskUiState extends State<AdminTaskUi>
             const Icon(Icons.error_outline, color: Colors.red, size: 48),
             const SizedBox(height: 16),
             Text(
-              'Xatolik: ${tasksProvider.tasksError}',
+              'Ошибка: ${tasksProvider.tasksError}',
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 16),
@@ -395,7 +395,7 @@ class _AdminTaskUiState extends State<AdminTaskUi>
     }
 
     if (tasksProvider.tasks.isEmpty) {
-      return const Center(child: Text("Hech qanday task topilmadi"));
+      return const Center(child: Text("Задачи не найдены"));
     }
 
     return TabBarView(

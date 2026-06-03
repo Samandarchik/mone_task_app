@@ -182,7 +182,7 @@ class _AudioTaskRowState extends State<AudioTaskRow>
       if (mounted) {
         setState(() => _isRecording = false);
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Mikrofon ruxsati berilmagan')),
+          const SnackBar(content: Text('Доступ к микрофону не предоставлен')),
         );
       }
       return;
@@ -274,7 +274,7 @@ class _AudioTaskRowState extends State<AudioTaskRow>
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(success ? 'Audio yuborildi' : 'Xato yuz berdi'),
+            content: Text(success ? 'Аудио отправлено' : 'Произошла ошибка'),
             backgroundColor: success ? Colors.green : Colors.red,
             duration: const Duration(milliseconds: 800),
           ),
@@ -283,7 +283,7 @@ class _AudioTaskRowState extends State<AudioTaskRow>
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Xato: $e'), backgroundColor: Colors.red),
+          SnackBar(content: Text('Ошибка: $e'), backgroundColor: Colors.red),
         );
       }
     } finally {
@@ -352,7 +352,7 @@ class _AudioTaskRowState extends State<AudioTaskRow>
         setState(() => _previewPath = null);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(success ? 'Audio yuborildi' : 'Xato yuz berdi'),
+            content: Text(success ? 'Аудио отправлено' : 'Произошла ошибка'),
             backgroundColor: success ? Colors.green : Colors.red,
             duration: const Duration(milliseconds: 800),
           ),
@@ -362,7 +362,7 @@ class _AudioTaskRowState extends State<AudioTaskRow>
       if (mounted) {
         setState(() => _previewPath = null);
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Xato: $e'), backgroundColor: Colors.red),
+          SnackBar(content: Text('Ошибка: $e'), backgroundColor: Colors.red),
         );
       }
     } finally {
@@ -506,7 +506,7 @@ class _AudioTaskRowState extends State<AudioTaskRow>
             Icon(Icons.mic_none_rounded, size: 18),
             SizedBox(width: 6),
             Text(
-              'Bosib ushlab ovoz yuboring',
+              'Зажмите для записи голоса',
               style: TextStyle(fontSize: 12, color: Colors.black87),
             ),
           ],
@@ -576,7 +576,7 @@ class _AudioTaskRowState extends State<AudioTaskRow>
                         ),
                         SizedBox(width: 2),
                         Text(
-                          'Qo\'yib yuboring → tinglash',
+                          'Отпустите → прослушать',
                           style: TextStyle(
                             fontSize: 12,
                             color: Colors.orange,
@@ -596,7 +596,7 @@ class _AudioTaskRowState extends State<AudioTaskRow>
                         ),
                         SizedBox(width: 2),
                         Text(
-                          'Tepaga — tinglash',
+                          'Вверх — прослушать',
                           style: TextStyle(fontSize: 12, color: Colors.black45),
                         ),
                       ],
@@ -630,7 +630,7 @@ class _AudioTaskRowState extends State<AudioTaskRow>
           const Padding(
             padding: EdgeInsets.only(left: 4, bottom: 4),
             child: Text(
-              'Yuborishdan oldin tinglang',
+              'Прослушайте перед отправкой',
               style: TextStyle(
                 fontSize: 11,
                 color: Colors.orange,
@@ -782,7 +782,7 @@ class _AudioTaskRowState extends State<AudioTaskRow>
         ),
         SizedBox(width: 8),
         Text(
-          'Yuborilmoqda...',
+          'Отправка...',
           style: TextStyle(fontSize: 12, color: Colors.black54),
         ),
       ],

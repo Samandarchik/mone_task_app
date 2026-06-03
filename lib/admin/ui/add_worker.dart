@@ -1,8 +1,8 @@
 import 'dart:convert';
+import 'package:dio/dio.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:http/http.dart' as http;
 import 'package:mone_task_app/admin/model/category_model.dart';
 import 'package:mone_task_app/admin/model/filial_model.dart';
 import 'package:mone_task_app/admin/service/user_service.dart';
@@ -103,8 +103,13 @@ class _AddWorkerPageState extends State<AddWorkerPage> {
     try {
       final normalized =
           phone.startsWith('+') || phone.startsWith('998') ? phone : '998$phone';
-      final url = Uri.parse('$_rezumeBaseUrl/api/public/rezume-by-phone/$normalized');
-      final resp = await http.get(url).timeout(const Duration(seconds: 20));
+      final url = '$_rezumeBaseUrl/api/public/rezume-by-phone/$normalized';
+      final resp = await Dio(
+        BaseOptions(
+          connectTimeout: const Duration(seconds: 20),
+          receiveTimeout: const Duration(seconds: 20),
+        ),
+      ).get(url, options: Options(validateStatus: (_) => true));
 
       if (resp.statusCode != 200) {
         setState(() {
@@ -114,7 +119,9 @@ class _AddWorkerPageState extends State<AddWorkerPage> {
         return;
       }
 
-      final data = jsonDecode(resp.body) as Map<String, dynamic>;
+      final data = (resp.data is String
+          ? jsonDecode(resp.data as String)
+          : resp.data) as Map<String, dynamic>;
       data.remove('interviews');
 
       // Avtomatik to'ldirish

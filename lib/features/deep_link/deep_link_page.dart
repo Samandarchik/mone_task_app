@@ -40,7 +40,7 @@ class _DeepLinkPageState extends State<DeepLinkPage> {
       if (token.isEmpty) {
         if (mounted) {
           setState(() {
-            _error = 'Tizimga kiring';
+            _error = 'Войдите в систему';
             _isLoading = false;
           });
         }
@@ -65,7 +65,7 @@ class _DeepLinkPageState extends State<DeepLinkPage> {
         });
       } else {
         setState(() {
-          _error = 'Task topilmadi';
+          _error = 'Задача не найдена';
           _isLoading = false;
         });
       }
@@ -73,19 +73,19 @@ class _DeepLinkPageState extends State<DeepLinkPage> {
       if (!mounted) return;
       if (e.response?.statusCode == 401) {
         setState(() {
-          _error = 'Tizimga kiring';
+          _error = 'Войдите в систему';
           _isLoading = false;
         });
       } else {
         setState(() {
-          _error = 'Server xatosi';
+          _error = 'Ошибка сервера';
           _isLoading = false;
         });
       }
     } catch (e) {
       if (!mounted) return;
       setState(() {
-        _error = 'Xatolik yuz berdi';
+        _error = 'Произошла ошибка';
         _isLoading = false;
       });
     }
@@ -160,7 +160,7 @@ class _DeepLinkPageState extends State<DeepLinkPage> {
                   ElevatedButton.icon(
                     onPressed: _goToApp,
                     icon: const Icon(Icons.arrow_forward, size: 18),
-                    label: const Text('Ilovaga kirish'),
+                    label: const Text('Открыть приложение'),
                     style: ElevatedButton.styleFrom(
                       backgroundColor: Colors.white,
                       foregroundColor: Colors.black,
@@ -200,7 +200,7 @@ class _DeepLinkPageState extends State<DeepLinkPage> {
                     )
                   : const Center(
                       child: Text(
-                        'Video hali yuborilmagan',
+                        'Видео ещё не отправлено',
                         style: TextStyle(color: Colors.white70, fontSize: 16),
                       ),
                     ),
