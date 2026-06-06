@@ -1,11 +1,15 @@
+import 'dart:io';
 import 'dart:ui';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
+import 'package:path_provider/path_provider.dart';
 import 'package:mone_task_app/admin/model/filial_model.dart';
 import 'package:mone_task_app/admin/provider/admin_task_list_widget.dart';
 import 'package:mone_task_app/admin/provider/admin_tasks_provider.dart';
 import 'package:mone_task_app/admin/provider/circle_video_player.dart';
-import 'package:mone_task_app/admin/provider/my_drawer.dart';
+import 'package:mone_task_app/admin/service/get_excel_ui.dart';
+import 'package:mone_task_app/admin/ui/all_task_ui.dart';
+import 'package:mone_task_app/admin/ui/user_list_page.dart';
 import 'package:mone_task_app/checker/model/checker_check_task_model.dart';
 import 'package:mone_task_app/core/context_extension.dart';
 import 'package:mone_task_app/core/data/local/token_storage.dart';
@@ -235,6 +239,110 @@ class _AdminTaskUiState extends State<AdminTaskUi>
     );
   }
 
+  Future<void> _clearVideoCache() async {
+    // Qaysi kungacha bo'lgan videolarni o'chirishni so'raymiz
+    DateTime selectedDate = DateTime.now();
+    final confirm = await showCupertinoModalPopup<bool>(
+      context: context,
+      builder: (ctx) => Container(
+        height: 320,
+        color: CupertinoColors.systemBackground.resolveFrom(ctx),
+        child: SafeArea(
+          top: false,
+          child: Column(
+            children: [
+              Padding(
+                padding: const EdgeInsets.all(12),
+                child: Text(
+                  'До какого дня удалить видео?',
+                  style: Theme.of(ctx).textTheme.titleMedium,
+                ),
+              ),
+              Expanded(
+                child: CupertinoDatePicker(
+                  mode: CupertinoDatePickerMode.date,
+                  initialDateTime: selectedDate,
+                  maximumDate: DateTime.now(),
+                  onDateTimeChanged: (d) => selectedDate = d,
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 8,
+                ),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: CupertinoButton(
+                        onPressed: () => Navigator.pop(ctx, false),
+                        child: const Text('Отмена'),
+                      ),
+                    ),
+                    Expanded(
+                      child: CupertinoButton.filled(
+                        onPressed: () => Navigator.pop(ctx, true),
+                        child: const Text('Удалить'),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+
+    if (confirm != true) return;
+
+    // Tanlangan kunning oxirigacha (shu kun ham kiradi)
+    final cutoff = DateTime(
+      selectedDate.year,
+      selectedDate.month,
+      selectedDate.day,
+      23,
+      59,
+      59,
+    );
+
+    try {
+      final directory = await getApplicationDocumentsDirectory();
+      final videosDir = Directory('${directory.path}/videos');
+
+      int deleted = 0;
+      if (await videosDir.exists()) {
+        for (final entity in videosDir.listSync()) {
+          if (entity is File) {
+            final stat = await entity.stat();
+            if (!stat.modified.isAfter(cutoff)) {
+              await entity.delete();
+              deleted++;
+            }
+          }
+        }
+      }
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Удалено видео: $deleted'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Ошибка: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
   Future<void> _handleLogout() async {
     WsService().disconnect();
     await LogOutService().logOut();
@@ -305,11 +413,6 @@ class _AdminTaskUiState extends State<AdminTaskUi>
     _initTabController(categories.length);
 
     return Scaffold(
-      drawer: MyDrawer(
-        categories: categories,
-        user: _user,
-        onLogout: _handleLogout,
-      ),
       appBar: AppBar(
         title: Text(_user?.username ?? ""),
         actions: [
@@ -351,13 +454,55 @@ class _AdminTaskUiState extends State<AdminTaskUi>
               ),
             ),
           ),
+
+          // ── Menyu elementlari (drawer o'rniga) ─────────────────────────
+          IconButton(
+            onPressed: () => context.push(
+              TemplateTaskAdminUi(
+                name: _user?.username ?? "",
+                category: categories,
+              ),
+            ),
+            icon: const Icon(CupertinoIcons.list_bullet),
+            tooltip: 'Все задачи',
+          ),
+          IconButton(
+            onPressed: _clearVideoCache,
+            icon: const Icon(CupertinoIcons.trash),
+            tooltip: 'Очистить кэш видео',
+          ),
+          IconButton(
+            onPressed: () => context.push(ExcelReportPage(filials: categories)),
+            icon: const Icon(CupertinoIcons.doc_plaintext),
+            tooltip: 'Отчеты',
+          ),
+          IconButton(
+            onPressed: _handleLogout,
+            icon: const Icon(Icons.logout, color: Colors.red),
+            tooltip: 'Выйти',
+          ),
         ],
-        bottom: TabBar(
-          controller: _tabController,
-          padding: EdgeInsets.zero,
-          isScrollable: true,
-          tabAlignment: TabAlignment.start,
-          tabs: categories.map((c) => Tab(text: c.name)).toList(),
+        bottom: PreferredSize(
+          preferredSize: const Size.fromHeight(kTextTabBarHeight),
+          child: Row(
+            children: [
+              Expanded(
+                child: TabBar(
+                  controller: _tabController,
+                  padding: EdgeInsets.zero,
+                  isScrollable: true,
+                  tabAlignment: TabAlignment.start,
+                  tabs: categories.map((c) => Tab(text: c.name)).toList(),
+                ),
+              ),
+              IconButton(
+                onPressed: () =>
+                    context.push(UsersPage(filialModel: categories)),
+                icon: const Icon(Icons.groups, color: Colors.green),
+                tooltip: 'Все пользователи',
+              ),
+            ],
+          ),
         ),
       ),
       body: _buildBody(tasksProvider, categories, selectedDate),
