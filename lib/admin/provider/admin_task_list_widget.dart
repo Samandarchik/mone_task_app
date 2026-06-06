@@ -3,7 +3,7 @@ import 'package:mone_task_app/admin/provider/admin_task_item.dart';
 import 'package:mone_task_app/admin/provider/video_download_provider.dart';
 import 'package:mone_task_app/checker/model/checker_check_task_model.dart';
 import 'package:provider/provider.dart';
-import 'package:share_plus/share_plus.dart';
+import 'package:mone_task_app/core/utils/share_helper.dart';
 
 class AdminTaskListWidget extends StatefulWidget {
   final List<TaskModel> tasks;
@@ -75,7 +75,7 @@ class _AdminTaskListWidgetState extends State<AdminTaskListWidget> {
 
   void _shareTaskLink(TaskModel task) {
     final link = 'https://taskapi.monebakeryuz.uz/task/${task.date}/${task.taskId}';
-    Share.share('${task.task}\n$link', subject: task.task);
+    shareTaskLink(title: task.task, link: link);
   }
 
   @override

@@ -13,7 +13,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:provider/provider.dart';
 import 'package:record/record.dart';
 import 'package:media_kit_video/media_kit_video.dart' as mkv;
-import 'package:share_plus/share_plus.dart';
+import 'package:mone_task_app/core/utils/share_helper.dart';
 import 'package:video_player/video_player.dart';
 
 class CircleVideoPlayer extends StatelessWidget {
@@ -194,9 +194,9 @@ class _CircleVideoPlayerBodyState extends State<_CircleVideoPlayerBody>
         100,
       );
     }
-    Share.share(
-      '${task.task}\n$link',
-      subject: task.task,
+    shareTaskLink(
+      title: task.task,
+      link: link,
       sharePositionOrigin: sharePosition,
     );
   }

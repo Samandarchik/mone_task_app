@@ -7,7 +7,7 @@ import 'package:mone_task_app/checker/service/task_worker_service.dart';
 import 'package:mone_task_app/checker/ui/player2.dart';
 import 'package:mone_task_app/core/constants/urls.dart';
 import 'package:mone_task_app/utils/get_color.dart';
-import 'package:share_plus/share_plus.dart';
+import 'package:mone_task_app/core/utils/share_helper.dart';
 import 'package:dio/dio.dart';
 import 'package:path_provider/path_provider.dart';
 import 'dart:io';
@@ -180,7 +180,7 @@ class _TaskListWidgetState extends State<TaskListWidget> {
 
   void _shareTaskLink(TaskModel task) {
     final link = 'https://taskapi.monebakeryuz.uz/task/${task.date}/${task.taskId}';
-    Share.share('${task.task}\n$link', subject: task.task);
+    shareTaskLink(title: task.task, link: link);
   }
 
   String? _getVideoPath(String? videoUrl) {

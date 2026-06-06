@@ -57,7 +57,7 @@ dependencies:
   wakelock_plus: ^1.4.0
   record: ^6.2.0
   just_audio: ^0.10.5
-  flutter_sound: ^9.30.0
+  # flutter_sound: ^9.30.0  # Windows build'ni buzadi va kodda ishlatilmagan
   audioplayers: ^6.5.1
   # flutter_local_notifications: ^20.1.0
   provider: ^6.1.5+1
