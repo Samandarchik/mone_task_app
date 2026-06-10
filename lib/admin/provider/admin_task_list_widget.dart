@@ -75,7 +75,7 @@ class _AdminTaskListWidgetState extends State<AdminTaskListWidget> {
 
   void _shareTaskLink(TaskModel task) {
     final link = 'https://taskapi.monebakeryuz.uz/task/${task.date}/${task.taskId}';
-    shareTaskLink(title: task.task, link: link);
+    shareTaskLink(title: task.task, link: link, context: context);
   }
 
   @override

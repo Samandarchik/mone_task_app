@@ -34,9 +34,10 @@
 		</dict>
 	</array>
 
-	<!-- Flutter deep linking -->
+	<!-- Flutter'ning ichki deep link handler'i o'chirilgan: app_links plugin
+	     bilan to'qnashib, universal link'ni brauzerda ham ochib yuboradi -->
 	<key>FlutterDeepLinkingEnabled</key>
-	<true/>
+	<false/>
 
 	<!-- Bundle info -->
 	<key>CFBundleDevelopmentRegion</key>

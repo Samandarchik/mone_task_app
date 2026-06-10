@@ -180,7 +180,7 @@ class _TaskListWidgetState extends State<TaskListWidget> {
 
   void _shareTaskLink(TaskModel task) {
     final link = 'https://taskapi.monebakeryuz.uz/task/${task.date}/${task.taskId}';
-    shareTaskLink(title: task.task, link: link);
+    shareTaskLink(title: task.task, link: link, context: context);
   }
 
   String? _getVideoPath(String? videoUrl) {
@@ -421,7 +421,11 @@ class _TaskListItemState extends State<TaskListItem> {
                           },
                           icon:
                               task.videoUrl != null && task.videoUrl!.isNotEmpty
-                              ? const Icon(CupertinoIcons.share)
+                              ? Icon(
+                                  Platform.isWindows
+                                      ? CupertinoIcons.doc_on_doc
+                                      : CupertinoIcons.share,
+                                )
                               : const SizedBox(),
                         ),
                       ],

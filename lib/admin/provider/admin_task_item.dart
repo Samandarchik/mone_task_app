@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:mone_task_app/admin/provider/admin_tasks_provider.dart';
@@ -266,7 +268,9 @@ class _AdminTaskListItemState extends State<AdminTaskListItem>
     }
     return IconButton(
       onPressed: widget.onShareVideo,
-      icon: const Icon(CupertinoIcons.share),
+      icon: Icon(
+        Platform.isWindows ? CupertinoIcons.doc_on_doc : CupertinoIcons.share,
+      ),
     );
   }
 

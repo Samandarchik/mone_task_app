@@ -161,7 +161,7 @@ class _CircleVideoPlayerBodyState extends State<_CircleVideoPlayerBody>
   double get _bottomButtonRadius => _isTablet ? 40.0 : 16.0;
   double get _bottomIconSize => _isTablet ? 48.0 : 18.0;
 
-  // ── Share ─────────────────────────────────────────────────────────────────
+  // ── Share / copy link ─────────────────────────────────────────────────────
 
   final GlobalKey _shareButtonKey = GlobalKey();
 
@@ -171,7 +171,7 @@ class _CircleVideoPlayerBodyState extends State<_CircleVideoPlayerBody>
     TaskModel? task,
   ) {
     if (task == null) return;
-    if (provider.isPlaying) provider.togglePlayPause();
+    if (!Platform.isWindows && provider.isPlaying) provider.togglePlayPause();
 
     final link = 'https://taskapi.monebakeryuz.uz/task/${task.date}/${task.taskId}';
     final box =
@@ -198,6 +198,7 @@ class _CircleVideoPlayerBodyState extends State<_CircleVideoPlayerBody>
       title: task.task,
       link: link,
       sharePositionOrigin: sharePosition,
+      context: context,
     );
   }
 
@@ -600,7 +601,9 @@ class _CircleVideoPlayerBodyState extends State<_CircleVideoPlayerBody>
                     radius: _bottomButtonRadius,
                     backgroundColor: Colors.black54,
                     child: Icon(
-                      Icons.share_rounded,
+                      Platform.isWindows
+                          ? Icons.copy_rounded
+                          : Icons.share_rounded,
                       color: Colors.white,
                       size: _bottomIconSize,
                     ),

@@ -54,8 +54,9 @@ class _MyAppState extends State<MyApp> {
 
   Future<void> _initDeepLinks() async {
     // 1. Ilova yopiq holatda link orqali ochilganda
+    Uri? initialUri;
     try {
-      final initialUri = await _appLinks.getInitialLink();
+      initialUri = await _appLinks.getInitialLink();
       if (initialUri != null) {
         final data = parseDeepLink(initialUri);
         if (data != null) {
@@ -71,6 +72,12 @@ class _MyAppState extends State<MyApp> {
 
     // 2. Ilova ochiq holatda link bosilganda
     _linkSub = _appLinks.uriLinkStream.listen((uri) {
+      // uriLinkStream initial linkni ham qaytaradi — SplashScreen allaqachon
+      // ochgan bo'ladi, ikkinchi marta push qilmaymiz
+      if (initialUri != null && uri == initialUri) {
+        initialUri = null;
+        return;
+      }
       final data = parseDeepLink(uri);
       if (data == null) return;
 
