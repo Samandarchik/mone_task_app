@@ -1,6 +1,5 @@
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
-import 'package:mone_task_app/admin/provider/admin_task_ui.dart';
 import 'package:mone_task_app/checker/ui/player2.dart';
 import 'package:mone_task_app/core/constants/urls.dart';
 import 'package:mone_task_app/core/context_extension.dart';
@@ -8,7 +7,7 @@ import 'package:mone_task_app/core/data/local/token_storage.dart';
 import 'package:mone_task_app/core/di/di.dart';
 import 'package:mone_task_app/deep_link_service.dart';
 import 'package:mone_task_app/home/service/login_service.dart';
-import 'package:mone_task_app/worker/ui/task_worker_ui.dart';
+import 'package:mone_task_app/home/ui/role_home.dart';
 
 /// Deep link orqali kelganda ko'rinadigan sahifa.
 /// Login so'ramasdan to'g'ridan-to'g'ri video ko'rsatadi.
@@ -103,13 +102,7 @@ class _DeepLinkPageState extends State<DeepLinkPage> {
       context.pushAndRemove(LoginPage());
       return;
     }
-    if (user.role == 'super_admin' || user.role == 'checker') {
-      context.pushAndRemove(const AdminTaskUi());
-    } else if (user.role == 'worker') {
-      context.pushAndRemove(const TaskWorkerUi());
-    } else {
-      context.pushAndRemove(LoginPage());
-    }
+    context.pushAndRemove(landingForUser(user));
   }
 
   String _fullVideoUrl(String url) {

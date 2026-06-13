@@ -1,14 +1,13 @@
 import 'package:flutter/material.dart';
-import 'package:mone_task_app/admin/provider/admin_task_ui.dart';
 import 'package:mone_task_app/core/context_extension.dart';
 import 'package:mone_task_app/core/data/local/token_storage.dart';
 import 'package:mone_task_app/core/di/di.dart';
 import 'package:mone_task_app/features/deep_link/deep_link_page.dart';
 import 'package:mone_task_app/home/service/check_version.dart';
 import 'package:mone_task_app/home/service/login_service.dart';
+import 'package:mone_task_app/home/ui/role_home.dart';
 import 'package:mone_task_app/main.dart';
 import 'package:mone_task_app/worker/model/user_model.dart';
-import 'package:mone_task_app/worker/ui/task_worker_ui.dart';
 
 class SpleshScreen extends StatefulWidget {
   const SpleshScreen({super.key});
@@ -51,13 +50,7 @@ class SpleshScreenState extends State<SpleshScreen> {
       context.pushAndRemove(LoginPage());
       return;
     }
-    if (userModel?.role == "super_admin" || userModel?.role == "checker") {
-      context.pushAndRemove(AdminTaskUi());
-    } else if (userModel?.role == "worker") {
-      context.pushAndRemove(TaskWorkerUi());
-    } else {
-      context.pushAndRemove(LoginPage());
-    }
+    context.pushAndRemove(landingForUser(userModel!));
   }
 
   @override

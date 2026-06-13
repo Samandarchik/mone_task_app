@@ -2381,6 +2381,26 @@ func getFilials(w http.ResponseWriter, r *http.Request) {
 	db, _ := getMainDB()
 	defer db.Close()
 
+	role := r.Header.Get("Role")
+	userID := r.Header.Get("UserID")
+
+	// Foydalanuvchining JORIY ruxsatlarini DB dan o'qiymiz (tokendagi filialIds
+	// eskirgan bo'lishi mumkin — admin yangi filial bersa, shu yerda darhol
+	// aks etadi, qayta login kerak emas).
+	allowed := map[int]bool{}
+	restrict := false
+	if role != RoleSuperAdmin && userID != "" {
+		var filialIDsStr sql.NullString
+		if err := db.QueryRow("SELECT filial_ids FROM users WHERE id = ?", userID).Scan(&filialIDsStr); err == nil {
+			if filialIDsStr.Valid && filialIDsStr.String != "" {
+				for _, id := range parseFilialIDs(filialIDsStr.String) {
+					allowed[id] = true
+				}
+				restrict = true
+			}
+		}
+	}
+
 	rows, err := db.Query("SELECT id, name FROM filials")
 	if err != nil {
 		respondJSON(w, http.StatusInternalServerError, map[string]interface{}{
@@ -2395,7 +2415,11 @@ func getFilials(w http.ResponseWriter, r *http.Request) {
 	for rows.Next() {
 		var f Filial
 		rows.Scan(&f.ID, &f.Name)
-		filials = append(filials, f)
+		// super_admin yoki ruxsat ro'yxati bo'sh → barcha filiallar;
+		// aks holda faqat foydalanuvchiga biriktirilganlari.
+		if !restrict || allowed[f.ID] {
+			filials = append(filials, f)
+		}
 	}
 
 	respondJSON(w, http.StatusOK, map[string]interface{}{
@@ -3508,6 +3532,16 @@ func updateUser(w http.ResponseWriter, r *http.Request) {
 		})
 		return
 	}
+
+	// Real-time: foydalanuvchining ruxsatlari (filial/rol) o'zgardi — uning
+	// ilovasi shu hodisani eshitib filiallarni qaytadan yuklab oladi.
+	userIDInt, _ := strconv.Atoi(id)
+	hub.broadcast("user_updated", map[string]interface{}{
+		"action":    "permissions_changed",
+		"userId":    userIDInt,
+		"role":      req.Role,
+		"filialIds": req.FilialIDs,
+	})
 
 	respondJSON(w, http.StatusOK, map[string]interface{}{
 		"success": true,

@@ -9,7 +9,11 @@ import 'package:mone_task_app/checker/ui/player2.dart';
 import 'package:mone_task_app/admin/ui/audio_task_row.dart';
 import 'package:mone_task_app/core/constants/urls.dart';
 import 'package:mone_task_app/core/context_extension.dart';
+import 'package:mone_task_app/core/data/local/active_filial.dart';
 import 'package:mone_task_app/core/data/local/token_storage.dart';
+import 'package:mone_task_app/home/ui/filial_select_page.dart';
+import 'package:mone_task_app/home/ui/role_home.dart';
+import 'package:mone_task_app/shared/widgets/user_avatar.dart';
 import 'package:mone_task_app/core/di/di.dart';
 import 'package:mone_task_app/home/service/login_service.dart';
 import 'package:mone_task_app/worker/model/task_worker_model.dart';
@@ -55,6 +59,16 @@ class _TaskWorkerUiState extends State<TaskWorkerUi> {
     _wsSub = ws.onEvent.listen((event) {
       if (event['event'] == 'task_updated') {
         _fetchTasks(showLoading: false);
+      } else if (event['event'] == 'user_updated') {
+        final data = event['data'];
+        if (data is Map<String, dynamic>) {
+          final updated = applyUserUpdateEvent(data);
+          // Ruxsatlar o'zgardi — landing dan qayta yo'naltirib UI ni yangilaymiz
+          // (yangi filial paydo bo'lsa almashtirish, olib tashlansa qayta tanlash).
+          if (updated != null && mounted) {
+            context.pushAndRemove(landingForUser(updated));
+          }
+        }
       }
     });
   }
@@ -90,6 +104,25 @@ class _TaskWorkerUiState extends State<TaskWorkerUi> {
   }
 
   void _refresh() => _fetchTasks(showLoading: false);
+
+  /// Aktiv filial tanlangan bo'lsa — faqat o'sha filial tasklari ko'rinadi.
+  List<TaskModel> get _visibleTasks {
+    final fid = ActiveFilial.id;
+    if (fid == null) return _tasks;
+    return _tasks.where((t) => t.filialId == fid).toList();
+  }
+
+  bool get _canSwitchFilial => (user?.filialIds?.length ?? 0) > 1;
+
+  Future<void> _switchFilial() async {
+    final ids = user?.filialIds;
+    if (ids == null || ids.length <= 1) return;
+    context.push(FilialSelectPage(
+      role: user?.role ?? 'worker',
+      allowedIds: ids,
+      isSwitch: true,
+    ));
+  }
 
   bool get _isToday {
     final now = DateTime.now();
@@ -331,8 +364,48 @@ class _TaskWorkerUiState extends State<TaskWorkerUi> {
         ),
       ),
       appBar: AppBar(
-        title: Text(user?.username ?? ""),
+        titleSpacing: 0,
+        title: Row(
+          children: [
+            UserAvatar(user: user, radius: 18),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    user?.fullName ?? "",
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  if (ActiveFilial.name != null)
+                    Text(
+                      ActiveFilial.name!,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w500,
+                        color: Color(0xFF6B7280),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          ],
+        ),
         actions: [
+          if (_canSwitchFilial)
+            IconButton(
+              onPressed: _switchFilial,
+              icon: const Icon(Icons.swap_horiz),
+              tooltip: 'Сменить филиал',
+            ),
           GestureDetector(
             onTap: _pickDate,
             child: Padding(
@@ -358,14 +431,15 @@ class _TaskWorkerUiState extends State<TaskWorkerUi> {
       return const Center(child: CircularProgressIndicator.adaptive());
     if (_hasError) return Center(child: Text("Ошибка: $_errorMessage"));
 
+    final visible = _visibleTasks;
     return RefreshIndicator(
       onRefresh: () => _fetchTasks(showLoading: false),
-      child: _tasks.isEmpty
+      child: visible.isEmpty
           ? const Center(child: Text("Нет задач"))
           : ListView.builder(
-              itemCount: _tasks.length,
+              itemCount: visible.length,
               itemBuilder: (_, i) {
-                final task = _tasks[i];
+                final task = visible[i];
 
                 return InkWell(
                   onTap: task.videoUrl == null
@@ -519,6 +593,7 @@ class _TaskWorkerUiState extends State<TaskWorkerUi> {
     await LogOutService().logOut();
     tokenStorage.removeToken();
     tokenStorage.putUserData({});
+    await ActiveFilial.clear();
     if (mounted) context.pushAndRemove(LoginPage());
   }
 }

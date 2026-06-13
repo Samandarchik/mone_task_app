@@ -1,13 +1,13 @@
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
-import 'package:mone_task_app/admin/provider/admin_task_ui.dart';
 import 'package:mone_task_app/core/data/local/token_storage.dart';
 import 'package:mone_task_app/core/di/di.dart';
-import 'package:mone_task_app/worker/ui/task_worker_ui.dart';
 import 'package:mone_task_app/core/context_extension.dart';
 import 'package:mone_task_app/home/model/login_model.dart';
 import 'package:mone_task_app/home/service/api_service.dart';
+import 'package:mone_task_app/home/ui/role_home.dart';
+import 'package:mone_task_app/worker/model/user_model.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 class _SavedAccount {
@@ -107,12 +107,11 @@ class _LoginPageState extends State<LoginPage> {
         await _saveAccount(password, fullName);
 
         if (!mounted) return;
-        final role = result['user']['role'];
-        if (role == 'super_admin' || role == 'checker') {
-          context.pushAndRemove(AdminTaskUi());
-        } else {
-          context.pushAndRemove(TaskWorkerUi());
-        }
+        context.pushAndRemove(
+          landingForUser(UserModel.fromJson(
+            Map<String, dynamic>.from(result['user'] as Map),
+          )),
+        );
       } else {
         setState(() => _error = result['message'] ?? result['error'] ?? 'Неверный пароль');
       }

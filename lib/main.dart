@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:media_kit/media_kit.dart';
 import 'package:mone_task_app/admin/provider/admin_tasks_provider.dart';
 import 'package:mone_task_app/admin/provider/video_download_provider.dart';
+import 'package:mone_task_app/core/data/local/active_filial.dart';
 import 'package:mone_task_app/core/di/di.dart';
 import 'package:mone_task_app/deep_link_service.dart';
 import 'package:mone_task_app/features/deep_link/deep_link_page.dart';
@@ -19,6 +20,7 @@ Future<void> main() async {
     MediaKit.ensureInitialized();
   }
   await setupInit();
+  await ActiveFilial.load();
   runApp(const MyApp());
 }
 

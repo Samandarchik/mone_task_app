@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 import 'dart:ui';
 import 'package:flutter/cupertino.dart';
@@ -12,9 +13,13 @@ import 'package:mone_task_app/admin/ui/all_task_ui.dart';
 import 'package:mone_task_app/admin/ui/user_list_page.dart';
 import 'package:mone_task_app/checker/model/checker_check_task_model.dart';
 import 'package:mone_task_app/core/context_extension.dart';
+import 'package:mone_task_app/core/data/local/active_filial.dart';
 import 'package:mone_task_app/core/data/local/token_storage.dart';
 import 'package:mone_task_app/core/di/di.dart';
 import 'package:mone_task_app/home/service/login_service.dart';
+import 'package:mone_task_app/home/ui/filial_select_page.dart';
+import 'package:mone_task_app/home/ui/role_home.dart';
+import 'package:mone_task_app/shared/widgets/user_avatar.dart';
 import 'package:mone_task_app/core/network/ws_service.dart';
 import 'package:mone_task_app/worker/model/user_model.dart';
 import 'package:mone_task_app/worker/service/log_out.dart';
@@ -33,6 +38,7 @@ class _AdminTaskUiState extends State<AdminTaskUi>
   UserModel? _user;
   TabController? _tabController;
   int _lastCategoryLength = 0;
+  StreamSubscription? _wsSub;
 
   // _selectedDate ni providerdan olamiz, bu yerda saqlamaymiz
   DateTime get _selectedDate => context.read<AdminTasksProvider>().selectedDate;
@@ -46,10 +52,23 @@ class _AdminTaskUiState extends State<AdminTaskUi>
       final provider = context.read<AdminTasksProvider>();
       provider.init();
     });
+
+    // Ruxsat o'zgarishi (real-time) — joriy foydalanuvchiga tegishli bo'lsa
+    // landing dan qayta yo'naltiramiz (provider o'zi task_updated ni eshitadi).
+    _wsSub = WsService().onEvent.listen((event) {
+      if (event['event'] != 'user_updated') return;
+      final data = event['data'];
+      if (data is! Map<String, dynamic>) return;
+      final updated = applyUserUpdateEvent(data);
+      if (updated != null && mounted) {
+        context.pushAndRemove(landingForUser(updated));
+      }
+    });
   }
 
   @override
   void dispose() {
+    _wsSub?.cancel();
     _tabController?.dispose();
     super.dispose();
   }
@@ -343,11 +362,24 @@ class _AdminTaskUiState extends State<AdminTaskUi>
     }
   }
 
+  bool get _canSwitchFilial => (_user?.filialIds?.length ?? 0) > 1;
+
+  void _switchFilial() {
+    final ids = _user?.filialIds;
+    if (ids == null || ids.length <= 1) return;
+    context.push(FilialSelectPage(
+      role: _user?.role ?? 'checker',
+      allowedIds: ids,
+      isSwitch: true,
+    ));
+  }
+
   Future<void> _handleLogout() async {
     WsService().disconnect();
     await LogOutService().logOut();
     _tokenStorage.removeToken();
     _tokenStorage.putUserData({});
+    await ActiveFilial.clear();
     if (mounted) context.pushAndRemove(LoginPage());
   }
 
@@ -409,13 +441,40 @@ class _AdminTaskUiState extends State<AdminTaskUi>
       );
     }
 
-    final categories = tasksProvider.filials;
+    // Aktiv filial tanlangan bo'lsa — faqat o'sha filial tabi ko'rinadi.
+    // Aks holda (super_admin = barcha filiallar) hammasi ko'rinadi.
+    final allFilials = tasksProvider.filials;
+    final visible = ActiveFilial.id != null
+        ? allFilials.where((f) => f.filialId == ActiveFilial.id).toList()
+        : allFilials;
+    final categories = visible.isEmpty ? allFilials : visible;
     _initTabController(categories.length);
 
     return Scaffold(
       appBar: AppBar(
-        title: Text(_user?.username ?? ""),
+        titleSpacing: 8,
+        title: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            UserAvatar(user: _user, radius: 16),
+            const SizedBox(width: 8),
+            Flexible(
+              child: Text(
+                _user?.fullName ?? "",
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(fontWeight: FontWeight.w700),
+              ),
+            ),
+          ],
+        ),
         actions: [
+          if (_canSwitchFilial)
+            IconButton(
+              onPressed: _switchFilial,
+              icon: const Icon(Icons.swap_horiz),
+              tooltip: 'Сменить филиал',
+            ),
           _StatusFilterButton(
             status: 3,
             color: Colors.green,
