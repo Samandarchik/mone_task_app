@@ -237,6 +237,10 @@ const (
 	RoleSuperAdmin = "super_admin"
 	RoleChecker    = "checker"
 	RoleWorker     = "worker"
+
+	// AppVersion — har deployda oshiriladi. /api/version orqali tekshiriladi:
+	// serverda yangi kod ishga tushganini bir zumda bilish uchun.
+	AppVersion = "1.1.0-filial-filter"
 )
 
 type User struct {
@@ -311,6 +315,9 @@ func main() {
 	go startNotificationScheduler()
 
 	r := mux.NewRouter()
+
+	// Version — deploy tekshirish uchun (token kerak emas)
+	r.HandleFunc("/api/version", getVersion).Methods("GET")
 
 	// Auth
 	r.HandleFunc("/api/auth/register", register).Methods("POST")
@@ -2377,6 +2384,17 @@ func getNotifications(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+func getVersion(w http.ResponseWriter, r *http.Request) {
+	respondJSON(w, http.StatusOK, map[string]interface{}{
+		"success": true,
+		"version": AppVersion,
+		// Bu flag rost bo'lsa — getFilials foydalanuvchi ruxsatlari bo'yicha
+		// filtrlaydigan yangi kod ishlamoqda demakdir.
+		"filialFilter": true,
+		"time":         time.Now().Format(time.RFC3339),
+	})
+}
+
 func getFilials(w http.ResponseWriter, r *http.Request) {
 	db, _ := getMainDB()
 	defer db.Close()
@@ -2388,15 +2406,17 @@ func getFilials(w http.ResponseWriter, r *http.Request) {
 	// eskirgan bo'lishi mumkin — admin yangi filial bersa, shu yerda darhol
 	// aks etadi, qayta login kerak emas).
 	allowed := map[int]bool{}
-	restrict := false
-	if role != RoleSuperAdmin && userID != "" {
+	// super_admin'dan boshqa HAR QANDAY foydalanuvchi cheklanadi: faqat o'ziga
+	// biriktirilgan filiallarni ko'radi. Ruxsat ro'yxati bo'sh bo'lsa — hech
+	// qaysi filial ko'rinmaydi (avval bo'sh ro'yxat = barchasi edi, bu noto'g'ri).
+	restrict := role != RoleSuperAdmin
+	if restrict && userID != "" {
 		var filialIDsStr sql.NullString
 		if err := db.QueryRow("SELECT filial_ids FROM users WHERE id = ?", userID).Scan(&filialIDsStr); err == nil {
 			if filialIDsStr.Valid && filialIDsStr.String != "" {
 				for _, id := range parseFilialIDs(filialIDsStr.String) {
 					allowed[id] = true
 				}
-				restrict = true
 			}
 		}
 	}
@@ -2415,8 +2435,8 @@ func getFilials(w http.ResponseWriter, r *http.Request) {
 	for rows.Next() {
 		var f Filial
 		rows.Scan(&f.ID, &f.Name)
-		// super_admin yoki ruxsat ro'yxati bo'sh → barcha filiallar;
-		// aks holda faqat foydalanuvchiga biriktirilganlari.
+		// super_admin → barcha filiallar; aks holda faqat foydalanuvchiga
+		// biriktirilganlari (biriktirilmagan bo'lsa — hech narsa).
 		if !restrict || allowed[f.ID] {
 			filials = append(filials, f)
 		}
