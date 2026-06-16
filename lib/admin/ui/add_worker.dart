@@ -3,7 +3,6 @@ import 'package:dio/dio.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:mone_task_app/admin/model/category_model.dart';
 import 'package:mone_task_app/admin/model/filial_model.dart';
 import 'package:mone_task_app/admin/service/user_service.dart';
 import 'package:mone_task_app/checker/service/task_worker_service.dart';
@@ -24,9 +23,8 @@ class _AddWorkerPageState extends State<AddWorkerPage> {
   final _passwordController = TextEditingController();
   final _phoneController = TextEditingController();
 
-  String _selectedRole = 'worker';
+  final String _selectedRole = 'worker';
   final List<int> _selectedFilialIds = [];
-  final List<String> _selectedCategories = [];
   bool _isLoading = false;
   bool _obscurePassword = true;
 
@@ -38,7 +36,6 @@ class _AddWorkerPageState extends State<AddWorkerPage> {
 
   final UserService _userService = UserService();
   List<FilialModel>? _filials;
-  List<CategoryModel>? _categories;
   bool _isLoadingData = true;
 
   @override
@@ -49,13 +46,9 @@ class _AddWorkerPageState extends State<AddWorkerPage> {
 
   Future<void> _loadData() async {
     try {
-      final results = await Future.wait([
-        TaskViewService().fetchFilials(),
-        TaskViewService().fetchCategories(),
-      ]);
+      final filials = await TaskViewService().fetchFilials();
       setState(() {
-        _filials = results[0] as List<FilialModel>;
-        _categories = results[1] as List<CategoryModel>;
+        _filials = filials;
         _isLoadingData = false;
       });
     } catch (e) {
@@ -169,7 +162,6 @@ class _AddWorkerPageState extends State<AddWorkerPage> {
       password: _passwordController.text.trim(),
       role: _selectedRole,
       filialIds: _selectedFilialIds.isNotEmpty ? _selectedFilialIds : null,
-      categories: _selectedCategories.isNotEmpty ? _selectedCategories : null,
       phoneNumber: phone.isNotEmpty ? phone : null,
       profileJson: profileJson,
     );
@@ -270,10 +262,6 @@ class _AddWorkerPageState extends State<AddWorkerPage> {
                     // Filiallar
                     if (_selectedRole == 'worker' && _filials != null)
                       _buildFilialSection(),
-
-                    // Kategoriyalar
-                    if (_selectedRole == 'worker' && _categories != null)
-                      _buildCategorySection(),
                   ],
                 ),
               ),
@@ -493,30 +481,6 @@ class _AddWorkerPageState extends State<AddWorkerPage> {
                 },
               )),
         const SizedBox(height: 16),
-      ],
-    );
-  }
-
-  Widget _buildCategorySection() {
-    return Column(
-      children: [
-        const Center(
-          child: Text('Категории', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-        ),
-        const SizedBox(height: 8),
-        ..._categories!.map((category) => _buildSwitchRow(
-              title: category.name,
-              value: _selectedCategories.contains(category.name),
-              onChanged: (value) {
-                setState(() {
-                  if (value) {
-                    _selectedCategories.add(category.name);
-                  } else {
-                    _selectedCategories.remove(category.name);
-                  }
-                });
-              },
-            )),
       ],
     );
   }

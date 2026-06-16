@@ -362,7 +362,12 @@ class _AdminTaskUiState extends State<AdminTaskUi>
     }
   }
 
-  bool get _canSwitchFilial => (_user?.filialIds?.length ?? 0) > 1;
+  // super_admin va checker barcha filiallarni ko'radi — filial filtri yo'q.
+  bool get _seesAllFilials =>
+      _user?.role == 'super_admin' || _user?.role == 'checker';
+
+  bool get _canSwitchFilial =>
+      !_seesAllFilials && (_user?.filialIds?.length ?? 0) > 1;
 
   void _switchFilial() {
     final ids = _user?.filialIds;
@@ -441,10 +446,10 @@ class _AdminTaskUiState extends State<AdminTaskUi>
       );
     }
 
-    // Aktiv filial tanlangan bo'lsa — faqat o'sha filial tabi ko'rinadi.
-    // Aks holda (super_admin = barcha filiallar) hammasi ko'rinadi.
+    // super_admin va checker (Корректор) barcha filiallarni ko'radi.
+    // Aks holda aktiv filial tanlangan bo'lsa — faqat o'sha filial tabi ko'rinadi.
     final allFilials = tasksProvider.filials;
-    final visible = ActiveFilial.id != null
+    final visible = (!_seesAllFilials && ActiveFilial.id != null)
         ? allFilials.where((f) => f.filialId == ActiveFilial.id).toList()
         : allFilials;
     final categories = visible.isEmpty ? allFilials : visible;

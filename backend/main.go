@@ -2406,10 +2406,11 @@ func getFilials(w http.ResponseWriter, r *http.Request) {
 	// eskirgan bo'lishi mumkin — admin yangi filial bersa, shu yerda darhol
 	// aks etadi, qayta login kerak emas).
 	allowed := map[int]bool{}
-	// super_admin'dan boshqa HAR QANDAY foydalanuvchi cheklanadi: faqat o'ziga
-	// biriktirilgan filiallarni ko'radi. Ruxsat ro'yxati bo'sh bo'lsa — hech
-	// qaysi filial ko'rinmaydi (avval bo'sh ro'yxat = barchasi edi, bu noto'g'ri).
-	restrict := role != RoleSuperAdmin
+	// super_admin va checker (Korrektor) BARCHA filiallarni ko'radi. Boshqa har
+	// qanday foydalanuvchi cheklanadi: faqat o'ziga biriktirilgan filiallarni
+	// ko'radi. Ruxsat ro'yxati bo'sh bo'lsa — hech qaysi filial ko'rinmaydi
+	// (avval bo'sh ro'yxat = barchasi edi, bu noto'g'ri).
+	restrict := role != RoleSuperAdmin && role != RoleChecker
 	if restrict && userID != "" {
 		var filialIDsStr sql.NullString
 		if err := db.QueryRow("SELECT filial_ids FROM users WHERE id = ?", userID).Scan(&filialIDsStr); err == nil {
@@ -3512,11 +3513,13 @@ func updateUser(w http.ResponseWriter, r *http.Request) {
 	id := vars["id"]
 
 	var req struct {
-		Username   string   `json:"username"`
-		Password   string   `json:"password"`
-		Role       string   `json:"role"`
-		FilialIDs  []int    `json:"filialIds"`
-		Categories []string `json:"categories"`
+		Username    string   `json:"username"`
+		Password    string   `json:"password"`
+		Role        string   `json:"role"`
+		FilialIDs   []int    `json:"filialIds"`
+		Categories  []string `json:"categories"`
+		PhoneNumber string   `json:"phoneNumber"`
+		ProfileJSON string   `json:"profileJson"`
 	}
 
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -3551,6 +3554,15 @@ func updateUser(w http.ResponseWriter, r *http.Request) {
 			"error":   "Server xatosi",
 		})
 		return
+	}
+
+	// Rezumeni yangilash: faqat qiymat kelganda yozamiz, aks holda mavjud
+	// profile_json/phone_number o'chib ketmasligi uchun tegmaymiz.
+	if req.PhoneNumber != "" {
+		db.Exec("UPDATE users SET phone_number = ? WHERE id = ?", req.PhoneNumber, id)
+	}
+	if req.ProfileJSON != "" {
+		db.Exec("UPDATE users SET profile_json = ? WHERE id = ?", req.ProfileJSON, id)
 	}
 
 	// Real-time: foydalanuvchining ruxsatlari (filial/rol) o'zgardi — uning

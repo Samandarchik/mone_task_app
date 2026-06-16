@@ -1,5 +1,3 @@
-import 'dart:convert';
-
 import 'package:flutter/material.dart';
 import 'package:mone_task_app/core/data/local/token_storage.dart';
 import 'package:mone_task_app/core/di/di.dart';
@@ -8,16 +6,6 @@ import 'package:mone_task_app/home/model/login_model.dart';
 import 'package:mone_task_app/home/service/api_service.dart';
 import 'package:mone_task_app/home/ui/role_home.dart';
 import 'package:mone_task_app/worker/model/user_model.dart';
-import 'package:shared_preferences/shared_preferences.dart';
-
-class _SavedAccount {
-  final String password;
-  final String fullName;
-  _SavedAccount(this.password, this.fullName);
-  Map<String, dynamic> toJson() => {'password': password, 'full_name': fullName};
-  static _SavedAccount fromJson(Map<String, dynamic> j) =>
-      _SavedAccount((j['password'] ?? '') as String, (j['full_name'] ?? '') as String);
-}
 
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
@@ -33,56 +21,11 @@ class _LoginPageState extends State<LoginPage> {
   bool _loading = false;
   bool _obscure = true;
   String? _error;
-  List<_SavedAccount> _savedAccounts = [];
-  static const _accountsKey = 'saved_accounts_v2';
-
-  @override
-  void initState() {
-    super.initState();
-    _loadSavedAccounts();
-  }
 
   @override
   void dispose() {
     _passCtrl.dispose();
     super.dispose();
-  }
-
-  Future<void> _loadSavedAccounts() async {
-    final prefs = await SharedPreferences.getInstance();
-    final raw = prefs.getString(_accountsKey);
-    if (raw == null || raw.isEmpty) return;
-    try {
-      final list = (jsonDecode(raw) as List)
-          .whereType<Map<String, dynamic>>()
-          .map(_SavedAccount.fromJson)
-          .toList();
-      if (!mounted) return;
-      setState(() => _savedAccounts = list);
-    } catch (_) {}
-  }
-
-  Future<void> _saveAccount(String password, String fullName) async {
-    final list = _savedAccounts.where((a) => a.password != password).toList();
-    list.insert(0, _SavedAccount(password, fullName));
-    if (list.length > 10) list.removeRange(10, list.length);
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_accountsKey, jsonEncode(list.map((a) => a.toJson()).toList()));
-    if (!mounted) return;
-    setState(() => _savedAccounts = list);
-  }
-
-  Future<void> _removeAccount(String password) async {
-    final list = _savedAccounts.where((a) => a.password != password).toList();
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_accountsKey, jsonEncode(list.map((a) => a.toJson()).toList()));
-    if (!mounted) return;
-    setState(() => _savedAccounts = list);
-  }
-
-  void _pickAccount(_SavedAccount acc) {
-    _passCtrl.text = acc.password;
-    _login();
   }
 
   Future<void> _login() async {
@@ -102,9 +45,6 @@ class _LoginPageState extends State<LoginPage> {
       if (result['success'] == true && result['token'] != null) {
         await tokenStorage.putToken(result['token']);
         await tokenStorage.putUserData(result['user']);
-
-        final fullName = result['user']['username'] ?? '';
-        await _saveAccount(password, fullName);
 
         if (!mounted) return;
         context.pushAndRemove(
@@ -167,59 +107,6 @@ class _LoginPageState extends State<LoginPage> {
                       decoration: BoxDecoration(color: const Color(0xFFFEE2E2), borderRadius: BorderRadius.circular(12)),
                       child: Text(_error!, style: const TextStyle(color: Color(0xFF991B1B), fontSize: 13, fontWeight: FontWeight.w500)),
                     ),
-                    const SizedBox(height: 16),
-                  ],
-
-                  if (_savedAccounts.isNotEmpty) ...[
-                    Text(
-                      'Сохранённые аккаунты',
-                      style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: Colors.grey[500], letterSpacing: 0.5),
-                    ),
-                    const SizedBox(height: 8),
-                    ..._savedAccounts.map((a) => Padding(
-                      padding: const EdgeInsets.only(bottom: 8),
-                      child: InkWell(
-                        onTap: _loading ? null : () => _pickAccount(a),
-                        borderRadius: BorderRadius.circular(12),
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                          decoration: BoxDecoration(
-                            color: const Color(0xFFFAFAFA),
-                            borderRadius: BorderRadius.circular(12),
-                            border: Border.all(color: const Color(0xFFE5E7EB)),
-                          ),
-                          child: Row(
-                            children: [
-                              Container(
-                                width: 36, height: 36,
-                                decoration: const BoxDecoration(
-                                  shape: BoxShape.circle,
-                                  gradient: LinearGradient(colors: [Color(0xFF3699ff), Color(0xFF8b5cf6)]),
-                                ),
-                                alignment: Alignment.center,
-                                child: Text(
-                                  a.fullName.isEmpty ? '?' : a.fullName[0].toUpperCase(),
-                                  style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700),
-                                ),
-                              ),
-                              const SizedBox(width: 12),
-                              Expanded(
-                                child: Text(
-                                  a.fullName.isEmpty ? '••••••' : a.fullName,
-                                  style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14, color: Color(0xFF1A1A2E)),
-                                ),
-                              ),
-                              IconButton(
-                                icon: const Icon(Icons.close, size: 18, color: Color(0xFF9CA3AF)),
-                                onPressed: () => _removeAccount(a.password),
-                                padding: EdgeInsets.zero,
-                                constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                    )),
                     const SizedBox(height: 16),
                   ],
 

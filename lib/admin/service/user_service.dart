@@ -25,7 +25,8 @@ class UserService {
     required String role,
     String? password,
     List<int>? filialIds,
-    List<String>? categories,
+    String? phoneNumber,
+    String? profileJson,
   }) async {
     try {
       final Map<String, dynamic> data = {'username': username, 'role': role};
@@ -35,8 +36,11 @@ class UserService {
       if (filialIds != null && filialIds.isNotEmpty) {
         data['filialIds'] = filialIds;
       }
-      if (categories != null && categories.isNotEmpty) {
-        data['categories'] = categories;
+      if (phoneNumber != null && phoneNumber.isNotEmpty) {
+        data['phoneNumber'] = phoneNumber;
+      }
+      if (profileJson != null && profileJson.isNotEmpty) {
+        data['profileJson'] = profileJson;
       }
       final response = await _dio.put('${AppUrls.users}/$userId', data: data);
       return response.statusCode == 200;
@@ -84,7 +88,6 @@ class UserService {
     required String password,
     required String role,
     List<int>? filialIds,
-    List<String>? categories,
     String? notificationId,
     String? phoneNumber,
     String? profileJson,
@@ -98,9 +101,6 @@ class UserService {
       };
       if (filialIds != null && filialIds.isNotEmpty) {
         data['filialIds'] = filialIds;
-      }
-      if (categories != null && categories.isNotEmpty) {
-        data['categories'] = categories;
       }
       if (notificationId != null && notificationId.isNotEmpty) {
         data['notificationId'] = notificationId;

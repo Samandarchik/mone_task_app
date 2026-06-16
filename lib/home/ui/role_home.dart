@@ -17,13 +17,20 @@ Widget roleHome(String role) {
 
 /// Auth dan keyin ko'rsatiladigan birinchi ekran.
 ///
-/// - filialIds 2+ bo'lsa → filial tanlash ekrani.
-/// - 1 ta bo'lsa → o'sha filial aktiv qilinadi, to'g'ridan-to'g'ri asosiy ekran.
-/// - bo'sh/null bo'lsa (super_admin = barcha filiallar) → tanlovsiz asosiy ekran.
+/// - super_admin / checker → barcha filiallarni ko'radi, tanlov shart emas.
+/// - worker: filialIds 2+ bo'lsa → filial tanlash ekrani.
+/// - worker: 1 ta bo'lsa → o'sha filial aktiv qilinadi, to'g'ridan-to'g'ri asosiy ekran.
 Widget landingForUser(UserModel user) {
   final role = user.role;
   if (role != 'super_admin' && role != 'checker' && role != 'worker') {
     return const LoginPage();
+  }
+
+  // super_admin va checker (Корректор) barcha filiallarni ko'radi va
+  // tekshira oladi — filial tanlash shart emas.
+  if (role == 'super_admin' || role == 'checker') {
+    ActiveFilial.clear();
+    return roleHome(role);
   }
 
   final ids = user.filialIds ?? const <int>[];

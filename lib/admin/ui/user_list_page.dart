@@ -1,12 +1,15 @@
 import 'package:flutter/material.dart';
-import 'package:mone_task_app/admin/model/category_model.dart';
 import 'package:mone_task_app/admin/model/filial_model.dart';
 import 'package:mone_task_app/admin/ui/add_worker.dart';
-import 'package:mone_task_app/admin/ui/edit.dart';
+import 'package:mone_task_app/admin/ui/user_edit_dialog.dart';
 import 'package:mone_task_app/admin/service/user_service.dart';
 import 'package:mone_task_app/checker/service/task_worker_service.dart';
+import 'package:mone_task_app/core/context_extension.dart';
 import 'package:mone_task_app/core/data/local/token_storage.dart';
 import 'package:mone_task_app/core/di/di.dart';
+import 'package:mone_task_app/home/model/login_model.dart';
+import 'package:mone_task_app/home/service/api_service.dart';
+import 'package:mone_task_app/home/ui/role_home.dart';
 import 'package:mone_task_app/worker/model/user_model.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -21,7 +24,6 @@ class UsersPage extends StatefulWidget {
 class _UsersPageState extends State<UsersPage> {
   bool _loading = true;
   List<UserModel> _users = [];
-  List<CategoryModel> _categories = [];
   List<FilialModel> _filials = [];
   final UserService _userService = UserService();
   bool _profileView = false;
@@ -38,7 +40,6 @@ class _UsersPageState extends State<UsersPage> {
       final svc = TaskViewService();
       final results = await Future.wait([
         _userService.fetchUsers(),
-        svc.fetchCategories(),
         svc.fetchFilials(),
       ]);
       final users = results[0] as List<UserModel>;
@@ -46,8 +47,7 @@ class _UsersPageState extends State<UsersPage> {
       if (mounted) {
         setState(() {
           _users = users;
-          _categories = results[1] as List<CategoryModel>;
-          _filials = results[2] as List<FilialModel>;
+          _filials = results[1] as List<FilialModel>;
           _loading = false;
         });
       }
@@ -279,7 +279,6 @@ class _UsersPageState extends State<UsersPage> {
                       _thFlex('Имя', 2),
                       _th('Роль', 140),
                       _thFlex('Филиалы', 2),
-                      _thFlex('Категории', 2),
                     ],
                   ),
                 ),
@@ -370,7 +369,7 @@ class _UsersPageState extends State<UsersPage> {
     return ListView.separated(
       itemCount: _users.length,
       separatorBuilder: (_, __) => const Divider(height: 1),
-      itemBuilder: (_, i) => _row(_users[i]),
+      itemBuilder: (_, i) => _row(_users[i], i + 1),
     );
   }
 
@@ -388,19 +387,20 @@ class _UsersPageState extends State<UsersPage> {
     );
   }
 
-  Widget _row(UserModel u) {
+  Widget _row(UserModel u, int index) {
     final phone = u.phoneNumber ?? u.login;
     final imgUrl = u.photoUrl ?? '';
 
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
+      onTap: () => _showEditDialog(u),
       onLongPress: () => _deleteUser(u.userId),
-      onDoubleTap: () => _showUserInfo(u),
+      onDoubleTap: () => _loginAsUser(u),
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
         child: Row(
           children: [
-            SizedBox(width: 36, child: Text('${u.userId}', style: TextStyle(fontSize: 13, color: Colors.grey[500]))),
+            SizedBox(width: 36, child: Text('$index', style: TextStyle(fontSize: 13, color: Colors.grey[500]))),
             SizedBox(
               width: 60,
               child: GestureDetector(
@@ -432,7 +432,7 @@ class _UsersPageState extends State<UsersPage> {
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   GestureDetector(
-                    onTap: () => _showUserInfo(u),
+                    onTap: () => _showEditDialog(u),
                     child: Text(
                       u.fullName.isNotEmpty ? u.fullName : '—',
                       style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 15, color: Color(0xFF111827)),
@@ -477,7 +477,6 @@ class _UsersPageState extends State<UsersPage> {
             ),
             SizedBox(width: 140, child: Align(alignment: Alignment.centerLeft, child: _roleSelector(u))),
             Expanded(flex: 2, child: _filialSelector(u)),
-            Expanded(flex: 2, child: _categoriesSelector(u)),
             // Bitta foydalanuvchiga login ma'lumotlarini Telegram orqali yuborish.
             if (u.role != 'super_admin' &&
                 sl<TokenStorage>().getUserData()?.role == 'super_admin')
@@ -563,7 +562,7 @@ class _UsersPageState extends State<UsersPage> {
 
   Future<void> _changeRole(UserModel u, String next) async {
     if (next == u.role) return;
-    final success = await _userService.updateUser(userId: u.userId, username: u.username, role: next, categories: u.categories, filialIds: u.filialIds);
+    final success = await _userService.updateUser(userId: u.userId, username: u.username, role: next, filialIds: u.filialIds);
     if (!mounted) return;
     if (success) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Обновлено'), backgroundColor: Colors.green));
@@ -574,7 +573,9 @@ class _UsersPageState extends State<UsersPage> {
   // ── Filial selector ────────────────────────────────────────────────────
 
   Widget _filialSelector(UserModel u) {
-    if (u.role == 'super_admin') {
+    // super_admin va checker (Корректор) barcha filiallarni ko'radi —
+    // filial tanlash kerak emas.
+    if (u.role == 'super_admin' || u.role == 'checker') {
       return Text('—', style: TextStyle(fontSize: 12, color: Colors.grey[600]));
     }
     final ids = u.filialIds ?? [];
@@ -695,131 +696,7 @@ class _UsersPageState extends State<UsersPage> {
     );
 
     if (selected.length == initial.length && selected.containsAll(initial)) return;
-    final success = await _userService.updateUser(userId: u.userId, username: u.username, role: u.role, categories: u.categories, filialIds: selected.toList());
-    if (!mounted) return;
-    if (success) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Обновлено'), backgroundColor: Colors.green));
-      _load();
-    }
-  }
-
-  // ── Categories selector ────────────────────────────────────────────────
-
-  Widget _categoriesSelector(UserModel u) {
-    if (u.role == 'super_admin') {
-      return Text('—', style: TextStyle(fontSize: 12, color: Colors.grey[600]));
-    }
-    final cats = u.categories ?? [];
-    final btnKey = GlobalKey();
-    final isEmpty = cats.isEmpty;
-    return GestureDetector(
-      onTap: () => _openCategoryMenu(u, btnKey),
-      child: Container(
-        key: btnKey,
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
-        decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(10), border: Border.all(color: const Color(0xFFE5E7EB))),
-        child: Row(
-          children: [
-            if (!isEmpty) ...[
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
-                decoration: BoxDecoration(color: const Color(0xFF2563EB), borderRadius: BorderRadius.circular(20)),
-                child: Text('${cats.length}', style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w700)),
-              ),
-              const SizedBox(width: 8),
-            ],
-            Expanded(
-              child: Text(
-                isEmpty ? 'Выбрать категории' : cats.join(' · '),
-                style: TextStyle(fontSize: 12, color: isEmpty ? Colors.grey[500] : const Color(0xFF374151), fontWeight: isEmpty ? FontWeight.w500 : FontWeight.w600),
-                overflow: TextOverflow.ellipsis,
-                maxLines: 1,
-              ),
-            ),
-            const SizedBox(width: 4),
-            Container(
-              padding: const EdgeInsets.all(2),
-              decoration: BoxDecoration(color: const Color(0xFFF3F4F6), borderRadius: BorderRadius.circular(6)),
-              child: const Icon(Icons.unfold_more_rounded, size: 14, color: Color(0xFF6B7280)),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Future<void> _openCategoryMenu(UserModel u, GlobalKey anchorKey) async {
-    final selected = Set<String>.from(u.categories ?? []);
-    final initial = Set<String>.from(selected);
-
-    final box = anchorKey.currentContext?.findRenderObject() as RenderBox?;
-    final overlay = Overlay.of(context).context.findRenderObject() as RenderBox?;
-    if (box == null || overlay == null) return;
-    final topLeft = box.localToGlobal(Offset(0, box.size.height + 4), ancestor: overlay);
-    final bottomRight = box.localToGlobal(box.size.bottomRight(Offset.zero), ancestor: overlay);
-    final position = RelativeRect.fromLTRB(topLeft.dx, topLeft.dy, overlay.size.width - bottomRight.dx, 0);
-
-    await showMenu<void>(
-      context: context,
-      position: position,
-      color: Colors.white,
-      surfaceTintColor: Colors.white,
-      constraints: const BoxConstraints(minWidth: 280, maxWidth: 360, maxHeight: 420),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12), side: const BorderSide(color: Color(0xFFE5E7EB))),
-      items: [
-        PopupMenuItem<void>(
-          enabled: false,
-          padding: EdgeInsets.zero,
-          child: StatefulBuilder(
-            builder: (ctx, setS) {
-              if (_categories.isEmpty) {
-                return Padding(padding: const EdgeInsets.all(16), child: Text('Категорий нет', style: TextStyle(color: Colors.grey[600])));
-              }
-              return ConstrainedBox(
-                constraints: const BoxConstraints(maxHeight: 380),
-                child: SingleChildScrollView(
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: _categories.map((c) {
-                      final sel = selected.contains(c.name);
-                      return InkWell(
-                        onTap: () => setS(() { sel ? selected.remove(c.name) : selected.add(c.name); }),
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                          color: sel ? const Color(0xFFEFF6FF) : Colors.white,
-                          child: Row(
-                            children: [
-                              AnimatedContainer(
-                                duration: const Duration(milliseconds: 120),
-                                width: 20, height: 20,
-                                decoration: BoxDecoration(
-                                  color: sel ? const Color(0xFF2563EB) : Colors.white,
-                                  border: Border.all(color: sel ? const Color(0xFF2563EB) : const Color(0xFFD1D5DB), width: 1.6),
-                                  borderRadius: BorderRadius.circular(6),
-                                ),
-                                alignment: Alignment.center,
-                                child: sel ? const Icon(Icons.check_rounded, size: 14, color: Colors.white) : null,
-                              ),
-                              const SizedBox(width: 12),
-                              Expanded(
-                                child: Text(c.name, style: TextStyle(fontSize: 13, fontWeight: sel ? FontWeight.w600 : FontWeight.w500, color: sel ? const Color(0xFF1E40AF) : const Color(0xFF111827))),
-                              ),
-                            ],
-                          ),
-                        ),
-                      );
-                    }).toList(),
-                  ),
-                ),
-              );
-            },
-          ),
-        ),
-      ],
-    );
-
-    if (selected.length == initial.length && selected.containsAll(initial)) return;
-    final success = await _userService.updateUser(userId: u.userId, username: u.username, role: u.role, categories: selected.toList(), filialIds: u.filialIds);
+    final success = await _userService.updateUser(userId: u.userId, username: u.username, role: u.role, filialIds: selected.toList());
     if (!mounted) return;
     if (success) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Обновлено'), backgroundColor: Colors.green));
@@ -846,8 +723,6 @@ class _UsersPageState extends State<UsersPage> {
   }
 
   Widget _profileCard(UserModel u, {required bool isWide}) {
-    final cats = u.categories;
-
     final cardContent = Padding(
       padding: const EdgeInsets.fromLTRB(14, 14, 14, 6),
       child: Row(
@@ -861,10 +736,6 @@ class _UsersPageState extends State<UsersPage> {
               children: isWide ? _userFullFields(u) : _userShortFields(u),
             ),
           ),
-          if (isWide) ...[
-            const SizedBox(width: 14),
-            _categoriesColumn(u, cats),
-          ],
         ],
       ),
     );
@@ -880,12 +751,11 @@ class _UsersPageState extends State<UsersPage> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           GestureDetector(
-            onTap: () => _showUserInfo(u),
+            onTap: () => _showEditDialog(u),
             onLongPress: () => _deleteUser(u.userId),
-            onDoubleTap: () => _showUserInfo(u),
+            onDoubleTap: () => _loginAsUser(u),
             child: cardContent,
           ),
-          if (!isWide) _phoneCategoriesPanel(u, cats),
           const SizedBox(height: 4),
         ],
       ),
@@ -1021,244 +891,48 @@ class _UsersPageState extends State<UsersPage> {
     );
   }
 
-  // ── Kategoriyalar ustuni (profil, keng layout) ─────────────────────────
+  // ── Tahrirlash dialogi (bitta tap) ─────────────────────────────────────
 
-  Widget _categoriesColumn(UserModel u, List<String>? cats) {
-    final isSuper = u.role == 'super_admin';
-    final catList = cats ?? [];
-    return Container(
-      width: 220,
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(color: const Color(0xFFF9FAFB), borderRadius: BorderRadius.circular(12), border: Border.all(color: Colors.grey.shade200)),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Row(children: [
-            const Text('Категории', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700)),
-            const Spacer(),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-              decoration: BoxDecoration(
-                color: isSuper ? const Color(0xFFFEF3C7) : (catList.isEmpty ? const Color(0xFFFEE2E2) : const Color(0xFFDCFCE7)),
-                borderRadius: BorderRadius.circular(20),
-              ),
-              child: Text(isSuper ? '∞' : '${catList.length}', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: isSuper ? const Color(0xFF92400E) : (catList.isEmpty ? const Color(0xFF991B1B) : const Color(0xFF166534)))),
-            ),
-          ]),
-          const SizedBox(height: 10),
-          if (isSuper)
-            Container(
-              width: double.infinity, padding: const EdgeInsets.symmetric(vertical: 18), alignment: Alignment.center,
-              decoration: BoxDecoration(color: const Color(0xFFFFFBEB), borderRadius: BorderRadius.circular(10), border: Border.all(color: const Color(0xFFFDE68A))),
-              child: const Column(mainAxisSize: MainAxisSize.min, children: [
-                Icon(Icons.admin_panel_settings_rounded, size: 26, color: Color(0xFF92400E)),
-                SizedBox(height: 6),
-                Text('Видит все категории', style: TextStyle(fontSize: 12, color: Color(0xFF92400E), fontWeight: FontWeight.w600)),
-              ]),
-            )
-          else if (catList.isEmpty)
-            Container(
-              width: double.infinity, padding: const EdgeInsets.symmetric(vertical: 18), alignment: Alignment.center,
-              decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(10), border: Border.all(color: Colors.grey.shade200)),
-              child: Column(mainAxisSize: MainAxisSize.min, children: [
-                Icon(Icons.layers_clear_rounded, size: 26, color: Colors.grey[400]),
-                const SizedBox(height: 6),
-                Text('Нет категорий', style: TextStyle(fontSize: 12, color: Colors.grey[500], fontWeight: FontWeight.w500)),
-              ]),
-            )
-          else
-            ...catList.map((c) => Container(
-              margin: const EdgeInsets.only(bottom: 8), padding: const EdgeInsets.all(10),
-              decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(10), border: Border.all(color: Colors.grey.shade200)),
-              child: Row(children: [
-                const Icon(Icons.label_rounded, size: 14, color: Color(0xFF3699ff)),
-                const SizedBox(width: 8),
-                Expanded(child: Text(c, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Color(0xFF1F2937)), overflow: TextOverflow.ellipsis)),
-              ]),
-            )),
-        ],
-      ),
+  Future<void> _showEditDialog(UserModel u) async {
+    final saved = await UserEditDialog.show(
+      context,
+      user: u,
+      filials: _filials,
     );
+    if (saved == true) _load();
   }
 
-  // ── Kategoriyalar paneli (profil, tor layout) ──────────────────────────
+  // ── O'sha foydalanuvchi paroli bilan kirish (ikki marta bosilganda) ────
 
-  Widget _phoneCategoriesPanel(UserModel u, List<String>? cats) {
-    final isSuper = u.role == 'super_admin';
-    final catList = cats ?? [];
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(14, 6, 14, 6),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-        decoration: BoxDecoration(color: const Color(0xFFF9FAFB), borderRadius: BorderRadius.circular(10), border: Border.all(color: const Color(0xFFE5E7EB))),
-        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Row(children: [
-            const Icon(Icons.visibility_rounded, size: 14, color: Color(0xFF6B7280)),
-            const SizedBox(width: 6),
-            Text('Категории', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: Colors.grey[700], letterSpacing: 0.3)),
-            const Spacer(),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
-              decoration: BoxDecoration(color: isSuper ? const Color(0xFF92400E) : const Color(0xFF2563EB), borderRadius: BorderRadius.circular(20)),
-              child: Text(isSuper ? '∞' : '${catList.length}', style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.w700)),
-            ),
-          ]),
-          const SizedBox(height: 8),
-          if (isSuper)
-            const Text('Видит все', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Color(0xFF92400E)))
-          else if (catList.isEmpty)
-            Text('Нет', style: TextStyle(fontSize: 12, color: Colors.grey[500]))
-          else
-            Wrap(
-              spacing: 6, runSpacing: 6,
-              children: catList.map((c) => Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                decoration: BoxDecoration(color: const Color(0xFFEFF6FF), borderRadius: BorderRadius.circular(20), border: Border.all(color: const Color(0xFFBFDBFE))),
-                child: Text(c, style: const TextStyle(fontSize: 11, color: Color(0xFF1E40AF), fontWeight: FontWeight.w600)),
-              )).toList(),
-            ),
-        ]),
-      ),
-    );
-  }
+  Future<void> _loginAsUser(UserModel u) async {
+    if (u.password.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('У пользователя нет пароля')),
+      );
+      return;
+    }
 
-  // ── User info dialog ───────────────────────────────────────────────────
+    final messenger = ScaffoldMessenger.of(context);
+    final result =
+        await ApiService().login(LoginModel(password: u.password));
+    if (!mounted) return;
 
-  void _showUserInfo(UserModel u) {
-    final phone = u.phoneNumber ?? u.login;
-    final cats = u.categories;
-    final pos = u.position;
-    final tg = u.telegram;
-    final imgUrl = u.photoUrl ?? '';
-
-    showDialog(
-      context: context,
-      builder: (ctx) => Dialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 560, maxHeight: 720),
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(24, 20, 16, 20),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(children: [
-                  GestureDetector(
-                    onTap: imgUrl.isNotEmpty ? () { Navigator.pop(ctx); _showAvatarPreview(imgUrl, u.fullName); } : null,
-                    child: Container(
-                      width: 88, height: 88,
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle, color: const Color(0xFFE0E7FF),
-                        border: Border.all(color: const Color(0xFFE5E7EB), width: 1),
-                        image: imgUrl.isNotEmpty ? DecorationImage(image: NetworkImage(imgUrl), fit: BoxFit.cover, onError: (_, __) {}) : null,
-                      ),
-                      alignment: Alignment.center,
-                      child: imgUrl.isEmpty ? Text(u.fullName.trim().isNotEmpty ? u.fullName.trim()[0].toUpperCase() : '?', style: const TextStyle(fontSize: 32, fontWeight: FontWeight.w700, color: Color(0xFF3730A3))) : null,
-                    ),
-                  ),
-                  const SizedBox(width: 16),
-                  Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                    Text(u.fullName.isNotEmpty ? u.fullName : '—', style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 20, color: Color(0xFF111827))),
-                    const SizedBox(height: 6),
-                    _roleBadge(u.role),
-                  ])),
-                  IconButton(icon: const Icon(Icons.close_rounded), onPressed: () => Navigator.pop(ctx)),
-                ]),
-                const SizedBox(height: 16),
-                Flexible(
-                  child: SingleChildScrollView(
-                    padding: const EdgeInsets.only(right: 8),
-                    child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                      if (sl<TokenStorage>().getUserData()?.role == 'super_admin') ...[
-                        SizedBox(
-                          width: double.infinity,
-                          child: FilledButton.icon(
-                            onPressed: () {
-                              Navigator.pop(ctx);
-                              _sendCredentials(u);
-                            },
-                            icon: const Icon(Icons.send_rounded, size: 18),
-                            label: const Text('Отправить логин в Telegram'),
-                          ),
-                        ),
-                        const SizedBox(height: 12),
-                      ],
-                      if (phone.isNotEmpty) _infoRow('Телефон', phone, onTap: () => _callPhone(phone), valueColor: const Color(0xFF2563EB)),
-                      _infoRow('Логин', u.login),
-                      if (u.password.isNotEmpty) _infoRow('Пароль', u.password),
-                      if (pos != null && pos.isNotEmpty) _infoRow('Должность', pos),
-                      if (tg != null && tg.isNotEmpty) _infoRow('Telegram', '@$tg', onTap: () => _openTelegram(tg), valueColor: const Color(0xFF3699ff)),
-                      if (u.filialIds != null && u.filialIds!.isNotEmpty)
-                        _infoRow('Филиалы', u.filialIds!.map((id) {
-                          final f = _filials.where((f) => f.filialId == id);
-                          return f.isNotEmpty ? f.first.name : '#$id';
-                        }).join(', ')),
-                      const SizedBox(height: 8),
-                      _sectionLabel('Категории'),
-                      const SizedBox(height: 6),
-                      if (u.role == 'super_admin')
-                        Container(
-                          width: double.infinity, padding: const EdgeInsets.symmetric(vertical: 14), alignment: Alignment.center,
-                          decoration: BoxDecoration(color: const Color(0xFFFFFBEB), borderRadius: BorderRadius.circular(10), border: Border.all(color: const Color(0xFFFDE68A))),
-                          child: const Column(mainAxisSize: MainAxisSize.min, children: [
-                            Icon(Icons.admin_panel_settings_rounded, size: 26, color: Color(0xFF92400E)),
-                            SizedBox(height: 6),
-                            Text('Видит все категории', style: TextStyle(fontSize: 12, color: Color(0xFF92400E), fontWeight: FontWeight.w600)),
-                          ]),
-                        )
-                      else if (cats == null || cats.isEmpty)
-                        Text('—', style: TextStyle(fontSize: 13, color: Colors.grey[600]))
-                      else
-                        Wrap(
-                          spacing: 6, runSpacing: 6,
-                          children: cats.map((c) => Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                            decoration: BoxDecoration(color: const Color(0xFFF3F4F6), borderRadius: BorderRadius.circular(20)),
-                            child: Text(c, style: const TextStyle(fontSize: 12, color: Color(0xFF374151))),
-                          )).toList(),
-                        ),
-                      const SizedBox(height: 16),
-                      Row(children: [
-                        Expanded(child: OutlinedButton.icon(
-                          onPressed: () {
-                            Navigator.pop(ctx);
-                            Navigator.push(context, MaterialPageRoute(builder: (_) => EditUserPage(user: u, category: widget.filialModel))).then((result) { if (result == true) _load(); });
-                          },
-                          icon: const Icon(Icons.edit_rounded, size: 16),
-                          label: const Text('Редактировать'),
-                        )),
-                        const SizedBox(width: 8),
-                        OutlinedButton.icon(
-                          onPressed: () { Navigator.pop(ctx); _deleteUser(u.userId); },
-                          icon: const Icon(Icons.delete_rounded, size: 16, color: Colors.red),
-                          label: const Text('Удалить', style: TextStyle(color: Colors.red)),
-                          style: OutlinedButton.styleFrom(side: const BorderSide(color: Colors.red)),
-                        ),
-                      ]),
-                    ]),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _sectionLabel(String text) => Text(text, style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: Colors.grey[600], letterSpacing: 0.4));
-
-  Widget _infoRow(String label, String value, {VoidCallback? onTap, Color? valueColor}) {
-    final text = Text(value, style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: valueColor ?? const Color(0xFF111827), decoration: onTap != null ? TextDecoration.underline : null, decorationColor: valueColor));
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 6),
-      child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        SizedBox(width: 110, child: Text(label, style: TextStyle(fontSize: 13, color: Colors.grey[600]))),
-        Expanded(child: onTap != null ? GestureDetector(onTap: onTap, child: text) : text),
-      ]),
-    );
+    if (result['success'] == true && result['token'] != null) {
+      final ts = sl<TokenStorage>();
+      await ts.putToken(result['token']);
+      await ts.putUserData(Map<String, dynamic>.from(result['user'] as Map));
+      if (!mounted) return;
+      context.pushAndRemove(
+        landingForUser(UserModel.fromJson(
+          Map<String, dynamic>.from(result['user'] as Map),
+        )),
+      );
+    } else {
+      messenger.showSnackBar(SnackBar(
+        content: Text(
+            result['message']?.toString() ?? result['error']?.toString() ?? 'Не удалось войти'),
+      ));
+    }
   }
 
   // ── Shared widgets ─────────────────────────────────────────────────────
