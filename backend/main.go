@@ -3349,6 +3349,15 @@ func colName(n int) string {
 }
 
 func getUsers(w http.ResponseWriter, r *http.Request) {
+	// checker (Korrektor) foydalanuvchilar ro'yxatini ko'ra olmaydi.
+	if r.Header.Get("Role") == RoleChecker {
+		respondJSON(w, http.StatusForbidden, map[string]interface{}{
+			"success": false,
+			"error":   "Ruxsat yo'q",
+		})
+		return
+	}
+
 	role := r.URL.Query().Get("role")
 	filialID := r.URL.Query().Get("filialId")
 

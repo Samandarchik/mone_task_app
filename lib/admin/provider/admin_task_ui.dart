@@ -559,12 +559,14 @@ class _AdminTaskUiState extends State<AdminTaskUi>
                   tabs: categories.map((c) => Tab(text: c.name)).toList(),
                 ),
               ),
-              IconButton(
-                onPressed: () =>
-                    context.push(UsersPage(filialModel: categories)),
-                icon: const Icon(Icons.groups, color: Colors.green),
-                tooltip: 'Все пользователи',
-              ),
+              // checker (Корректор) foydalanuvchilar ro'yxatini ko'ra olmaydi.
+              if (_user?.role != 'checker')
+                IconButton(
+                  onPressed: () =>
+                      context.push(UsersPage(filialModel: categories)),
+                  icon: const Icon(Icons.groups, color: Colors.green),
+                  tooltip: 'Все пользователи',
+                ),
             ],
           ),
         ),
