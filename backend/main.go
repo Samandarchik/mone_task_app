@@ -951,7 +951,7 @@ func getTasks(w http.ResponseWriter, r *http.Request) {
 			filialIDs = parseFilialIDs(filialIDsStr.String)
 		}
 
-		if len(filialIDs) == 0 || len(categories) == 0 {
+		if len(filialIDs) == 0 {
 			respondJSON(w, http.StatusOK, map[string]interface{}{
 				"success": true,
 				"data":    []Task{},
@@ -960,24 +960,34 @@ func getTasks(w http.ResponseWriter, r *http.Request) {
 		}
 
 		filialPlaceholders := make([]string, len(filialIDs))
-		categoryPlaceholders := make([]string, len(categories))
-
 		for i, id := range filialIDs {
 			filialPlaceholders[i] = "?"
 			args = append(args, id)
 		}
 
-		for i, cat := range categories {
-			categoryPlaceholders[i] = "?"
-			args = append(args, cat)
-		}
+		if len(categories) == 0 {
+			// Filialga ruxsat berilgan, lekin kategoriya tanlanmagan —
+			// shu holatda foydalanuvchi filialdagi barcha vazifalarni ko'radi.
+			query = fmt.Sprintf(`
+				SELECT id, filial_id, worker_ids, task, type, status, video_url, checker_audio_url, submitted_at, submitted_by, days, category, notification_time, order_index
+				FROM tasks
+				WHERE filial_id IN (%s)
+				ORDER BY order_index ASC
+			`, strings.Join(filialPlaceholders, ","))
+		} else {
+			categoryPlaceholders := make([]string, len(categories))
+			for i, cat := range categories {
+				categoryPlaceholders[i] = "?"
+				args = append(args, cat)
+			}
 
-		query = fmt.Sprintf(`
-			SELECT id, filial_id, worker_ids, task, type, status, video_url, checker_audio_url, submitted_at, submitted_by, days, category, notification_time, order_index 
-			FROM tasks 
-			WHERE filial_id IN (%s) AND (category = '' OR category IN (%s))
-			ORDER BY order_index ASC
-		`, strings.Join(filialPlaceholders, ","), strings.Join(categoryPlaceholders, ","))
+			query = fmt.Sprintf(`
+				SELECT id, filial_id, worker_ids, task, type, status, video_url, checker_audio_url, submitted_at, submitted_by, days, category, notification_time, order_index
+				FROM tasks
+				WHERE filial_id IN (%s) AND (category = '' OR category IN (%s))
+				ORDER BY order_index ASC
+			`, strings.Join(filialPlaceholders, ","), strings.Join(categoryPlaceholders, ","))
+		}
 	} else {
 		query = "SELECT id, filial_id, worker_ids, task, type, status, video_url, checker_audio_url, submitted_at, submitted_by, days, category, notification_time, order_index FROM tasks ORDER BY order_index ASC"
 	}
