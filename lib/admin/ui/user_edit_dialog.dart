@@ -2,7 +2,9 @@ import 'dart:convert';
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:mone_task_app/admin/model/category_model.dart';
 import 'package:mone_task_app/admin/model/filial_model.dart';
+import 'package:mone_task_app/admin/service/task_worker_service.dart';
 import 'package:mone_task_app/admin/service/user_service.dart';
 import 'package:mone_task_app/worker/model/user_model.dart';
 
@@ -47,6 +49,9 @@ class _UserEditDialogState extends State<UserEditDialog> {
   late final TextEditingController _passwordController;
   late String _selectedRole;
   late List<int> _selectedFilialIds;
+  late List<String> _selectedCategories;
+
+  List<CategoryModel> _categories = [];
 
   Map<String, dynamic>? _rezume;
   bool _replacingRezume = false;
@@ -63,7 +68,16 @@ class _UserEditDialogState extends State<UserEditDialog> {
     _passwordController = TextEditingController(text: widget.user.password);
     _selectedRole = widget.user.role;
     _selectedFilialIds = List<int>.from(widget.user.filialIds ?? const []);
+    _selectedCategories = List<String>.from(widget.user.categories ?? const []);
     _rezume = widget.user.profile;
+    _loadCategories();
+  }
+
+  Future<void> _loadCategories() async {
+    try {
+      final categories = await TemplateService().fetchCategoriesList();
+      if (mounted) setState(() => _categories = categories);
+    } catch (_) {}
   }
 
   @override
@@ -160,6 +174,7 @@ class _UserEditDialogState extends State<UserEditDialog> {
       role: _selectedRole,
       password: changedPassword,
       filialIds: _selectedFilialIds.isNotEmpty ? _selectedFilialIds : null,
+      categories: _selectedCategories.isNotEmpty ? _selectedCategories : null,
       phoneNumber: phone.isNotEmpty ? phone : null,
       profileJson: _rezume != null ? jsonEncode(_rezume) : null,
     );
@@ -271,6 +286,30 @@ class _UserEditDialogState extends State<UserEditDialog> {
                                   _selectedFilialIds.add(f.filialId);
                                 } else {
                                   _selectedFilialIds.remove(f.filialId);
+                                }
+                              }),
+                            );
+                          }).toList(),
+                        ),
+                        const SizedBox(height: 16),
+                        const Text('Категории',
+                            style: TextStyle(
+                                fontSize: 13, color: Color(0xFF6B7280))),
+                        const SizedBox(height: 8),
+                        Wrap(
+                          spacing: 8,
+                          runSpacing: 8,
+                          children: _categories.map((c) {
+                            final selected =
+                                _selectedCategories.contains(c.name);
+                            return FilterChip(
+                              label: Text(c.name),
+                              selected: selected,
+                              onSelected: (v) => setState(() {
+                                if (v) {
+                                  _selectedCategories.add(c.name);
+                                } else {
+                                  _selectedCategories.remove(c.name);
                                 }
                               }),
                             );

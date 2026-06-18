@@ -551,10 +551,11 @@ func createMainDB() {
 	db.QueryRow("SELECT COUNT(*) FROM filials").Scan(&count)
 	if count == 0 {
 		filials := []string{
-			"Toshkent markaz",
-			"Samarqand",
-			"Buxoro",
-			"Farg'ona",
+			"Gelion",
+			"Sibirski",
+			"Fresco",
+			"Marxabo",
+			"Marojni",
 		}
 		for _, name := range filials {
 			db.Exec("INSERT INTO filials (name) VALUES (?)", name)
@@ -565,9 +566,9 @@ func createMainDB() {
 	db.QueryRow("SELECT COUNT(*) FROM categories").Scan(&count)
 	if count == 0 {
 		categories := []string{
-			"Shef Povar",
-			"Admin",
-			"Ofitsiant",
+			"Bar",
+			"Magazin",
+			"Povar",
 		}
 		for _, name := range categories {
 			db.Exec("INSERT INTO categories (name) VALUES (?)", name)
@@ -713,6 +714,53 @@ func authMiddleware(next http.HandlerFunc) http.HandlerFunc {
 	}
 }
 
+// fetchRezumeByPhone HR tizimidan telefon raqami bo'yicha rezumeni oladi.
+// Xatolik yoki 200 bo'lmagan status holatida nil qaytaradi (user yaratishni buzmaydi).
+func fetchRezumeByPhone(phone string) *string {
+	phone = strings.TrimSpace(phone)
+	if phone == "" {
+		return nil
+	}
+
+	normalized := phone
+	if !strings.HasPrefix(normalized, "+") && !strings.HasPrefix(normalized, "998") {
+		normalized = "998" + normalized
+	}
+
+	url := "https://hr.monebakeryuz.uz/api/public/rezume-by-phone/" + normalized
+
+	client := &http.Client{Timeout: 20 * time.Second}
+	resp, err := client.Get(url)
+	if err != nil {
+		return nil
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil
+	}
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil
+	}
+
+	var data map[string]interface{}
+	if err := json.Unmarshal(body, &data); err != nil {
+		return nil
+	}
+
+	delete(data, "interviews")
+
+	out, err := json.Marshal(data)
+	if err != nil {
+		return nil
+	}
+
+	s := string(out)
+	return &s
+}
+
 func register(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		Username       string   `json:"username"`
@@ -752,8 +800,15 @@ func register(w http.ResponseWriter, r *http.Request) {
 		filialIDsStr = strings.Trim(strings.Join(strings.Fields(fmt.Sprint(req.FilialIDs)), ","), "[]")
 	}
 
+	// Rezumeni avtomatik olish: agar klient profileJson yubormagan bo'lsa va
+	// telefon raqami bor bo'lsa, HR tizimidan rezumeni olib qo'yamiz.
+	profileJSON := req.ProfileJSON
+	if (profileJSON == nil || *profileJSON == "") && req.PhoneNumber != nil && *req.PhoneNumber != "" {
+		profileJSON = fetchRezumeByPhone(*req.PhoneNumber)
+	}
+
 	result, err := db.Exec("INSERT INTO users (username, login, password_hash, password, role, filial_ids, categories, notification_id, phone_number, profile_json) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-		req.Username, req.Login, string(hash), req.Password, req.Role, filialIDsStr, string(categoriesJSON), req.NotificationID, req.PhoneNumber, req.ProfileJSON)
+		req.Username, req.Login, string(hash), req.Password, req.Role, filialIDsStr, string(categoriesJSON), req.NotificationID, req.PhoneNumber, profileJSON)
 	if err != nil {
 		respondJSON(w, http.StatusBadRequest, map[string]interface{}{
 			"success": false,
@@ -3582,6 +3637,16 @@ func updateUser(w http.ResponseWriter, r *http.Request) {
 	}
 	if req.ProfileJSON != "" {
 		db.Exec("UPDATE users SET profile_json = ? WHERE id = ?", req.ProfileJSON, id)
+	} else if req.PhoneNumber != "" {
+		// Klient profileJson yubormagan, lekin telefon kelgan bo'lsa: mavjud
+		// profile_json bo'sh bo'lsa, HR tizimidan rezumeni avtomatik olamiz.
+		var existing sql.NullString
+		db.QueryRow("SELECT profile_json FROM users WHERE id = ?", id).Scan(&existing)
+		if !existing.Valid || existing.String == "" {
+			if rezume := fetchRezumeByPhone(req.PhoneNumber); rezume != nil {
+				db.Exec("UPDATE users SET profile_json = ? WHERE id = ?", *rezume, id)
+			}
+		}
 	}
 
 	// Real-time: foydalanuvchining ruxsatlari (filial/rol) o'zgardi — uning

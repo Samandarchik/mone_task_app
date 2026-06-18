@@ -106,10 +106,24 @@ class _TaskWorkerUiState extends State<TaskWorkerUi> {
   void _refresh() => _fetchTasks(showLoading: false);
 
   /// Aktiv filial tanlangan bo'lsa — faqat o'sha filial tasklari ko'rinadi.
+  /// Worker uchun qo'shimcha: faqat o'ziga biriktirilgan kategoriyalardagi
+  /// tasklar ko'rinadi (kategoriyalar bo'sh/null bo'lsa — cheklov yo'q).
   List<TaskModel> get _visibleTasks {
+    var tasks = _tasks;
+
     final fid = ActiveFilial.id;
-    if (fid == null) return _tasks;
-    return _tasks.where((t) => t.filialId == fid).toList();
+    if (fid != null) {
+      tasks = tasks.where((t) => t.filialId == fid).toList();
+    }
+
+    // Kategoriya bo'yicha filtrlash — faqat worker rolida.
+    final cats = user?.categories;
+    if (user?.role == 'worker' && cats != null && cats.isNotEmpty) {
+      final allowed = cats.toSet();
+      tasks = tasks.where((t) => allowed.contains(t.category)).toList();
+    }
+
+    return tasks;
   }
 
   bool get _canSwitchFilial => (user?.filialIds?.length ?? 0) > 1;

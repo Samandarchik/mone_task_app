@@ -1,9 +1,9 @@
-import 'dart:convert';
-import 'package:dio/dio.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:mone_task_app/admin/model/category_model.dart';
 import 'package:mone_task_app/admin/model/filial_model.dart';
+import 'package:mone_task_app/admin/service/task_worker_service.dart';
 import 'package:mone_task_app/admin/service/user_service.dart';
 import 'package:mone_task_app/checker/service/task_worker_service.dart';
 
@@ -15,8 +15,6 @@ class AddWorkerPage extends StatefulWidget {
 }
 
 class _AddWorkerPageState extends State<AddWorkerPage> {
-  static const String _rezumeBaseUrl = 'https://hr.monebakeryuz.uz';
-
   final _formKey = GlobalKey<FormState>();
   final _usernameController = TextEditingController();
   final _loginController = TextEditingController();
@@ -25,17 +23,13 @@ class _AddWorkerPageState extends State<AddWorkerPage> {
 
   final String _selectedRole = 'worker';
   final List<int> _selectedFilialIds = [];
+  final List<String> _selectedCategories = [];
   bool _isLoading = false;
   bool _obscurePassword = true;
 
-  // Rezume state
-  bool _fetchingRezume = false;
-  String? _rezumeError;
-  Map<String, dynamic>? _rezume;
-  String _lastSearchedDigits = '';
-
   final UserService _userService = UserService();
   List<FilialModel>? _filials;
+  List<CategoryModel>? _categories;
   bool _isLoadingData = true;
 
   @override
@@ -47,8 +41,10 @@ class _AddWorkerPageState extends State<AddWorkerPage> {
   Future<void> _loadData() async {
     try {
       final filials = await TaskViewService().fetchFilials();
+      final categories = await TemplateService().fetchCategoriesList();
       setState(() {
         _filials = filials;
+        _categories = categories;
         _isLoadingData = false;
       });
     } catch (e) {
@@ -65,79 +61,6 @@ class _AddWorkerPageState extends State<AddWorkerPage> {
     super.dispose();
   }
 
-  // ── Rezume qidirish ─────────────────────────────────────────────────────
-
-  void _onPhoneChanged(String value) {
-    final digits = value.replaceAll(RegExp(r'[^\d]'), '');
-    if (digits.length != 12) {
-      if (digits != _lastSearchedDigits && (_rezume != null || _rezumeError != null)) {
-        setState(() {
-          _rezume = null;
-          _rezumeError = null;
-        });
-      }
-      return;
-    }
-    if (_fetchingRezume || digits == _lastSearchedDigits) return;
-    _lastSearchedDigits = digits;
-    _fetchRezume();
-  }
-
-  Future<void> _fetchRezume() async {
-    final phone = _phoneController.text.trim();
-    if (phone.isEmpty) return;
-
-    setState(() {
-      _fetchingRezume = true;
-      _rezumeError = null;
-      _rezume = null;
-    });
-
-    try {
-      final normalized =
-          phone.startsWith('+') || phone.startsWith('998') ? phone : '998$phone';
-      final url = '$_rezumeBaseUrl/api/public/rezume-by-phone/$normalized';
-      final resp = await Dio(
-        BaseOptions(
-          connectTimeout: const Duration(seconds: 20),
-          receiveTimeout: const Duration(seconds: 20),
-        ),
-      ).get(url, options: Options(validateStatus: (_) => true));
-
-      if (resp.statusCode != 200) {
-        setState(() {
-          _rezumeError = 'Резюме не найдено (${resp.statusCode})';
-          _fetchingRezume = false;
-        });
-        return;
-      }
-
-      final data = (resp.data is String
-          ? jsonDecode(resp.data as String)
-          : resp.data) as Map<String, dynamic>;
-      data.remove('interviews');
-
-      // Avtomatik to'ldirish
-      final familiya = (data['familiya'] ?? '').toString().trim();
-      final ism = (data['ism'] ?? '').toString().trim();
-      final sharif = (data['sharif'] ?? '').toString().trim();
-      final fio = [familiya, ism, sharif].where((s) => s.isNotEmpty).join(' ');
-      if (fio.isNotEmpty && _usernameController.text.isEmpty) {
-        _usernameController.text = fio;
-      }
-
-      setState(() {
-        _rezume = data;
-        _fetchingRezume = false;
-      });
-    } catch (e) {
-      setState(() {
-        _rezumeError = 'Ошибка: $e';
-        _fetchingRezume = false;
-      });
-    }
-  }
-
   // ── Saqlash ─────────────────────────────────────────────────────────────
 
   Future<void> _saveUser() async {
@@ -148,13 +71,14 @@ class _AddWorkerPageState extends State<AddWorkerPage> {
       return;
     }
 
+    if (_selectedRole == 'worker' && _selectedCategories.isEmpty) {
+      _showError('Выберите хотя бы одну категорию');
+      return;
+    }
+
     setState(() => _isLoading = true);
 
     final phone = _phoneController.text.trim();
-    String? profileJson;
-    if (_rezume != null) {
-      profileJson = jsonEncode(_rezume);
-    }
 
     final success = await _userService.createUser(
       username: _usernameController.text.trim(),
@@ -162,8 +86,8 @@ class _AddWorkerPageState extends State<AddWorkerPage> {
       password: _passwordController.text.trim(),
       role: _selectedRole,
       filialIds: _selectedFilialIds.isNotEmpty ? _selectedFilialIds : null,
+      categories: _selectedCategories.isNotEmpty ? _selectedCategories : null,
       phoneNumber: phone.isNotEmpty ? phone : null,
-      profileJson: profileJson,
     );
 
     setState(() => _isLoading = false);
@@ -217,25 +141,6 @@ class _AddWorkerPageState extends State<AddWorkerPage> {
                     _buildPhoneField(),
                     const SizedBox(height: 16),
 
-                    // Rezume xatosi
-                    if (_rezumeError != null) ...[
-                      Container(
-                        padding: const EdgeInsets.all(12),
-                        decoration: BoxDecoration(
-                          color: Colors.red.shade50,
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        child: Text(_rezumeError!, style: TextStyle(color: Colors.red.shade900)),
-                      ),
-                      const SizedBox(height: 16),
-                    ],
-
-                    // Rezume preview
-                    if (_rezume != null) ...[
-                      _buildRezumePreview(_rezume!),
-                      const SizedBox(height: 16),
-                    ],
-
                     // Ism
                     _buildTextField(
                       controller: _usernameController,
@@ -262,6 +167,10 @@ class _AddWorkerPageState extends State<AddWorkerPage> {
                     // Filiallar
                     if (_selectedRole == 'worker' && _filials != null)
                       _buildFilialSection(),
+
+                    // Kategoriyalar
+                    if (_selectedRole == 'worker' && _categories != null)
+                      _buildCategorySection(),
                   ],
                 ),
               ),
@@ -278,122 +187,11 @@ class _AddWorkerPageState extends State<AddWorkerPage> {
       inputFormatters: [
         FilteringTextInputFormatter.allow(RegExp(r'[0-9+]')),
       ],
-      decoration: InputDecoration(
+      decoration: const InputDecoration(
         labelText: 'Телефон',
         hintText: '998901234567',
-        border: const OutlineInputBorder(),
-        prefixIcon: const Icon(Icons.phone),
-        suffixIcon: _fetchingRezume
-            ? const Padding(
-                padding: EdgeInsets.all(14),
-                child: SizedBox(
-                  width: 18, height: 18,
-                  child: CircularProgressIndicator(strokeWidth: 2),
-                ),
-              )
-            : null,
-      ),
-      onChanged: _onPhoneChanged,
-      onSubmitted: (_) => _fetchRezume(),
-    );
-  }
-
-  // ── Rezume preview ──────────────────────────────────────────────────────
-
-  Widget _buildRezumePreview(Map<String, dynamic> r) {
-    final familiya = (r['familiya'] ?? '').toString();
-    final ism = (r['ism'] ?? '').toString();
-    final sharif = (r['sharif'] ?? '').toString();
-    final fio = [familiya, ism, sharif].where((s) => s.isNotEmpty).join(' ');
-    final rasm = (r['rasm_url'] ?? '').toString();
-    final photoUrl = rasm.isEmpty
-        ? null
-        : (rasm.startsWith('http') ? rasm : '$_rezumeBaseUrl$rasm');
-
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.green.shade50,
-        border: Border.all(color: Colors.green.shade200),
-        borderRadius: BorderRadius.circular(8),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              if (photoUrl != null)
-                ClipRRect(
-                  borderRadius: BorderRadius.circular(8),
-                  child: Image.network(
-                    photoUrl,
-                    width: 80,
-                    height: 100,
-                    fit: BoxFit.cover,
-                    errorBuilder: (_, __, ___) => Container(
-                      width: 80, height: 100,
-                      color: Colors.grey.shade200,
-                      child: const Icon(Icons.person, size: 40),
-                    ),
-                  ),
-                ),
-              if (photoUrl != null) const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      fio.isEmpty ? '(имя не найдено)' : fio,
-                      style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-                    ),
-                    if ((r['lavozim'] ?? '').toString().isNotEmpty) ...[
-                      const SizedBox(height: 4),
-                      Text(r['lavozim'].toString(), style: const TextStyle(color: Colors.grey)),
-                    ],
-                    const SizedBox(height: 4),
-                    Text((r['telefon'] ?? '').toString()),
-                  ],
-                ),
-              ),
-            ],
-          ),
-          const Divider(height: 24),
-          _kv('Дата рождения', r['tugilgan_sana']),
-          _kv('Рост / Вес', '${r['boy_sm'] ?? '?'} см / ${r['vazn_kg'] ?? '?'} кг'),
-          _kv('Адрес', r['yashash_manzili']),
-          _kv('Ориентир', r['moljal']),
-          _kv('Общий стаж', r['umumiy_tajriba']),
-          _kv('Зарубежный опыт', r['chet_el_tajribasi']),
-          _kv('Образование', r['malumot']),
-          _kv('Семейное положение', r['oilaviy_holat']),
-          if (r['tillar'] is List)
-            _kv('Языки', (r['tillar'] as List)
-                .map((t) => '${(t as Map)['til']}: ${t['daraja']}')
-                .join(', ')),
-          if ((r['qoshimcha'] ?? '').toString().isNotEmpty)
-            _kv('Дополнительно', r['qoshimcha']),
-          if ((r['tg_username'] ?? '').toString().isNotEmpty)
-            _kv('Telegram', '@${r['tg_username']}'),
-        ],
-      ),
-    );
-  }
-
-  Widget _kv(String label, dynamic value) {
-    final v = (value ?? '').toString();
-    if (v.isEmpty) return const SizedBox.shrink();
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 6),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          SizedBox(
-            width: 130,
-            child: Text(label, style: TextStyle(fontSize: 13, color: Colors.grey.shade700)),
-          ),
-          Expanded(child: Text(v, style: const TextStyle(fontSize: 13))),
-        ],
+        border: OutlineInputBorder(),
+        prefixIcon: Icon(Icons.phone),
       ),
     );
   }
@@ -476,6 +274,51 @@ class _AddWorkerPageState extends State<AddWorkerPage> {
                       _selectedFilialIds.add(filial.filialId);
                     } else {
                       _selectedFilialIds.remove(filial.filialId);
+                    }
+                  });
+                },
+              )),
+        const SizedBox(height: 16),
+      ],
+    );
+  }
+
+  Widget _buildCategorySection() {
+    return Column(
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Text('Категории *', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+            if (_selectedCategories.isEmpty) ...[
+              const SizedBox(width: 8),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                decoration: BoxDecoration(
+                  color: Colors.red.shade100,
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: const Text('Выбрать', style: TextStyle(fontSize: 12, color: Colors.red)),
+              ),
+            ],
+          ],
+        ),
+        const SizedBox(height: 8),
+        if (_categories!.isEmpty)
+          const Padding(
+            padding: EdgeInsets.all(16),
+            child: Text('Категории не найдены', style: TextStyle(color: Colors.grey)),
+          )
+        else
+          ..._categories!.map((category) => _buildSwitchRow(
+                title: category.name,
+                value: _selectedCategories.contains(category.name),
+                onChanged: (value) {
+                  setState(() {
+                    if (value) {
+                      _selectedCategories.add(category.name);
+                    } else {
+                      _selectedCategories.remove(category.name);
                     }
                   });
                 },
