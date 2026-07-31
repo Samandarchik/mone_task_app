@@ -16,7 +16,7 @@ import (
 // credBotToken — login ma'lumotlarini (login + parol + ilova linklari) Telegram
 // orqali yuborish uchun ishlatiladigan bot tokeni (boshqa mone loyihalari bilan
 // bir xil bot).
-const credBotToken = "8550220546:AAFEII8AzNdMapEqT_VFtqiqv6h0obbLgzQ"
+const credBotToken = "8550220546:AAEVwWyWXhhUgJlMQaV8klu66qbzjzEFWNo"
 
 // telegramIDFromProfileJSON — rezume `profile_json` satridan `tg_user_id`
 // raqamli qiymatini ajratib oladi. JSON bo'sh/buzuq yoki maydon yo'q bo'lsa 0.
