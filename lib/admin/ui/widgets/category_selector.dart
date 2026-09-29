@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:mone_task_app/admin/model/category_model.dart';
 import 'package:mone_task_app/admin/service/task_worker_service.dart';
+import 'package:mone_task_app/core/l10n/app_script.dart';
+import 'package:mone_task_app/core/theme/app_theme.dart';
+import 'package:mone_task_app/core/widgets/app_widgets.dart';
 
 class CategorySelector extends StatefulWidget {
   final int? selectedCategoryId;
@@ -44,19 +47,22 @@ class CategorySelectorState extends State<CategorySelector> {
     }
   }
 
+  /// Nom bo'yicha qidiradi (serverdagi xom nom bilan solishtiriladi).
   int? findCategoryIdByName(String name) {
     final match = categories.where((c) => c.name == name).firstOrNull;
     return match?.id;
   }
 
+  /// Serverdagi xom nomni qaytaradi (API ga yuborish uchun).
   String? getCategoryName(int id) {
     final match = categories.where((c) => c.id == id).firstOrNull;
     return match?.name;
   }
 
-  Future<void> addCategory(String name) async {
-    await _service.addCategory(name);
-    await loadCategories();
+  Future<bool> addCategory(String name) async {
+    final ok = await _service.addCategory(name);
+    if (ok) await loadCategories();
+    return ok;
   }
 
   Future<bool> deleteCategory(int id) async {
@@ -70,130 +76,281 @@ class CategorySelectorState extends State<CategorySelector> {
     return success;
   }
 
-  void _showAddDialog() {
+  Future<void> _showAddDialog() async {
     final controller = TextEditingController();
-    showDialog<void>(
+    final name = await showDialog<String>(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text("Новая категория"),
-        content: TextField(
-          controller: controller,
-          autofocus: true,
-          decoration: const InputDecoration(
-            labelText: "Название категории",
-            border: OutlineInputBorder(),
+      builder: (ctx) {
+        void submit() {
+          final value = controller.text.trim();
+          if (value.isEmpty) return;
+          Navigator.pop(ctx, value);
+        }
+
+        return AlertDialog(
+          title: Text(tr('Yangi kategoriya')),
+          content: TextField(
+            controller: controller,
+            autofocus: true,
+            textCapitalization: TextCapitalization.sentences,
+            decoration: InputDecoration(
+              labelText: tr('Kategoriya nomi'),
+              hintText: tr('Masalan: Tozalik'),
+            ),
+            onSubmitted: (_) => submit(),
           ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text("Отмена"),
-          ),
-          TextButton(
-            onPressed: () async {
-              final name = controller.text.trim();
-              if (name.isEmpty) return;
-              Navigator.pop(ctx);
-              await addCategory(name);
-            },
-            child: const Text("Добавить"),
-          ),
-        ],
-      ),
+          actionsPadding: EdgeInsets.fromLTRB(16, 0, 16, 16),
+          actions: [
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton(
+                    onPressed: () => Navigator.pop(ctx),
+                    child: Text(tr('Bekor qilish')),
+                  ),
+                ),
+                SizedBox(width: AppSpacing.md),
+                Expanded(
+                  child: FilledButton(
+                    onPressed: submit,
+                    child: Text(tr('Qoʻshish')),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        );
+      },
     );
+    controller.dispose();
+    if (name == null || name.isEmpty) return;
+    final ok = await addCategory(name);
+    if (!mounted) return;
+    if (ok) {
+      showAppSnack(
+        context,
+        tr('Kategoriya qoʻshildi'),
+        type: SnackType.success,
+      );
+    } else {
+      showAppSnack(
+        context,
+        tr('Kategoriyani qoʻshib boʻlmadi. Qayta urinib koʻring'),
+        type: SnackType.error,
+      );
+    }
   }
 
-  void _confirmDelete(CategoryModel category) {
-    showDialog<bool>(
+  Future<void> _confirmDelete(CategoryModel category) async {
+    final ok = await showConfirmDialog(
+      context,
+      title: tr('Kategoriyani oʻchirish'),
+      message:
+          '«${displayName(category.name)}» ${tr('kategoriyasi oʻchiriladi. Ishonchingiz komilmi?')}',
+      confirmLabel: tr('Ha, oʻchirish'),
+      destructive: true,
+    );
+    if (!ok || !mounted) return;
+    final success = await deleteCategory(category.id);
+    if (!mounted) return;
+    if (success) {
+      showAppSnack(
+        context,
+        tr('Kategoriya oʻchirildi'),
+        type: SnackType.success,
+      );
+    } else {
+      showAppSnack(
+        context,
+        tr('Kategoriyani oʻchirib boʻlmaydi — unga maʼlumotlar bogʻlangan'),
+        type: SnackType.error,
+      );
+    }
+  }
+
+  void _showManageSheet() {
+    showModalBottomSheet<void>(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text("Удалить"),
-        content: Text('"${category.name}" категорию удалить?'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text("Отмена"),
-          ),
-          TextButton(
-            onPressed: () async {
-              Navigator.pop(ctx);
-              final success = await deleteCategory(category.id);
-              if (!success && mounted) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text("Категорию нельзя удалить — к ней привязаны данные"),
+      showDragHandle: true,
+      isScrollControlled: true,
+      builder: (ctx) {
+        return SafeArea(
+          child: ConstrainedBox(
+            constraints: BoxConstraints(
+              maxHeight: MediaQuery.of(ctx).size.height * 0.7,
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Padding(
+                  padding: EdgeInsets.fromLTRB(16, 0, 16, 8),
+                  child: Text(
+                    tr('Kategoriyalar'),
+                    style: Theme.of(ctx).textTheme.titleMedium,
                   ),
-                );
-              }
-            },
-            style: TextButton.styleFrom(foregroundColor: Colors.red),
-            child: const Text("Удалить"),
+                ),
+                Flexible(
+                  child: categories.isEmpty
+                      ? Padding(
+                          padding: EdgeInsets.all(AppSpacing.xl),
+                          child: Text(
+                            tr('Hozircha kategoriya yoʻq'),
+                            textAlign: TextAlign.center,
+                            style: TextStyle(color: AppColors.textSecondary),
+                          ),
+                        )
+                      : ListView.separated(
+                          shrinkWrap: true,
+                          itemCount: categories.length,
+                          separatorBuilder: (_, _) =>
+                              Divider(height: 1, indent: 16),
+                          itemBuilder: (_, i) {
+                            final cat = categories[i];
+                            return ListTile(
+                              leading: Icon(
+                                Icons.label_outline_rounded,
+                                color: AppColors.textSecondary,
+                              ),
+                              title: Text(
+                                displayName(cat.name),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                              trailing: IconButton(
+                                tooltip: tr('Oʻchirish'),
+                                icon: Icon(
+                                  Icons.delete_outline_rounded,
+                                  color: AppColors.danger,
+                                ),
+                                onPressed: () {
+                                  Navigator.pop(ctx);
+                                  _confirmDelete(cat);
+                                },
+                              ),
+                            );
+                          },
+                        ),
+                ),
+                Padding(
+                  padding: EdgeInsets.all(AppSpacing.lg),
+                  child: OutlinedButton.icon(
+                    onPressed: () {
+                      Navigator.pop(ctx);
+                      _showAddDialog();
+                    },
+                    icon: Icon(Icons.add_rounded),
+                    label: Text(tr('Yangi kategoriya')),
+                  ),
+                ),
+              ],
+            ),
           ),
-        ],
-      ),
+        );
+      },
     );
   }
 
   @override
   Widget build(BuildContext context) {
+    final selected = categories.any((c) => c.id == widget.selectedCategoryId)
+        ? widget.selectedCategoryId
+        : null;
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text(
-          "Категория:",
-          style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+        Text(
+          tr('Kategoriya'),
+          style: TextStyle(
+            fontSize: 14,
+            fontWeight: FontWeight.w600,
+            color: AppColors.textPrimary,
+          ),
         ),
-        const SizedBox(height: 8),
+        SizedBox(height: AppSpacing.sm),
         if (isLoading)
-          const Center(child: CircularProgressIndicator.adaptive())
-        else if (error != null)
-          Row(
-            children: [
-              Flexible(
-                child: Text("Ошибка: $error", style: const TextStyle(color: Colors.red)),
+          SizedBox(
+            height: 52,
+            child: Center(
+              child: SizedBox(
+                width: 22,
+                height: 22,
+                child: CircularProgressIndicator(strokeWidth: 2.4),
               ),
-              TextButton(onPressed: loadCategories, child: const Text("Снова")),
-            ],
+            ),
+          )
+        else if (error != null)
+          Container(
+            padding: EdgeInsets.fromLTRB(12, 4, 4, 4),
+            decoration: BoxDecoration(
+              color: AppColors.dangerSoft,
+              borderRadius: AppRadius.mdAll,
+            ),
+            child: Row(
+              children: [
+                Icon(
+                  Icons.error_outline_rounded,
+                  color: AppColors.danger,
+                  size: 20,
+                ),
+                SizedBox(width: AppSpacing.sm),
+                Expanded(
+                  child: Text(
+                    tr('Kategoriyalarni yuklab boʻlmadi'),
+                    style: TextStyle(color: AppColors.danger),
+                  ),
+                ),
+                TextButton(
+                  onPressed: loadCategories,
+                  child: Text(tr('Qayta urinish')),
+                ),
+              ],
+            ),
           )
         else
           DropdownButtonFormField<int>(
-            initialValue: widget.selectedCategoryId,
+            key: ValueKey('category_$selected'),
+            initialValue: selected,
             isExpanded: true,
-            decoration: const InputDecoration(border: OutlineInputBorder()),
-            hint: const Text("Выбрать категорию"),
+            decoration: InputDecoration(
+              prefixIcon: Icon(Icons.label_outline_rounded),
+            ),
+            hint: Text(
+              categories.isEmpty
+                  ? tr('Avval kategoriya qoʻshing')
+                  : tr('Kategoriyani tanlang'),
+            ),
             items: categories
                 .map(
                   (cat) => DropdownMenuItem<int>(
                     value: cat.id,
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Flexible(child: Text(cat.name, overflow: TextOverflow.ellipsis)),
-                        const SizedBox(width: 8),
-                        GestureDetector(
-                          onTap: () {
-                            FocusManager.instance.primaryFocus?.unfocus();
-                            WidgetsBinding.instance.addPostFrameCallback((_) {
-                              _confirmDelete(cat);
-                            });
-                          },
-                          child: const Icon(Icons.delete_outline, size: 18, color: Colors.red),
-                        ),
-                      ],
+                    child: Text(
+                      displayName(cat.name),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                     ),
                   ),
                 )
                 .toList(),
             onChanged: widget.onChanged,
           ),
-        const SizedBox(height: 8),
-        Align(
-          alignment: Alignment.centerLeft,
-          child: TextButton.icon(
-            onPressed: _showAddDialog,
-            icon: const Icon(Icons.add_circle_outline, size: 18),
-            label: const Text("Добавить новую категорию"),
-          ),
+        SizedBox(height: AppSpacing.xs),
+        Wrap(
+          spacing: AppSpacing.xs,
+          children: [
+            TextButton.icon(
+              onPressed: _showAddDialog,
+              icon: Icon(Icons.add_rounded, size: 18),
+              label: Text(tr('Yangi kategoriya')),
+            ),
+            if (!isLoading && error == null && categories.isNotEmpty)
+              TextButton.icon(
+                onPressed: _showManageSheet,
+                icon: Icon(Icons.tune_rounded, size: 18),
+                label: Text(tr('Kategoriyalarni boshqarish')),
+              ),
+          ],
         ),
       ],
     );

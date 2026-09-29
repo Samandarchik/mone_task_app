@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:mone_task_app/core/l10n/app_script.dart';
+import 'package:mone_task_app/core/theme/app_theme.dart';
 import 'package:mone_task_app/worker/model/user_model.dart';
 
 /// Foydalanuvchi rasmi — rasm bo'lsa ko'rsatadi, bo'lmasa ism harfini.
@@ -11,12 +13,12 @@ class UserAvatar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final url = user?.photoUrl;
-    final name = (user?.fullName ?? '').trim();
+    final name = trData((user?.fullName ?? '').trim());
     final letter = name.isEmpty ? '?' : name[0].toUpperCase();
 
     return CircleAvatar(
       radius: radius,
-      backgroundColor: const Color(0xFF3699ff),
+      backgroundColor: AppColors.primary,
       backgroundImage: (url != null && url.isNotEmpty) ? NetworkImage(url) : null,
       child: (url == null || url.isEmpty)
           ? Text(

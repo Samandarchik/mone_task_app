@@ -10,9 +10,9 @@ import 'package:mone_task_app/worker/ui/task_worker_ui.dart';
 
 /// Rol bo'yicha asosiy ekran (filial allaqachon tanlangan deb hisoblanadi).
 Widget roleHome(String role) {
-  if (role == 'super_admin' || role == 'checker') return const AdminTaskUi();
-  if (role == 'worker') return const TaskWorkerUi();
-  return const LoginPage();
+  if (role == 'super_admin' || role == 'checker') return AdminTaskUi();
+  if (role == 'worker') return TaskWorkerUi();
+  return LoginPage();
 }
 
 /// Auth dan keyin ko'rsatiladigan birinchi ekran.
@@ -23,7 +23,7 @@ Widget roleHome(String role) {
 Widget landingForUser(UserModel user) {
   final role = user.role;
   if (role != 'super_admin' && role != 'checker' && role != 'worker') {
-    return const LoginPage();
+    return LoginPage();
   }
 
   // super_admin va checker (Корректор) barcha filiallarni ko'radi va
@@ -33,7 +33,7 @@ Widget landingForUser(UserModel user) {
     return roleHome(role);
   }
 
-  final ids = user.filialIds ?? const <int>[];
+  final ids = user.filialIds ?? <int>[];
 
   if (ids.length > 1) {
     // Tanlov majburiy — eski aktiv filial endi mavjud bo'lmasligi mumkin
@@ -85,7 +85,7 @@ UserModel? applyUserUpdateEvent(Map<String, dynamic> data) {
   ts.putUserData(updated.toJson());
 
   // Aktiv filial endi ruxsat ro'yxatida bo'lmasa — tozalaymiz (qayta tanlanadi).
-  final ids = updated.filialIds ?? const <int>[];
+  final ids = updated.filialIds ?? <int>[];
   if (ActiveFilial.id != null && !ids.contains(ActiveFilial.id)) {
     ActiveFilial.clear();
   }

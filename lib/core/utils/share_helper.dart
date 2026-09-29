@@ -2,6 +2,8 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:mone_task_app/core/l10n/app_script.dart';
+import 'package:mone_task_app/core/widgets/app_widgets.dart';
 import 'package:share_plus/share_plus.dart';
 
 /// Task linkini ulashish uchun umumiy helper.
@@ -19,12 +21,7 @@ Future<void> shareTaskLink({
   if (Platform.isWindows) {
     await Clipboard.setData(ClipboardData(text: link));
     if (context != null && context.mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Ссылка скопирована'),
-          duration: Duration(seconds: 2),
-        ),
-      );
+      showAppSnack(context, tr('Havola nusxalandi'), type: SnackType.success);
     }
     return;
   }

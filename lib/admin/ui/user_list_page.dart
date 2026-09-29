@@ -7,11 +7,16 @@ import 'package:mone_task_app/checker/service/task_worker_service.dart';
 import 'package:mone_task_app/core/context_extension.dart';
 import 'package:mone_task_app/core/data/local/token_storage.dart';
 import 'package:mone_task_app/core/di/di.dart';
+import 'package:mone_task_app/core/l10n/app_script.dart';
+import 'package:mone_task_app/core/theme/app_theme.dart';
+import 'package:mone_task_app/core/widgets/app_widgets.dart';
 import 'package:mone_task_app/home/model/login_model.dart';
 import 'package:mone_task_app/home/service/api_service.dart';
 import 'package:mone_task_app/home/ui/role_home.dart';
 import 'package:mone_task_app/worker/model/user_model.dart';
 import 'package:url_launcher/url_launcher.dart';
+
+enum _UserAction { edit, role, filials, telegram, loginAs, delete }
 
 class UsersPage extends StatefulWidget {
   final List<FilialModel> filialModel;
@@ -23,19 +28,34 @@ class UsersPage extends StatefulWidget {
 
 class _UsersPageState extends State<UsersPage> {
   bool _loading = true;
+  bool _error = false;
   List<UserModel> _users = [];
   List<FilialModel> _filials = [];
   final UserService _userService = UserService();
-  bool _profileView = false;
+
+  final TextEditingController _searchController = TextEditingController();
+  String _query = '';
+  String? _roleFilter; // null — barchasi
+  int? _filialFilter; // null — barchasi
 
   @override
   void initState() {
     super.initState();
+    _filials = widget.filialModel;
     _load();
   }
 
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
+
   Future<void> _load() async {
-    setState(() => _loading = true);
+    setState(() {
+      _loading = true;
+      _error = false;
+    });
     try {
       final svc = TaskViewService();
       final results = await Future.wait([
@@ -52,54 +72,88 @@ class _UsersPageState extends State<UsersPage> {
         });
       }
     } catch (e) {
-      if (mounted) setState(() => _loading = false);
+      if (mounted) {
+        setState(() {
+          _loading = false;
+          _error = _users.isEmpty;
+        });
+      }
     }
   }
 
   int _roleOrder(String role) {
     switch (role) {
-      case 'super_admin': return 0;
-      case 'checker': return 1;
-      case 'worker': return 2;
-      default: return 3;
+      case 'super_admin':
+        return 0;
+      case 'checker':
+        return 1;
+      case 'worker':
+        return 2;
+      default:
+        return 3;
     }
   }
 
-  String _roleLabel(String role) {
-    switch (role) {
-      case 'super_admin': return 'Супер админ';
-      case 'checker': return 'Корректор';
-      case 'worker': return 'Ревизор';
-      default: return role;
-    }
+  bool get _isSuperAdmin =>
+      sl<TokenStorage>().getUserData()?.role == 'super_admin';
+
+  String _filialName(int id) {
+    final f = _filials.where((f) => f.filialId == id);
+    return f.isNotEmpty ? displayName(f.first.name) : '#$id';
   }
 
-  Future<void> _deleteUser(int id) async {
-    final confirm = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Удалить'),
-        content: const Text('Вы уверены, что хотите удалить этого пользователя?'),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Нет')),
-          FilledButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            style: FilledButton.styleFrom(backgroundColor: Colors.red),
-            child: const Text('Удалить'),
-          ),
-        ],
-      ),
-    );
-    if (confirm != true) return;
-    final success = await _userService.deleteUser(id);
-    if (success) {
-      _load();
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Пользователь удалён'), backgroundColor: Colors.green),
-        );
+  String _nameOf(UserModel u) =>
+      u.fullName.isNotEmpty ? trData(u.fullName) : trData(u.username);
+
+  List<UserModel> get _visibleUsers {
+    final q = _query.trim().toLowerCase();
+    return _users.where((u) {
+      if (_roleFilter != null && u.role != _roleFilter) return false;
+      if (_filialFilter != null &&
+          !(u.filialIds ?? []).contains(_filialFilter)) {
+        return false;
       }
+      if (q.isEmpty) return true;
+      final hay = [
+        u.fullName,
+        trData(u.fullName),
+        u.username,
+        trData(u.username),
+        u.login,
+        u.phoneNumber ?? '',
+        u.telegram ?? '',
+      ].join(' ').toLowerCase();
+      return hay.contains(q);
+    }).toList();
+  }
+
+  // ── Amallar ────────────────────────────────────────────────────────────
+
+  Future<void> _deleteUser(UserModel u) async {
+    final confirm = await showConfirmDialog(
+      context,
+      title: tr("Foydalanuvchini o'chirish"),
+      message:
+          '${_nameOf(u)} — ${tr("Ishonchingiz komilmi? Bu amalni ortga qaytarib bo'lmaydi.")}',
+      confirmLabel: tr("Ha, o'chirish"),
+      destructive: true,
+    );
+    if (!confirm) return;
+    final success = await _userService.deleteUser(u.userId);
+    if (!mounted) return;
+    if (success) {
+      showAppSnack(
+        context,
+        tr("Foydalanuvchi o'chirildi"),
+        type: SnackType.success,
+      );
+      _load();
+    } else {
+      showAppSnack(
+        context,
+        tr("O'chirib bo'lmadi. Qayta urinib ko'ring."),
+        type: SnackType.error,
+      );
     }
   }
 
@@ -110,190 +164,142 @@ class _UsersPageState extends State<UsersPage> {
     await launchUrl(uri);
   }
 
-  // ── Build ──────────────────────────────────────────────────────────────
+  String _cleanError(Object e) => e.toString().replaceFirst('Exception: ', '');
 
   /// Bitta foydalanuvchiga login ma'lumotlarini (ism + login + parol + ilova
   /// linklari) Telegram orqali yuboradi. Avval tasdiqlash so'raladi.
   Future<void> _sendCredentials(UserModel u) async {
-    final messenger = ScaffoldMessenger.of(context);
-    final name = u.fullName.isNotEmpty ? u.fullName : u.username;
-    final ok = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: const Text('Отправить в Telegram'),
-        content: Text('$name — отправить логин и пароль через Telegram?'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Нет'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Отправить'),
-          ),
-        ],
-      ),
+    final ok = await showConfirmDialog(
+      context,
+      title: tr('Telegram orqali yuborish'),
+      message:
+          '${_nameOf(u)} — ${tr('login va parol Telegram orqali yuborilsinmi?')}',
+      confirmLabel: tr('Yuborish'),
     );
-    if (ok != true) return;
-    messenger.showSnackBar(const SnackBar(content: Text('Отправляется...')));
+    if (!ok || !mounted) return;
+    showAppSnack(context, tr('Yuborilmoqda...'));
     try {
       await _userService.sendCredentials(u.userId);
       if (!mounted) return;
-      messenger.hideCurrentSnackBar();
-      messenger.showSnackBar(
-        const SnackBar(
-          content: Text('Отправлено в Telegram'),
-          backgroundColor: Colors.green,
-        ),
+      showAppSnack(
+        context,
+        tr('Telegram orqali yuborildi'),
+        type: SnackType.success,
       );
     } catch (e) {
       if (!mounted) return;
-      messenger.hideCurrentSnackBar();
-      final msg = e.toString().replaceFirst('Exception: ', '');
-      messenger.showSnackBar(
-        SnackBar(content: Text(msg), backgroundColor: Colors.red),
-      );
+      showAppSnack(context, trData(_cleanError(e)), type: SnackType.error);
     }
   }
 
   /// super_admin'dan boshqa barcha foydalanuvchilarga login ma'lumotlarini
   /// (ism + login + parol + ilova linklari) bittada Telegram orqali yuboradi.
-  /// Avval tasdiqlash so'raladi, so'ng natija snackbar'da ko'rsatiladi.
   Future<void> _sendAllCredentials() async {
-    final messenger = ScaffoldMessenger.of(context);
-    final ok = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: const Text('Отправить всем'),
-        content: const Text(
-          'Отправить логин и пароль всем пользователям через Telegram?',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Нет'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Отправить'),
-          ),
-        ],
+    final ok = await showConfirmDialog(
+      context,
+      title: tr('Hammaga yuborish'),
+      message: tr(
+        'Barcha foydalanuvchilarga login va parol Telegram orqali yuborilsinmi?',
       ),
+      confirmLabel: tr('Yuborish'),
     );
-    if (ok != true) return;
-    messenger.showSnackBar(
-      const SnackBar(content: Text('Отправляется...')),
-    );
+    if (!ok || !mounted) return;
+    showAppSnack(context, tr('Yuborilmoqda...'));
     try {
       final res = await _userService.sendAllCredentials();
       if (!mounted) return;
       final sent = (res['sent'] as num?)?.toInt() ?? 0;
       final skipped = (res['skipped'] as List?)?.length ?? 0;
       final failed = (res['failed'] as List?)?.length ?? 0;
-      final parts = <String>['$sent отправлено'];
-      if (skipped > 0) parts.add('$skipped без Telegram');
-      if (failed > 0) parts.add('$failed ошибок');
-      messenger.hideCurrentSnackBar();
-      messenger.showSnackBar(
-        SnackBar(
-          content: Text(parts.join(' · ')),
-          backgroundColor: failed > 0 ? Colors.orange : Colors.green,
-        ),
+      final parts = <String>['$sent ${tr('ta yuborildi')}'];
+      if (skipped > 0) parts.add('$skipped ${tr('ta Telegramsiz')}');
+      if (failed > 0) parts.add('$failed ${tr('ta xatolik')}');
+      showAppSnack(
+        context,
+        parts.join(' · '),
+        type: failed > 0 ? SnackType.error : SnackType.success,
       );
     } catch (e) {
       if (!mounted) return;
-      messenger.hideCurrentSnackBar();
-      messenger.showSnackBar(
-        SnackBar(content: Text('Ошибка: $e'), backgroundColor: Colors.red),
+      showAppSnack(
+        context,
+        '${tr('Xatolik')}: ${_cleanError(e)}',
+        type: SnackType.error,
       );
     }
   }
 
+  Future<void> _openAddUser() async {
+    final result = await Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => AddWorkerPage()),
+    );
+    if (result == true) _load();
+  }
+
+  void _onAction(UserModel u, _UserAction a) {
+    switch (a) {
+      case _UserAction.edit:
+        _showEditDialog(u);
+      case _UserAction.role:
+        _pickRole(u);
+      case _UserAction.filials:
+        _pickFilials(u);
+      case _UserAction.telegram:
+        _sendCredentials(u);
+      case _UserAction.loginAs:
+        _loginAsUser(u);
+      case _UserAction.delete:
+        _deleteUser(u);
+    }
+  }
+
+  // ── Build ──────────────────────────────────────────────────────────────
+
   @override
   Widget build(BuildContext context) {
-    final isSuperAdmin =
-        sl<TokenStorage>().getUserData()?.role == 'super_admin';
     return Scaffold(
-      backgroundColor: const Color(0xFFF0F2F5),
       appBar: AppBar(
-        title: const Text('Пользователи'),
+        title: Text(tr('Foydalanuvchilar')),
         actions: [
+          IconButton(
+            tooltip: tr('Yangilash'),
+            icon: Icon(Icons.refresh_rounded),
+            onPressed: _load,
+          ),
           // Barcha foydalanuvchilarga login ma'lumotlarini bittada Telegram
           // orqali yuborish — faqat super_admin ko'radi.
-          if (isSuperAdmin)
-            IconButton(
-              icon: const Icon(Icons.send_rounded),
-              tooltip: 'Отправить всем в Telegram',
-              onPressed: _sendAllCredentials,
-            ),
-        ],
-      ),
-      body: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Container(
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(16),
-            boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.04), blurRadius: 4)],
-          ),
-          child: Column(
-            children: [
-              Padding(
-                padding: const EdgeInsets.all(16),
-                child: Row(
-                  children: [
-                    Text(
-                      '${_users.length} пользователей',
-                      style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: Colors.grey[700]),
-                    ),
-                    const Spacer(),
-                    _viewToggleButton(),
-                    const SizedBox(width: 8),
-                    FilledButton.icon(
-                      onPressed: () async {
-                        final result = await Navigator.push(
-                          context,
-                          MaterialPageRoute(builder: (_) => const AddWorkerPage()),
-                        );
-                        if (result == true) _load();
-                      },
-                      icon: const Icon(Icons.add, size: 18),
-                      label: const Text('Новый'),
-                    ),
-                    const SizedBox(width: 8),
-                    IconButton(icon: const Icon(Icons.refresh_rounded), onPressed: _load),
-                  ],
-                ),
-              ),
-              const Divider(height: 1),
-              if (!_profileView) ...[
-                Container(
-                  color: const Color(0xFFF9FAFB),
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                  child: Row(
-                    children: [
-                      _th('#', 36),
-                      const SizedBox(width: 60),
-                      _thFlex('Имя', 2),
-                      _th('Роль', 140),
-                      _thFlex('Филиалы', 2),
-                    ],
+          if (_isSuperAdmin)
+            PopupMenuButton<int>(
+              tooltip: tr("Ko'proq"),
+              icon: Icon(Icons.more_vert_rounded),
+              onSelected: (_) => _sendAllCredentials(),
+              itemBuilder: (_) => [
+                PopupMenuItem(
+                  value: 0,
+                  child: ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    leading: Icon(Icons.send_rounded),
+                    title: Text(tr('Hammaga Telegram orqali yuborish')),
                   ),
                 ),
-                const Divider(height: 1),
               ],
-              Expanded(
-                child: _loading
-                    ? const Center(child: CircularProgressIndicator())
-                    : _users.isEmpty
-                        ? const Center(child: Text('Пользователи не найдены'))
-                        : RefreshIndicator(
-                            onRefresh: _load,
-                            child: _profileView ? _profileGrid() : _listView(),
-                          ),
-              ),
+            ),
+          SizedBox(width: 4),
+        ],
+      ),
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: _openAddUser,
+        icon: Icon(Icons.person_add_alt_1_rounded),
+        label: Text(tr('Yangi foydalanuvchi')),
+      ),
+      body: Center(
+        child: ConstrainedBox(
+          constraints: BoxConstraints(maxWidth: 720),
+          child: Column(
+            children: [
+              _buildFilters(),
+              Expanded(child: _buildBody()),
             ],
           ),
         ),
@@ -301,597 +307,580 @@ class _UsersPageState extends State<UsersPage> {
     );
   }
 
-  // ── View toggle ────────────────────────────────────────────────────────
-
-  Widget _viewToggleButton() {
-    return Container(
-      decoration: BoxDecoration(
-        color: const Color(0xFFF3F4F6),
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: const Color(0xFFE5E7EB)),
-      ),
-      padding: const EdgeInsets.all(3),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
+  Widget _buildFilters() {
+    final t = Theme.of(context).textTheme;
+    final count = _loading && _users.isEmpty ? null : _visibleUsers.length;
+    return Padding(
+      padding: EdgeInsets.fromLTRB(16, 12, 16, 4),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          _toggleSeg(
-            icon: Icons.view_list_rounded,
-            label: 'Список',
-            selected: !_profileView,
-            onTap: () => setState(() => _profileView = false),
+          TextField(
+            controller: _searchController,
+            onChanged: (v) => setState(() => _query = v),
+            textInputAction: TextInputAction.search,
+            decoration: InputDecoration(
+              hintText: tr("Ism, login yoki telefon bo'yicha qidirish"),
+              prefixIcon: Icon(Icons.search_rounded),
+              suffixIcon: _query.isEmpty
+                  ? null
+                  : IconButton(
+                      tooltip: tr('Tozalash'),
+                      icon: Icon(Icons.close_rounded),
+                      onPressed: () {
+                        _searchController.clear();
+                        setState(() => _query = '');
+                      },
+                    ),
+            ),
           ),
-          _toggleSeg(
-            icon: Icons.account_box_rounded,
-            label: 'Профиль',
-            selected: _profileView,
-            onTap: () => setState(() => _profileView = true),
+          SizedBox(height: AppSpacing.sm),
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Row(
+              children: [
+                _roleChip(null, tr('Hammasi')),
+                for (final r in kUserRoles) _roleChip(r, userRoleLabel(r)),
+                SizedBox(width: 4),
+                _filialFilterChip(),
+              ],
+            ),
           ),
+          if (count != null)
+            Padding(
+              padding: EdgeInsets.only(top: 8, left: 4),
+              child: Text(
+                '$count ${tr('ta foydalanuvchi')}',
+                style: t.bodySmall?.copyWith(color: AppColors.textSecondary),
+              ),
+            ),
         ],
       ),
     );
   }
 
-  Widget _toggleSeg({required IconData icon, required String label, required bool selected, required VoidCallback onTap}) {
-    return GestureDetector(
-      onTap: onTap,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 150),
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
-        decoration: BoxDecoration(
-          color: selected ? Colors.white : Colors.transparent,
-          borderRadius: BorderRadius.circular(8),
-          boxShadow: selected
-              ? [BoxShadow(color: Colors.black.withValues(alpha: 0.06), blurRadius: 4, offset: const Offset(0, 1))]
-              : null,
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(icon, size: 16, color: selected ? const Color(0xFF2563EB) : const Color(0xFF6B7280)),
-            const SizedBox(width: 6),
-            Text(
-              label,
-              style: TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.w600,
-                color: selected ? const Color(0xFF111827) : const Color(0xFF6B7280),
-              ),
-            ),
-          ],
-        ),
+  Widget _roleChip(String? role, String label) {
+    return Padding(
+      padding: EdgeInsets.only(right: 8),
+      child: ChoiceChip(
+        label: Text(label),
+        selected: _roleFilter == role,
+        onSelected: (_) => setState(() => _roleFilter = role),
       ),
     );
   }
 
-  // ── List view ──────────────────────────────────────────────────────────
-
-  Widget _listView() {
-    return ListView.separated(
-      itemCount: _users.length,
-      separatorBuilder: (_, __) => const Divider(height: 1),
-      itemBuilder: (_, i) => _row(_users[i], i + 1),
-    );
-  }
-
-  Widget _th(String text, double width) {
-    return SizedBox(
-      width: width,
-      child: Text(text, style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: Colors.grey[600], letterSpacing: 0.5)),
-    );
-  }
-
-  Widget _thFlex(String text, int flex) {
-    return Expanded(
-      flex: flex,
-      child: Text(text, style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: Colors.grey[600], letterSpacing: 0.5)),
-    );
-  }
-
-  Widget _row(UserModel u, int index) {
-    final phone = u.phoneNumber ?? u.login;
-    final imgUrl = u.photoUrl ?? '';
-
-    return GestureDetector(
-      behavior: HitTestBehavior.opaque,
-      onTap: () => _showEditDialog(u),
-      onLongPress: () => _deleteUser(u.userId),
-      onDoubleTap: () => _loginAsUser(u),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-        child: Row(
-          children: [
-            SizedBox(width: 36, child: Text('$index', style: TextStyle(fontSize: 13, color: Colors.grey[500]))),
-            SizedBox(
-              width: 60,
-              child: GestureDetector(
-                onTap: imgUrl.isNotEmpty ? () => _showAvatarPreview(imgUrl, u.fullName) : null,
-                child: Container(
-                  width: 48, height: 48,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    color: const Color(0xFFE0E7FF),
-                    border: Border.all(color: const Color(0xFFE5E7EB), width: 1),
-                    image: imgUrl.isNotEmpty
-                        ? DecorationImage(image: NetworkImage(imgUrl), fit: BoxFit.cover, onError: (_, __) {})
-                        : null,
-                  ),
-                  alignment: Alignment.center,
-                  child: imgUrl.isEmpty
-                      ? Text(
-                          u.fullName.trim().isNotEmpty ? u.fullName.trim()[0].toUpperCase() : '?',
-                          style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w700, color: Color(0xFF3730A3)),
-                        )
-                      : null,
-                ),
-              ),
+  Widget _filialFilterChip() {
+    final active = _filialFilter != null;
+    return PopupMenuButton<int>(
+      tooltip: tr('Filial'),
+      position: PopupMenuPosition.under,
+      constraints: BoxConstraints(maxHeight: 420, minWidth: 220),
+      onSelected: (id) => setState(() => _filialFilter = id < 0 ? null : id),
+      itemBuilder: (_) => [
+        CheckedPopupMenuItem(
+          value: -1,
+          checked: _filialFilter == null,
+          child: Text(tr('Barcha filiallar')),
+        ),
+        PopupMenuDivider(),
+        ..._filials.map(
+          (f) => CheckedPopupMenuItem(
+            value: f.filialId,
+            checked: _filialFilter == f.filialId,
+            child: Text(displayName(f.name), overflow: TextOverflow.ellipsis),
+          ),
+        ),
+      ],
+      child: Chip(
+        avatar: Icon(
+          Icons.storefront_outlined,
+          size: 18,
+          color: active ? AppColors.primary : AppColors.textSecondary,
+        ),
+        label: ConstrainedBox(
+          constraints: BoxConstraints(maxWidth: 180),
+          child: Text(
+            active ? _filialName(_filialFilter!) : tr('Filial'),
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              color: active ? AppColors.primary : AppColors.textPrimary,
+              fontWeight: active ? FontWeight.w600 : FontWeight.w500,
             ),
-            Expanded(
-              flex: 2,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  GestureDetector(
-                    onTap: () => _showEditDialog(u),
-                    child: Text(
-                      u.fullName.isNotEmpty ? u.fullName : '—',
-                      style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 15, color: Color(0xFF111827)),
+          ),
+        ),
+        backgroundColor: active ? AppColors.primarySoft : null,
+        side: BorderSide(color: active ? AppColors.primary : AppColors.border),
+        deleteIcon: active ? Icon(Icons.close_rounded, size: 16) : null,
+        onDeleted: active ? () => setState(() => _filialFilter = null) : null,
+      ),
+    );
+  }
+
+  Widget _buildBody() {
+    if (_loading && _users.isEmpty) return AppLoader();
+    if (_error) return AppErrorState(onRetry: _load);
+    if (_users.isEmpty) {
+      return RefreshIndicator(
+        onRefresh: _load,
+        child: ListView(
+          children: [
+            SizedBox(height: 40),
+            AppEmptyState(
+              icon: Icons.people_outline_rounded,
+              title: tr("Hali foydalanuvchilar yo'q"),
+              message: tr(
+                "Birinchi xodimni qo'shish uchun «Yangi foydalanuvchi» tugmasini bosing.",
+              ),
+              actionLabel: tr('Yangi foydalanuvchi'),
+              onAction: _openAddUser,
+            ),
+          ],
+        ),
+      );
+    }
+    final users = _visibleUsers;
+    if (users.isEmpty) {
+      return AppEmptyState(
+        icon: Icons.search_off_rounded,
+        title: tr('Hech narsa topilmadi'),
+        message: tr("Qidiruv so'zini yoki filtrlarni o'zgartirib ko'ring."),
+        actionLabel: tr('Filtrlarni tozalash'),
+        onAction: () {
+          _searchController.clear();
+          setState(() {
+            _query = '';
+            _roleFilter = null;
+            _filialFilter = null;
+          });
+        },
+      );
+    }
+    return RefreshIndicator(
+      onRefresh: _load,
+      child: ListView.separated(
+        padding: EdgeInsets.fromLTRB(16, 8, 16, 96),
+        itemCount: users.length,
+        separatorBuilder: (_, __) => SizedBox(height: AppSpacing.sm),
+        itemBuilder: (_, i) => _userCard(users[i]),
+      ),
+    );
+  }
+
+  // ── Foydalanuvchi kartasi ──────────────────────────────────────────────
+
+  Widget _userCard(UserModel u) {
+    final t = Theme.of(context).textTheme;
+    final phone = u.phoneNumber ?? '';
+    final tg = u.telegram;
+    final pos = u.position;
+    final filialIds = u.filialIds ?? <int>[];
+    final allFilials = u.role == 'super_admin' || u.role == 'checker';
+
+    return Card(
+      margin: EdgeInsets.zero,
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: () => _showEditDialog(u),
+        child: Padding(
+          padding: EdgeInsets.fromLTRB(14, 12, 4, 12),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _avatar(u),
+              SizedBox(width: AppSpacing.md),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      _nameOf(u).isNotEmpty ? _nameOf(u) : '—',
+                      style: t.titleSmall?.copyWith(
+                        fontWeight: FontWeight.w700,
+                        fontSize: 15,
+                      ),
+                      maxLines: 2,
                       overflow: TextOverflow.ellipsis,
                     ),
-                  ),
-                  if (phone.isNotEmpty) ...[
-                    const SizedBox(height: 4),
-                    GestureDetector(
-                      onTap: () => _callPhone(phone),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          const Icon(Icons.phone_rounded, size: 14, color: Color(0xFF2563EB)),
-                          const SizedBox(width: 4),
-                          Flexible(
-                            child: Text(
-                              phone,
-                              style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: Color(0xFF2563EB), decoration: TextDecoration.underline, decorationColor: Color(0xFF2563EB)),
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                  if (u.password.isNotEmpty) ...[
-                    const SizedBox(height: 4),
-                    Row(
-                      mainAxisSize: MainAxisSize.min,
+                    SizedBox(height: 4),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 4,
+                      crossAxisAlignment: WrapCrossAlignment.center,
                       children: [
-                        const Icon(Icons.key_rounded, size: 14, color: Color(0xFF9CA3AF)),
-                        const SizedBox(width: 4),
-                        Flexible(
-                          child: Text(u.password, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500, color: Color(0xFF6B7280)), overflow: TextOverflow.ellipsis),
-                        ),
+                        _roleBadge(u.role),
+                        if (u.login.isNotEmpty)
+                          Text(
+                            '@${u.login}',
+                            style: t.bodySmall?.copyWith(
+                              color: AppColors.textTertiary,
+                            ),
+                            overflow: TextOverflow.ellipsis,
+                          ),
                       ],
                     ),
+                    if (pos != null && pos.isNotEmpty)
+                      _infoLine(Icons.work_outline_rounded, trData(pos)),
+                    if (phone.isNotEmpty)
+                      _infoLine(
+                        Icons.phone_outlined,
+                        phone,
+                        link: true,
+                        onTap: () => _callPhone(phone),
+                      ),
+                    if (u.password.isNotEmpty)
+                      _infoLine(Icons.key_rounded, u.password),
+                    if (tg != null && tg.isNotEmpty)
+                      _infoLine(
+                        Icons.send_outlined,
+                        '@$tg',
+                        link: true,
+                        onTap: () => _openTelegram(tg),
+                      ),
+                    if (allFilials)
+                      _infoLine(
+                        Icons.storefront_outlined,
+                        tr('Barcha filiallar'),
+                      )
+                    else if (filialIds.isEmpty)
+                      _infoLine(
+                        Icons.storefront_outlined,
+                        tr('Filial tanlanmagan'),
+                        warning: true,
+                        onTap: () => _pickFilials(u),
+                      )
+                    else
+                      _infoLine(
+                        Icons.storefront_outlined,
+                        filialIds.map(_filialName).join(', '),
+                        onTap: () => _pickFilials(u),
+                        maxLines: 2,
+                      ),
                   ],
-                ],
+                ),
               ),
-            ),
-            SizedBox(width: 140, child: Align(alignment: Alignment.centerLeft, child: _roleSelector(u))),
-            Expanded(flex: 2, child: _filialSelector(u)),
-            // Bitta foydalanuvchiga login ma'lumotlarini Telegram orqali yuborish.
-            if (u.role != 'super_admin' &&
-                sl<TokenStorage>().getUserData()?.role == 'super_admin')
-              IconButton(
-                tooltip: 'Отправить в Telegram',
-                icon: const Icon(Icons.send_rounded, size: 20, color: Color(0xFF2563EB)),
-                onPressed: () => _sendCredentials(u),
-              ),
-          ],
+              _actionsMenu(u),
+            ],
+          ),
         ),
       ),
     );
   }
 
-  // ── Role selector ──────────────────────────────────────────────────────
-
-  Widget _roleSelector(UserModel u) {
-    if (u.role == 'super_admin') return _roleBadge(u.role);
-    return PopupMenuButton<String>(
-      tooltip: 'Роль',
-      position: PopupMenuPosition.under,
-      color: Colors.white,
-      surfaceTintColor: Colors.white,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
-        side: const BorderSide(color: Color(0xFFE5E7EB)),
-      ),
-      onSelected: (next) => _changeRole(u, next),
-      itemBuilder: (_) => [
-        _roleMenuItem('checker', u.role == 'checker'),
-        _roleMenuItem('worker', u.role == 'worker'),
-      ],
-      child: Container(
-        padding: const EdgeInsets.fromLTRB(10, 6, 6, 6),
-        decoration: BoxDecoration(
-          color: const Color(0xFFEEF2FF),
-          borderRadius: BorderRadius.circular(24),
-          border: Border.all(color: const Color(0xFFC7D2FE), width: 1),
-        ),
+  Widget _actionsMenu(UserModel u) {
+    final canSend = u.role != 'super_admin' && _isSuperAdmin;
+    PopupMenuItem<_UserAction> item(
+      _UserAction a,
+      IconData icon,
+      String label, {
+      bool danger = false,
+    }) {
+      final color = danger ? AppColors.danger : AppColors.textPrimary;
+      return PopupMenuItem(
+        value: a,
         child: Row(
-          mainAxisSize: MainAxisSize.min,
           children: [
-            Container(width: 6, height: 6, decoration: const BoxDecoration(color: Color(0xFF4F46E5), shape: BoxShape.circle)),
-            const SizedBox(width: 8),
+            Icon(
+              icon,
+              size: 20,
+              color: danger ? color : AppColors.textSecondary,
+            ),
+            SizedBox(width: 12),
             Flexible(
-              child: Text(_roleLabel(u.role), style: const TextStyle(color: Color(0xFF3730A3), fontSize: 12, fontWeight: FontWeight.w600), overflow: TextOverflow.ellipsis),
-            ),
-            const SizedBox(width: 6),
-            Container(
-              width: 22, height: 22,
-              decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(11)),
-              alignment: Alignment.center,
-              child: const Icon(Icons.expand_more_rounded, size: 16, color: Color(0xFF4F46E5)),
+              child: Text(label, style: TextStyle(color: color)),
             ),
           ],
+        ),
+      );
+    }
+
+    return PopupMenuButton<_UserAction>(
+      tooltip: tr('Amallar'),
+      icon: Icon(Icons.more_vert_rounded, color: AppColors.textSecondary),
+      onSelected: (a) => _onAction(u, a),
+      itemBuilder: (_) => [
+        item(_UserAction.edit, Icons.edit_outlined, tr('Tahrirlash')),
+        if (u.role != 'super_admin')
+          item(
+            _UserAction.role,
+            Icons.badge_outlined,
+            tr("Rolni o'zgartirish"),
+          ),
+        if (u.role == 'worker')
+          item(
+            _UserAction.filials,
+            Icons.storefront_outlined,
+            tr('Filiallarni tanlash'),
+          ),
+        if (canSend)
+          item(
+            _UserAction.telegram,
+            Icons.send_rounded,
+            tr('Telegram orqali yuborish'),
+          ),
+        item(
+          _UserAction.loginAs,
+          Icons.login_rounded,
+          tr('Shu foydalanuvchi sifatida kirish'),
+        ),
+        PopupMenuDivider(),
+        item(
+          _UserAction.delete,
+          Icons.delete_outline_rounded,
+          tr("O'chirish"),
+          danger: true,
+        ),
+      ],
+    );
+  }
+
+  Widget _avatar(UserModel u) {
+    final imgUrl = u.photoUrl ?? '';
+    final name = _nameOf(u).trim();
+    final initial = name.isNotEmpty ? name[0].toUpperCase() : '?';
+    return GestureDetector(
+      onTap: imgUrl.isNotEmpty ? () => _showAvatarPreview(imgUrl, name) : null,
+      child: CircleAvatar(
+        radius: 24,
+        backgroundColor: AppColors.primarySoft,
+        foregroundImage: imgUrl.isNotEmpty ? NetworkImage(imgUrl) : null,
+        onForegroundImageError: imgUrl.isNotEmpty ? (_, __) {} : null,
+        child: Text(
+          initial,
+          style: TextStyle(
+            fontSize: 18,
+            fontWeight: FontWeight.w700,
+            color: AppColors.primary,
+          ),
         ),
       ),
     );
   }
 
-  PopupMenuItem<String> _roleMenuItem(String value, bool selected) {
-    return PopupMenuItem<String>(
-      value: value,
-      padding: EdgeInsets.zero,
-      child: Container(
-        width: double.infinity,
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-        color: selected ? const Color(0xFFEFF6FF) : Colors.white,
-        child: Row(
+  Widget _infoLine(
+    IconData icon,
+    String text, {
+    bool link = false,
+    bool warning = false,
+    VoidCallback? onTap,
+    int maxLines = 1,
+  }) {
+    final color = warning
+        ? AppColors.warning
+        : link
+        ? AppColors.primary
+        : AppColors.textSecondary;
+    final row = Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: EdgeInsets.only(top: 1),
+          child: Icon(
+            icon,
+            size: 15,
+            color: warning ? color : AppColors.textTertiary,
+          ),
+        ),
+        SizedBox(width: 6),
+        Flexible(
+          child: Text(
+            text,
+            maxLines: maxLines,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              fontSize: 13,
+              color: color,
+              fontWeight: link || warning ? FontWeight.w600 : FontWeight.w400,
+            ),
+          ),
+        ),
+      ],
+    );
+    return Padding(
+      padding: EdgeInsets.only(top: 6),
+      child: onTap == null
+          ? row
+          : InkWell(onTap: onTap, borderRadius: AppRadius.smAll, child: row),
+    );
+  }
+
+  Widget _roleBadge(String role) {
+    final (fg, bg) = userRoleColors(role);
+    return StatusBadge(label: userRoleLabel(role), color: fg, background: bg);
+  }
+
+  // ── Rolni o'zgartirish ─────────────────────────────────────────────────
+
+  Future<void> _pickRole(UserModel u) async {
+    final next = await showModalBottomSheet<String>(
+      context: context,
+      showDragHandle: true,
+      builder: (ctx) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Expanded(
+            Padding(
+              padding: EdgeInsets.fromLTRB(24, 0, 24, 8),
               child: Text(
-                _roleLabel(value),
-                style: TextStyle(fontSize: 13, fontWeight: selected ? FontWeight.w600 : FontWeight.w500, color: selected ? const Color(0xFF1E40AF) : const Color(0xFF111827)),
+                tr("Rolni o'zgartirish"),
+                style: Theme.of(ctx).textTheme.titleMedium,
               ),
             ),
-            if (selected) const Icon(Icons.check_rounded, size: 16, color: Color(0xFF2563EB)),
+            for (final r in ['checker', 'worker'])
+              ListTile(
+                contentPadding: EdgeInsets.symmetric(horizontal: 24),
+                title: Text(userRoleLabel(r)),
+                subtitle: Text(
+                  r == 'checker'
+                      ? tr("Barcha filiallarni ko'radi va tekshiradi")
+                      : tr('Faqat tanlangan filiallar bilan ishlaydi'),
+                ),
+                trailing: u.role == r
+                    ? Icon(Icons.check_rounded, color: AppColors.primary)
+                    : null,
+                onTap: () => Navigator.pop(ctx, r),
+              ),
+            SizedBox(height: 8),
           ],
         ),
       ),
     );
+    if (next == null) return;
+    await _changeRole(u, next);
   }
 
   Future<void> _changeRole(UserModel u, String next) async {
     if (next == u.role) return;
-    final success = await _userService.updateUser(userId: u.userId, username: u.username, role: next, filialIds: u.filialIds);
+    final success = await _userService.updateUser(
+      userId: u.userId,
+      username: u.username,
+      role: next,
+      filialIds: u.filialIds,
+    );
     if (!mounted) return;
     if (success) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Обновлено'), backgroundColor: Colors.green));
+      showAppSnack(context, tr('Yangilandi'), type: SnackType.success);
       _load();
-    }
-  }
-
-  // ── Filial selector ────────────────────────────────────────────────────
-
-  Widget _filialSelector(UserModel u) {
-    // super_admin va checker (Корректор) barcha filiallarni ko'radi —
-    // filial tanlash kerak emas.
-    if (u.role == 'super_admin' || u.role == 'checker') {
-      return Text('—', style: TextStyle(fontSize: 12, color: Colors.grey[600]));
-    }
-    final ids = u.filialIds ?? [];
-    final btnKey = GlobalKey();
-    final isEmpty = ids.isEmpty;
-    final names = ids.map((id) {
-      final f = _filials.where((f) => f.filialId == id);
-      return f.isNotEmpty ? f.first.name : '#$id';
-    }).toList();
-    return GestureDetector(
-      onTap: () => _openFilialMenu(u, btnKey),
-      child: Container(
-        key: btnKey,
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(10),
-          border: Border.all(color: const Color(0xFFE5E7EB)),
-        ),
-        child: Row(
-          children: [
-            if (!isEmpty) ...[
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
-                decoration: BoxDecoration(color: const Color(0xFF059669), borderRadius: BorderRadius.circular(20)),
-                child: Text('${ids.length}', style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w700)),
-              ),
-              const SizedBox(width: 8),
-            ],
-            Expanded(
-              child: Text(
-                isEmpty ? 'Выбрать филиалы' : names.join(' · '),
-                style: TextStyle(fontSize: 12, color: isEmpty ? Colors.grey[500] : const Color(0xFF374151), fontWeight: isEmpty ? FontWeight.w500 : FontWeight.w600),
-                overflow: TextOverflow.ellipsis,
-                maxLines: 1,
-              ),
-            ),
-            const SizedBox(width: 4),
-            Container(
-              padding: const EdgeInsets.all(2),
-              decoration: BoxDecoration(color: const Color(0xFFF3F4F6), borderRadius: BorderRadius.circular(6)),
-              child: const Icon(Icons.unfold_more_rounded, size: 14, color: Color(0xFF6B7280)),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Future<void> _openFilialMenu(UserModel u, GlobalKey anchorKey) async {
-    final selected = Set<int>.from(u.filialIds ?? []);
-    final initial = Set<int>.from(selected);
-
-    final box = anchorKey.currentContext?.findRenderObject() as RenderBox?;
-    final overlay = Overlay.of(context).context.findRenderObject() as RenderBox?;
-    if (box == null || overlay == null) return;
-    final topLeft = box.localToGlobal(Offset(0, box.size.height + 4), ancestor: overlay);
-    final bottomRight = box.localToGlobal(box.size.bottomRight(Offset.zero), ancestor: overlay);
-    final position = RelativeRect.fromLTRB(topLeft.dx, topLeft.dy, overlay.size.width - bottomRight.dx, 0);
-
-    await showMenu<void>(
-      context: context,
-      position: position,
-      color: Colors.white,
-      surfaceTintColor: Colors.white,
-      constraints: const BoxConstraints(minWidth: 280, maxWidth: 360, maxHeight: 420),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12), side: const BorderSide(color: Color(0xFFE5E7EB))),
-      items: [
-        PopupMenuItem<void>(
-          enabled: false,
-          padding: EdgeInsets.zero,
-          child: StatefulBuilder(
-            builder: (ctx, setS) {
-              if (_filials.isEmpty) {
-                return Padding(padding: const EdgeInsets.all(16), child: Text('Филиалов нет', style: TextStyle(color: Colors.grey[600])));
-              }
-              return ConstrainedBox(
-                constraints: const BoxConstraints(maxHeight: 380),
-                child: SingleChildScrollView(
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: _filials.map((f) {
-                      final sel = selected.contains(f.filialId);
-                      return InkWell(
-                        onTap: () => setS(() { sel ? selected.remove(f.filialId) : selected.add(f.filialId); }),
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                          color: sel ? const Color(0xFFECFDF5) : Colors.white,
-                          child: Row(
-                            children: [
-                              AnimatedContainer(
-                                duration: const Duration(milliseconds: 120),
-                                width: 20, height: 20,
-                                decoration: BoxDecoration(
-                                  color: sel ? const Color(0xFF059669) : Colors.white,
-                                  border: Border.all(color: sel ? const Color(0xFF059669) : const Color(0xFFD1D5DB), width: 1.6),
-                                  borderRadius: BorderRadius.circular(6),
-                                ),
-                                alignment: Alignment.center,
-                                child: sel ? const Icon(Icons.check_rounded, size: 14, color: Colors.white) : null,
-                              ),
-                              const SizedBox(width: 12),
-                              Expanded(
-                                child: Text(f.name, style: TextStyle(fontSize: 13, fontWeight: sel ? FontWeight.w600 : FontWeight.w500, color: sel ? const Color(0xFF065F46) : const Color(0xFF111827))),
-                              ),
-                            ],
-                          ),
-                        ),
-                      );
-                    }).toList(),
-                  ),
-                ),
-              );
-            },
-          ),
-        ),
-      ],
-    );
-
-    if (selected.length == initial.length && selected.containsAll(initial)) return;
-    final success = await _userService.updateUser(userId: u.userId, username: u.username, role: u.role, filialIds: selected.toList());
-    if (!mounted) return;
-    if (success) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Обновлено'), backgroundColor: Colors.green));
-      _load();
-    }
-  }
-
-  // ── Profile grid view ──────────────────────────────────────────────────
-
-  Widget _profileGrid() {
-    if (_users.isEmpty) {
-      return Center(child: Text('Пользователей нет', style: TextStyle(color: Colors.grey[600])));
-    }
-    return LayoutBuilder(
-      builder: (ctx, c) {
-        final isWide = c.maxWidth >= 600;
-        return ListView.builder(
-          padding: const EdgeInsets.all(16),
-          itemCount: _users.length,
-          itemBuilder: (_, i) => _profileCard(_users[i], isWide: isWide),
-        );
-      },
-    );
-  }
-
-  Widget _profileCard(UserModel u, {required bool isWide}) {
-    final cardContent = Padding(
-      padding: const EdgeInsets.fromLTRB(14, 14, 14, 6),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          _userImage(u, isWide: isWide),
-          const SizedBox(width: 14),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: isWide ? _userFullFields(u) : _userShortFields(u),
-            ),
-          ),
-        ],
-      ),
-    );
-
-    return Container(
-      margin: const EdgeInsets.only(bottom: 10),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(14),
-        boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.06), blurRadius: 6, offset: const Offset(0, 2))],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          GestureDetector(
-            onTap: () => _showEditDialog(u),
-            onLongPress: () => _deleteUser(u.userId),
-            onDoubleTap: () => _loginAsUser(u),
-            child: cardContent,
-          ),
-          const SizedBox(height: 4),
-        ],
-      ),
-    );
-  }
-
-  Widget _userImage(UserModel u, {required bool isWide}) {
-    final w = isWide ? 200.0 : 130.0;
-    final h = isWide ? 260.0 : 180.0;
-    final imgRaw = u.photoUrl ?? '';
-    if (imgRaw.isNotEmpty) {
-      return GestureDetector(
-        onTap: () => _showAvatarPreview(imgRaw, u.fullName),
-        child: ClipRRect(
-          borderRadius: BorderRadius.circular(10),
-          child: Image.network(imgRaw, width: w, height: h, fit: BoxFit.cover,
-            errorBuilder: (_, __, ___) => Container(width: w, height: h, decoration: BoxDecoration(color: Colors.grey[100], borderRadius: BorderRadius.circular(10)), child: Icon(Icons.person, size: 40, color: Colors.grey[400])),
-          ),
-        ),
+    } else {
+      showAppSnack(
+        context,
+        tr("Saqlab bo'lmadi. Qayta urinib ko'ring."),
+        type: SnackType.error,
       );
     }
-    return Container(
-      width: w, height: h,
-      decoration: BoxDecoration(color: const Color(0xFFE0E7FF), borderRadius: BorderRadius.circular(10)),
-      alignment: Alignment.center,
-      child: Text(u.fullName.isNotEmpty ? u.fullName[0].toUpperCase() : '?', style: TextStyle(fontSize: w * 0.3, fontWeight: FontWeight.w700, color: const Color(0xFF3730A3))),
-    );
   }
 
-  List<Widget> _userShortFields(UserModel u) {
-    final phone = u.phoneNumber ?? u.login;
-    final tg = u.telegram;
-    return [
-      _userCardHeader(u),
-      _phoneLine(phone),
-      if (u.password.isNotEmpty) _passwordLine(u.password),
-      if (tg != null && tg.isNotEmpty) _telegramLine(tg),
-      if (u.filialIds != null && u.filialIds!.isNotEmpty)
-        _profileInfoLine(Icons.location_on_outlined, u.filialIds!.map((id) {
-          final f = _filials.where((f) => f.filialId == id);
-          return f.isNotEmpty ? f.first.name : '#$id';
-        }).join(', ')),
-    ];
-  }
+  // ── Filiallarni tanlash ────────────────────────────────────────────────
 
-  List<Widget> _userFullFields(UserModel u) {
-    final phone = u.phoneNumber ?? u.login;
-    final pos = u.position;
-    final tg = u.telegram;
-    return [
-      _userCardHeader(u),
-      if (pos != null && pos.isNotEmpty) _profileInfoLine(Icons.work_outlined, pos),
-      _phoneLine(phone),
-      if (u.password.isNotEmpty) _passwordLine(u.password),
-      if (tg != null && tg.isNotEmpty) _telegramLine(tg),
-      if (u.filialIds != null && u.filialIds!.isNotEmpty)
-        _profileInfoLine(Icons.location_on_outlined, u.filialIds!.map((id) {
-          final f = _filials.where((f) => f.filialId == id);
-          return f.isNotEmpty ? f.first.name : '#$id';
-        }).join(', ')),
-    ];
-  }
+  Future<void> _pickFilials(UserModel u) async {
+    final initial = Set<int>.from(u.filialIds ?? <int>[]);
+    final selected = Set<int>.from(initial);
 
-  Widget _userCardHeader(UserModel u) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 8),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(children: [
-            Flexible(child: Text(u.fullName.isNotEmpty ? u.fullName : '—', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: Color(0xFF1F2937)))),
-            const SizedBox(width: 8),
-            _roleBadge(u.role),
-          ]),
-          if (u.position != null && u.position!.isNotEmpty) ...[
-            const SizedBox(height: 2),
-            Text(u.position!, style: TextStyle(fontSize: 13, color: Colors.grey[600])),
-          ],
-        ],
+    final save = await showModalBottomSheet<bool>(
+      context: context,
+      showDragHandle: true,
+      isScrollControlled: true,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setS) => SafeArea(
+          child: ConstrainedBox(
+            constraints: BoxConstraints(
+              maxHeight: MediaQuery.of(ctx).size.height * 0.8,
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Padding(
+                  padding: EdgeInsets.fromLTRB(24, 0, 24, 4),
+                  child: Text(
+                    tr('Filiallarni tanlash'),
+                    style: Theme.of(ctx).textTheme.titleMedium,
+                  ),
+                ),
+                Padding(
+                  padding: EdgeInsets.fromLTRB(24, 0, 24, 8),
+                  child: Text(
+                    _nameOf(u),
+                    style: Theme.of(ctx).textTheme.bodySmall?.copyWith(
+                      color: AppColors.textSecondary,
+                    ),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                if (_filials.isEmpty)
+                  Padding(
+                    padding: EdgeInsets.all(24),
+                    child: Text(tr("Filiallar yo'q")),
+                  )
+                else
+                  Flexible(
+                    child: ListView(
+                      shrinkWrap: true,
+                      children: _filials.map((f) {
+                        return CheckboxListTile(
+                          contentPadding: EdgeInsets.symmetric(horizontal: 16),
+                          controlAffinity: ListTileControlAffinity.leading,
+                          value: selected.contains(f.filialId),
+                          title: Text(displayName(f.name)),
+                          onChanged: (v) => setS(() {
+                            v == true
+                                ? selected.add(f.filialId)
+                                : selected.remove(f.filialId);
+                          }),
+                        );
+                      }).toList(),
+                    ),
+                  ),
+                Padding(
+                  padding: EdgeInsets.fromLTRB(16, 8, 16, 12),
+                  child: FilledButton(
+                    onPressed: () => Navigator.pop(ctx, true),
+                    child: Text(tr('Saqlash')),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
       ),
     );
-  }
 
-  Widget _profileInfoLine(IconData icon, String text, {int? maxLines}) {
-    if (text.isEmpty) return const SizedBox.shrink();
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 4),
-      child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Padding(padding: const EdgeInsets.only(top: 2), child: Icon(icon, size: 14, color: Colors.grey[400])),
-        const SizedBox(width: 8),
-        Expanded(child: Text(text, style: TextStyle(fontSize: 13, color: Colors.grey[700]), maxLines: maxLines, overflow: maxLines != null ? TextOverflow.ellipsis : TextOverflow.clip)),
-      ]),
+    if (save != true) return;
+    if (selected.length == initial.length && selected.containsAll(initial)) {
+      return;
+    }
+    // Server bo'sh ro'yxatni qabul qilmaydi (eski filiallar qolib ketadi) —
+    // shuning uchun kamida bitta filial talab qilinadi.
+    if (selected.isEmpty) {
+      if (!mounted) return;
+      showAppSnack(
+        context,
+        tr('Kamida bitta filialni tanlang'),
+        type: SnackType.error,
+      );
+      return;
+    }
+    final success = await _userService.updateUser(
+      userId: u.userId,
+      username: u.username,
+      role: u.role,
+      filialIds: selected.toList(),
     );
+    if (!mounted) return;
+    if (success) {
+      showAppSnack(context, tr('Yangilandi'), type: SnackType.success);
+      _load();
+    } else {
+      showAppSnack(
+        context,
+        tr("Saqlab bo'lmadi. Qayta urinib ko'ring."),
+        type: SnackType.error,
+      );
+    }
   }
 
-  Widget _phoneLine(String telefon) {
-    if (telefon.isEmpty) return const SizedBox.shrink();
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 4),
-      child: GestureDetector(
-        onTap: () => _callPhone(telefon),
-        child: Row(children: [
-          Icon(Icons.phone_outlined, size: 14, color: Colors.grey[400]),
-          const SizedBox(width: 8),
-          Text(telefon, style: const TextStyle(fontSize: 13, color: Color(0xFF3699ff), fontWeight: FontWeight.w600)),
-        ]),
-      ),
-    );
-  }
-
-  Widget _passwordLine(String password) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 4),
-      child: Row(children: [
-        const Icon(Icons.key_rounded, size: 14, color: Color(0xFF9CA3AF)),
-        const SizedBox(width: 8),
-        Flexible(child: Text(password, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500, color: Color(0xFF6B7280)), overflow: TextOverflow.ellipsis)),
-      ]),
-    );
-  }
-
-  Widget _telegramLine(String username) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 4),
-      child: GestureDetector(
-        onTap: () => _openTelegram(username),
-        child: Row(children: [
-          Icon(Icons.send_outlined, size: 14, color: Colors.grey[400]),
-          const SizedBox(width: 8),
-          Flexible(child: Text('@$username', style: const TextStyle(fontSize: 13, color: Color(0xFF3699ff), fontWeight: FontWeight.w600))),
-        ]),
-      ),
-    );
-  }
-
-  // ── Tahrirlash dialogi (bitta tap) ─────────────────────────────────────
+  // ── Tahrirlash dialogi ─────────────────────────────────────────────────
 
   Future<void> _showEditDialog(UserModel u) async {
     final saved = await UserEditDialog.show(
@@ -902,19 +891,19 @@ class _UsersPageState extends State<UsersPage> {
     if (saved == true) _load();
   }
 
-  // ── O'sha foydalanuvchi paroli bilan kirish (ikki marta bosilganda) ────
+  // ── O'sha foydalanuvchi paroli bilan kirish ────────────────────────────
 
   Future<void> _loginAsUser(UserModel u) async {
     if (u.password.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('У пользователя нет пароля')),
+      showAppSnack(
+        context,
+        tr("Bu foydalanuvchida parol yo'q"),
+        type: SnackType.error,
       );
       return;
     }
 
-    final messenger = ScaffoldMessenger.of(context);
-    final result =
-        await ApiService().login(LoginModel(password: u.password));
+    final result = await ApiService().login(LoginModel(password: u.password));
     if (!mounted) return;
 
     if (result['success'] == true && result['token'] != null) {
@@ -923,41 +912,40 @@ class _UsersPageState extends State<UsersPage> {
       await ts.putUserData(Map<String, dynamic>.from(result['user'] as Map));
       if (!mounted) return;
       context.pushAndRemove(
-        landingForUser(UserModel.fromJson(
-          Map<String, dynamic>.from(result['user'] as Map),
-        )),
+        landingForUser(
+          UserModel.fromJson(Map<String, dynamic>.from(result['user'] as Map)),
+        ),
       );
     } else {
-      messenger.showSnackBar(SnackBar(
-        content: Text(
-            result['message']?.toString() ?? result['error']?.toString() ?? 'Не удалось войти'),
-      ));
+      final serverMsg =
+          result['message']?.toString() ?? result['error']?.toString();
+      showAppSnack(
+        context,
+        serverMsg != null && serverMsg.isNotEmpty
+            ? trData(serverMsg)
+            : tr("Kirib bo'lmadi"),
+        type: SnackType.error,
+      );
     }
   }
 
-  // ── Shared widgets ─────────────────────────────────────────────────────
-
-  Widget _roleBadge(String role) {
-    final isSuper = role == 'super_admin';
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-      decoration: BoxDecoration(color: isSuper ? const Color(0xFFFEF3C7) : const Color(0xFFE0E7FF), borderRadius: BorderRadius.circular(20)),
-      child: Text(_roleLabel(role), style: TextStyle(color: isSuper ? const Color(0xFF92400E) : const Color(0xFF3730A3), fontSize: 11, fontWeight: FontWeight.w600), textAlign: TextAlign.center),
-    );
-  }
-
-  // ── Helpers ─────────────────────────────────────────────────────────
+  // ── Yordamchilar ───────────────────────────────────────────────────────
 
   Future<void> _openTelegram(String username) async {
     final appUri = Uri.parse('tg://resolve?domain=$username');
     final webUri = Uri.parse('https://t.me/$username');
     try {
       if (await canLaunchUrl(appUri)) {
-        final ok = await launchUrl(appUri, mode: LaunchMode.externalApplication);
+        final ok = await launchUrl(
+          appUri,
+          mode: LaunchMode.externalApplication,
+        );
         if (ok) return;
       }
     } catch (_) {}
-    try { await launchUrl(webUri, mode: LaunchMode.externalApplication); } catch (_) {}
+    try {
+      await launchUrl(webUri, mode: LaunchMode.externalApplication);
+    } catch (_) {}
   }
 
   void _showAvatarPreview(String url, String name) {
@@ -966,29 +954,78 @@ class _UsersPageState extends State<UsersPage> {
       barrierColor: Colors.black87,
       builder: (ctx) => Dialog(
         backgroundColor: Colors.transparent,
-        insetPadding: const EdgeInsets.all(24),
-        child: Stack(children: [
-          Center(child: InteractiveViewer(
-            maxScale: 5,
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(16),
-              child: Image.network(url, fit: BoxFit.contain,
-                loadingBuilder: (_, child, progress) => progress == null ? child : const Center(child: CircularProgressIndicator(color: Colors.white)),
-                errorBuilder: (_, __, ___) => Container(width: 320, height: 320, color: Colors.grey[800], alignment: Alignment.center, child: const Icon(Icons.broken_image_rounded, color: Colors.white54, size: 64)),
+        insetPadding: EdgeInsets.all(24),
+        child: Stack(
+          children: [
+            Center(
+              child: InteractiveViewer(
+                maxScale: 5,
+                child: ClipRRect(
+                  borderRadius: AppRadius.lgAll,
+                  child: Image.network(
+                    url,
+                    fit: BoxFit.contain,
+                    loadingBuilder: (_, child, progress) => progress == null
+                        ? child
+                        : Center(
+                            child: CircularProgressIndicator(
+                              color: Colors.white,
+                            ),
+                          ),
+                    errorBuilder: (_, __, ___) => Container(
+                      width: 320,
+                      height: 320,
+                      color: Colors.black26,
+                      alignment: Alignment.center,
+                      child: Icon(
+                        Icons.broken_image_rounded,
+                        color: Colors.white54,
+                        size: 64,
+                      ),
+                    ),
+                  ),
+                ),
               ),
             ),
-          )),
-          Positioned(top: 12, right: 12, child: Material(
-            color: Colors.black54, shape: const CircleBorder(),
-            child: InkWell(customBorder: const CircleBorder(), onTap: () => Navigator.pop(ctx), child: const Padding(padding: EdgeInsets.all(8), child: Icon(Icons.close_rounded, color: Colors.white, size: 24))),
-          )),
-          if (name.isNotEmpty)
-            Positioned(left: 16, bottom: 16, child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-              decoration: BoxDecoration(color: Colors.black54, borderRadius: BorderRadius.circular(20)),
-              child: Text(name, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600)),
-            )),
-        ]),
+            Positioned(
+              top: 12,
+              right: 12,
+              child: Material(
+                color: Colors.black54,
+                shape: CircleBorder(),
+                child: IconButton(
+                  tooltip: tr('Yopish'),
+                  onPressed: () => Navigator.pop(ctx),
+                  icon: Icon(Icons.close_rounded, color: Colors.white),
+                ),
+              ),
+            ),
+            if (name.isNotEmpty)
+              Positioned(
+                left: 16,
+                bottom: 16,
+                right: 16,
+                child: Align(
+                  alignment: Alignment.centerLeft,
+                  child: Container(
+                    padding: EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                    decoration: BoxDecoration(
+                      color: Colors.black54,
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: Text(
+                      name,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+          ],
+        ),
       ),
     );
   }

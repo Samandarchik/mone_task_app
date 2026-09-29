@@ -2,6 +2,8 @@ import 'dart:convert';
 import 'dart:io';
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
+import 'package:mone_task_app/core/l10n/app_script.dart';
+import 'package:mone_task_app/core/theme/app_theme.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -101,25 +103,46 @@ class VersionChecker {
     showDialog(
       context: context,
       barrierDismissible: false,
-      builder: (_) => AlertDialog(
-        title: const Text(
-          'Update required',
-          style: TextStyle(fontWeight: FontWeight.bold),
-        ),
-        content: const Text(
-          'A new version of the app is available.\nPlease update to continue.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () async {
-              final uri = Uri.parse(storeUrl);
-              if (await canLaunchUrl(uri)) {
-                await launchUrl(uri, mode: LaunchMode.externalApplication);
-              }
-            },
-            child: const Text('Update now'),
+      builder: (_) => PopScope(
+        canPop: false,
+        child: AlertDialog(
+          icon: Container(
+            width: 56,
+            height: 56,
+            decoration: BoxDecoration(
+              color: AppColors.primarySoft,
+              shape: BoxShape.circle,
+            ),
+            child: Icon(
+              Icons.system_update_rounded,
+              color: AppColors.primary,
+              size: 30,
+            ),
           ),
-        ],
+          title: Text(tr('Yangi versiya mavjud'), textAlign: TextAlign.center),
+          content: Text(
+            tr(
+              "Ilovadan foydalanishni davom ettirish uchun uni yangilang. Bu bir necha daqiqa oladi.",
+            ),
+            textAlign: TextAlign.center,
+          ),
+          actionsPadding: EdgeInsets.fromLTRB(16, 0, 16, 16),
+          actions: [
+            SizedBox(
+              width: double.infinity,
+              child: FilledButton.icon(
+                icon: Icon(Icons.download_rounded),
+                onPressed: () async {
+                  final uri = Uri.parse(storeUrl);
+                  if (await canLaunchUrl(uri)) {
+                    await launchUrl(uri, mode: LaunchMode.externalApplication);
+                  }
+                },
+                label: Text(tr('Yangilash')),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

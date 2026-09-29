@@ -3,7 +3,10 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:camera/camera.dart';
+import 'package:permission_handler/permission_handler.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
+import 'package:mone_task_app/core/l10n/app_script.dart';
+import 'package:mone_task_app/core/widgets/app_widgets.dart';
 import 'package:mone_task_app/worker/ui/video_pervi.dart';
 
 class TelegramStyleVideoRecorder extends StatefulWidget {
@@ -28,7 +31,7 @@ class _TelegramStyleVideoRecorderState
   int _recordedSeconds = 0;
   Timer? _timer;
 
-  List<XFile> _videoSegments = [];
+  final List<XFile> _videoSegments = [];
 
   static const _nativeCameraChannel = MethodChannel('native_camera');
   List<Map<String, dynamic>> _iosLenses = [];
@@ -49,17 +52,44 @@ class _TelegramStyleVideoRecorderState
   double _dragStartX = 0;
   double _dragStartZoom = 1.0;
 
+  bool _isStopping = false;
+  bool _isStarting = false;
+  String? _initError;
+
   @override
   void initState() {
     super.initState();
-    _initializeCamera();
+    // Ruxsat oynalari (dialog) uchun context tayyor bo'lishini kutamiz.
+    WidgetsBinding.instance.addPostFrameCallback((_) => _prepare());
+  }
+
+  /// Kamera va mikrofon ruxsatini so'rab, keyin kamerani ochadi.
+  Future<void> _prepare() async {
+    if (Platform.isAndroid || Platform.isIOS) {
+      try {
+        final cameraOk = await ensurePermission(context, Permission.camera);
+        if (!mounted) return;
+        final micOk =
+            cameraOk &&
+            await ensurePermission(context, Permission.microphone);
+        if (!mounted) return;
+        if (!cameraOk || !micOk) {
+          Navigator.of(context).pop();
+          return;
+        }
+      } catch (e) {
+        debugPrint('Ruxsat so\'rashda xatolik: $e');
+      }
+    }
+    if (!mounted) return;
+    await _initializeCamera();
   }
 
   Future<void> _initializeCamera() async {
     try {
       _cameras = await availableCameras();
       if (_cameras.isEmpty) {
-        _showError("Камера не найдена");
+        if (mounted) setState(() => _initError = tr('Kamera topilmadi'));
         return;
       }
       if (Platform.isIOS) {
@@ -70,7 +100,10 @@ class _TelegramStyleVideoRecorderState
       await _openCamera(_getInitialCameraIndex());
       if (mounted) setState(() => _isInitialized = true);
     } catch (e) {
-      _showError("Ошибка камеры: $e");
+      debugPrint('Kamera xatolik: $e');
+      if (mounted) {
+        setState(() => _initError = tr("Kamerani ochib bo'lmadi"));
+      }
     }
   }
 
@@ -205,7 +238,8 @@ class _TelegramStyleVideoRecorderState
       if (mounted) setState(() => _isSwitchingCamera = false);
     } catch (e) {
       if (mounted) setState(() => _isSwitchingCamera = false);
-      _showError("Ошибка при смене объектива: $e");
+      debugPrint("Obyektiv xatolik: $e");
+      _showError(tr("Obyektivni almashtirib bo'lmadi"));
     }
   }
 
@@ -238,7 +272,8 @@ class _TelegramStyleVideoRecorderState
       if (mounted) setState(() => _isSwitchingCamera = false);
     } catch (e) {
       if (mounted) setState(() => _isSwitchingCamera = false);
-      _showError("Ошибка при смене камеры: $e");
+      debugPrint("Kamera almashtirish xatolik: $e");
+      _showError(tr("Kamerani almashtirib bo'lmadi"));
     }
   }
 
@@ -253,7 +288,7 @@ class _TelegramStyleVideoRecorderState
   void _showZoomLabelTemporarily() {
     _zoomLabelTimer?.cancel();
     _showZoomLabel = true;
-    _zoomLabelTimer = Timer(const Duration(seconds: 2), () {
+    _zoomLabelTimer = Timer(Duration(seconds: 2), () {
       if (mounted) setState(() => _showZoomLabel = false);
     });
     setState(() {});
@@ -313,7 +348,7 @@ class _TelegramStyleVideoRecorderState
   void _onLensLongPressEnd(LongPressEndDetails details) {
     _isDraggingLensButton = false;
     _zoomLabelTimer?.cancel();
-    _zoomLabelTimer = Timer(const Duration(seconds: 2), () {
+    _zoomLabelTimer = Timer(Duration(seconds: 2), () {
       if (mounted) setState(() => _showZoomLabel = false);
     });
     setState(() {});
@@ -321,24 +356,30 @@ class _TelegramStyleVideoRecorderState
 
   void _startRecording() async {
     if (_controller == null || !_controller!.value.isInitialized) return;
-    if (_isRecording) return;
+    // Ikki marta bosilsa ikkinchi start xato bermasin.
+    if (_isRecording || _isStarting || _isStopping) return;
+    _isStarting = true;
     try {
       await _controller!.startVideoRecording();
       await WakelockPlus.enable();
+      if (!mounted) return;
       setState(() {
         _isRecording = true;
         _isPaused = false;
         _recordedSeconds = 0;
         _videoSegments.clear();
       });
-      _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      _timer = Timer.periodic(Duration(seconds: 1), (timer) {
         if (mounted && !_isPaused) {
           setState(() => _recordedSeconds++);
           if (_recordedSeconds >= 40) _stopRecording();
         }
       });
     } catch (e) {
-      _showError("Не удалось начать запись: $e");
+      debugPrint("Yozish xatolik: $e");
+      _showError(tr("Yozishni boshlab bo'lmadi. Qayta urinib ko'ring."));
+    } finally {
+      _isStarting = false;
     }
   }
 
@@ -347,24 +388,27 @@ class _TelegramStyleVideoRecorderState
     try {
       if (_isPaused) {
         await _controller!.resumeVideoRecording();
-        setState(() => _isPaused = false);
+        if (mounted) setState(() => _isPaused = false);
       } else {
         await _controller!.pauseVideoRecording();
-        setState(() => _isPaused = true);
+        if (mounted) setState(() => _isPaused = true);
       }
     } catch (e) {
-      _showError("Ошибка паузы/возобновления: $e");
+      debugPrint("Pauza xatolik: $e");
+      _showError(tr("Pauza qilib bo'lmadi"));
     }
   }
 
   void _stopRecording() async {
-    if (!_isRecording) return;
+    if (!_isRecording || _isStopping) return;
+    _isStopping = true;
     _timer?.cancel();
     try {
       if (_isPaused) await _controller!.resumeVideoRecording();
       final XFile lastSegment = await _controller!.stopVideoRecording();
       _videoSegments.add(lastSegment);
       await WakelockPlus.disable();
+      if (!mounted) return;
       setState(() {
         _isRecording = false;
         _isPaused = false;
@@ -378,6 +422,7 @@ class _TelegramStyleVideoRecorderState
             ),
           ),
         );
+        if (!mounted) return;
         if (result != null && result is Map) {
           if (result['action'] == 'send') {
             Navigator.of(context).pop(_videoSegments);
@@ -390,14 +435,65 @@ class _TelegramStyleVideoRecorderState
         }
       }
     } catch (e) {
-      _showError("Ошибка при сохранении видео: $e");
+      debugPrint("Videoni saqlash xatolik: $e");
+      _showError(tr("Videoni saqlab bo'lmadi. Qaytadan yozib ko'ring."));
+    } finally {
+      _isStopping = false;
     }
   }
 
   void _showError(String message) {
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(message), backgroundColor: Colors.red),
+    showAppSnack(context, message, type: SnackType.error);
+  }
+
+  String get _timeText {
+    final s = _recordedSeconds;
+    return '0:${s.toString().padLeft(2, '0')} / 0:40';
+  }
+
+  /// Qisqa ko'rsatma — nima qilish kerakligini aytadi.
+  Widget _buildHint() {
+    final String text;
+    if (!_isRecording) {
+      text = tr('Yozish uchun bosing');
+    } else if (_isPaused) {
+      text = tr('Pauza');
+    } else {
+      text = tr("To'xtatish uchun bosing");
+    }
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        if (_isRecording)
+          Container(
+            margin: EdgeInsets.only(bottom: 8),
+            padding: EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+            decoration: BoxDecoration(
+              color: _isPaused ? Colors.orange : Colors.red,
+              borderRadius: BorderRadius.circular(999),
+            ),
+            child: Text(
+              _timeText,
+              style: TextStyle(
+                color: Colors.white,
+                fontSize: 14,
+                fontWeight: FontWeight.w700,
+                fontFeatures: [FontFeature.tabularFigures()],
+              ),
+            ),
+          ),
+        Text(
+          text,
+          textAlign: TextAlign.center,
+          style: TextStyle(
+            color: Colors.white,
+            fontSize: 16,
+            fontWeight: FontWeight.w600,
+            shadows: [Shadow(color: Colors.black54, blurRadius: 6)],
+          ),
+        ),
+      ],
     );
   }
 
@@ -436,17 +532,62 @@ class _TelegramStyleVideoRecorderState
 
   @override
   Widget build(BuildContext context) {
+    if (_initError != null) {
+      return Material(
+        color: Colors.black,
+        child: SafeArea(
+          child: Center(
+            child: Padding(
+              padding: EdgeInsets.all(24),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    Icons.videocam_off_rounded,
+                    color: Colors.white70,
+                    size: 48,
+                  ),
+                  SizedBox(height: 16),
+                  Text(
+                    _initError!,
+                    textAlign: TextAlign.center,
+                    style: TextStyle(color: Colors.white, fontSize: 17),
+                  ),
+                  SizedBox(height: 24),
+                  FilledButton(
+                    onPressed: () => Navigator.of(context).pop(),
+                    child: Text(tr('Yopish')),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      );
+    }
     if (!_isInitialized || _controller == null) {
-      return const Material(
-        color: Colors.white,
-        child: Center(child: CircularProgressIndicator()),
+      return Material(
+        color: Colors.black,
+        child: Center(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              CircularProgressIndicator(color: Colors.white),
+              SizedBox(height: 16),
+              Text(
+                tr('Kamera ochilmoqda...'),
+                style: TextStyle(color: Colors.white70, fontSize: 15),
+              ),
+            ],
+          ),
+        ),
       );
     }
 
     final size = MediaQuery.of(context).size;
     final mediaPadding = MediaQuery.of(context).padding;
     // Pastdagi tugmalar (record + zoom + bottom gap) uchun zarur joy
-    const double bottomControlsHeight = 80 + 16 + 44 + 16 + 50;
+    const double bottomControlsHeight = 80 + 16 + 44 + 16 + 50 + 64; // + ko'rsatma matni
     final double topPadding = mediaPadding.top + 50;
     final double availableHeight =
         size.height - topPadding - mediaPadding.bottom - bottomControlsHeight;
@@ -481,7 +622,7 @@ class _TelegramStyleVideoRecorderState
               child: _isSwitchingCamera
                   ? Container(
                       color: Colors.black,
-                      child: const Center(
+                      child: Center(
                         child: CircularProgressIndicator.adaptive(),
                       ),
                     )
@@ -508,7 +649,7 @@ class _TelegramStyleVideoRecorderState
                     circleTop + circleDiameter / 2,
                   ),
                   circleRadius: circleDiameter / 2,
-                  overlayColor: Colors.black.withOpacity(0.55),
+                  overlayColor: Colors.black.withValues(alpha: 0.55),
                 ),
               ),
             ),
@@ -543,17 +684,17 @@ class _TelegramStyleVideoRecorderState
               right: 0,
               child: Center(
                 child: Container(
-                  padding: const EdgeInsets.symmetric(
+                  padding: EdgeInsets.symmetric(
                     horizontal: 16,
                     vertical: 8,
                   ),
                   decoration: BoxDecoration(
-                    color: Colors.black.withOpacity(0.5),
+                    color: Colors.black.withValues(alpha: 0.5),
                     borderRadius: BorderRadius.circular(20),
                   ),
                   child: Text(
                     _zoomDisplayText,
-                    style: const TextStyle(
+                    style: TextStyle(
                       color: Colors.white,
                       fontSize: 18,
                       fontWeight: FontWeight.bold,
@@ -577,30 +718,30 @@ class _TelegramStyleVideoRecorderState
                         16,
                   ),
 
-                  const Spacer(),
+                  Spacer(),
 
                   // ✅ ZOOM BUTTON — qizil tugmadan tepada
                   if (!_isFrontCamera)
                     Padding(
-                      padding: const EdgeInsets.only(bottom: 16),
+                      padding: EdgeInsets.only(bottom: 16),
                       child: GestureDetector(
                         onTap: _zoomSteps.length > 1 ? _toggleLens : null,
                         onLongPressStart: _onLensLongPressStart,
                         onLongPressMoveUpdate: _onLensLongPressMoveUpdate,
                         onLongPressEnd: _onLensLongPressEnd,
                         child: AnimatedContainer(
-                          duration: const Duration(milliseconds: 150),
+                          duration: Duration(milliseconds: 150),
                           width: _isDraggingLensButton ? 52 : 44,
                           height: _isDraggingLensButton ? 52 : 44,
                           decoration: BoxDecoration(
                             shape: BoxShape.circle,
                             color: _isDraggingLensButton
-                                ? Colors.black.withOpacity(0.6)
-                                : Colors.black.withOpacity(0.4),
+                                ? Colors.black.withValues(alpha: 0.6)
+                                : Colors.black.withValues(alpha: 0.4),
                             border: Border.all(
                               color: _isDraggingLensButton
-                                  ? Colors.amber.withOpacity(0.8)
-                                  : Colors.white.withOpacity(0.4),
+                                  ? Colors.amber.withValues(alpha: 0.8)
+                                  : Colors.white.withValues(alpha: 0.4),
                               width: _isDraggingLensButton ? 2 : 1,
                             ),
                           ),
@@ -617,6 +758,11 @@ class _TelegramStyleVideoRecorderState
                       ),
                     ),
 
+                  Padding(
+                    padding: EdgeInsets.only(bottom: 14),
+                    child: _buildHint(),
+                  ),
+
                   // ── Tugmalar ──
                   Row(
                     mainAxisAlignment: MainAxisAlignment.center,
@@ -625,7 +771,8 @@ class _TelegramStyleVideoRecorderState
                         GestureDetector(
                           onTap: () => Navigator.of(context).pop(),
                           child: _circleButton(
-                            child: const Icon(
+                            tooltip: tr('Yopish'),
+                            child: Icon(
                               Icons.close,
                               color: Colors.white,
                               size: 30,
@@ -636,6 +783,7 @@ class _TelegramStyleVideoRecorderState
                         GestureDetector(
                           onTap: _togglePauseResume,
                           child: _circleButton(
+                            tooltip: _isPaused ? tr('Davom etish') : tr('Pauza'),
                             child: Icon(
                               _isPaused ? Icons.play_arrow : Icons.pause,
                               color: Colors.white,
@@ -643,7 +791,7 @@ class _TelegramStyleVideoRecorderState
                             ),
                           ),
                         ),
-                      const SizedBox(width: 20),
+                      SizedBox(width: 20),
                       GestureDetector(
                         onTap: _isRecording ? _stopRecording : _startRecording,
                         child: Container(
@@ -654,14 +802,14 @@ class _TelegramStyleVideoRecorderState
                             border: Border.all(color: Colors.white, width: 4),
                             boxShadow: [
                               BoxShadow(
-                                color: Colors.black.withOpacity(0.2),
+                                color: Colors.black.withValues(alpha: 0.2),
                                 blurRadius: 8,
                               ),
                             ],
                           ),
                           child: Center(
                             child: AnimatedContainer(
-                              duration: const Duration(milliseconds: 200),
+                              duration: Duration(milliseconds: 200),
                               width: _isRecording ? 30 : 60,
                               height: _isRecording ? 30 : 60,
                               decoration: BoxDecoration(
@@ -674,21 +822,22 @@ class _TelegramStyleVideoRecorderState
                           ),
                         ),
                       ),
-                      const SizedBox(width: 20),
+                      SizedBox(width: 20),
                       if (_cameras.length > 1)
                         GestureDetector(
                           onTap: _isSwitchingCamera ? null : _toggleCamera,
                           child: _circleButton(
+                            tooltip: tr('Kamerani almashtirish'),
                             opacity: _isSwitchingCamera ? 0.3 : 1.0,
                             child: _isSwitchingCamera
-                                ? const Padding(
+                                ? Padding(
                                     padding: EdgeInsets.all(18.0),
                                     child: CircularProgressIndicator(
                                       color: Colors.white,
                                       strokeWidth: 2,
                                     ),
                                   )
-                                : const Icon(
+                                : Icon(
                                     Icons.flip_camera_ios,
                                     color: Colors.white,
                                     size: 30,
@@ -696,10 +845,10 @@ class _TelegramStyleVideoRecorderState
                           ),
                         )
                       else
-                        const SizedBox(width: 60),
+                        SizedBox(width: 60),
                     ],
                   ),
-                  const SizedBox(height: 50),
+                  SizedBox(height: 50),
                 ],
               ),
             ),
@@ -709,19 +858,24 @@ class _TelegramStyleVideoRecorderState
     );
   }
 
-  Widget _circleButton({required Widget child, double opacity = 1.0}) {
-    return Opacity(
+  Widget _circleButton({
+    required Widget child,
+    double opacity = 1.0,
+    String? tooltip,
+  }) {
+    final button = Opacity(
       opacity: opacity,
       child: Container(
         width: 60,
         height: 60,
         decoration: BoxDecoration(
-          color: Colors.black.withOpacity(0.3),
+          color: Colors.black.withValues(alpha: 0.3),
           shape: BoxShape.circle,
         ),
         child: child,
       ),
     );
+    return tooltip == null ? button : Tooltip(message: tooltip, child: button);
   }
 }
 
@@ -774,7 +928,7 @@ class CircleBorderPainter extends CustomPainter {
     final center = Offset(size.width / 2, size.height / 2);
     final borderRadius = size.width / 2 - borderWidth / 2;
     final borderPaint = Paint()
-      ..color = borderColor.withOpacity(0.5)
+      ..color = borderColor.withValues(alpha: 0.5)
       ..style = PaintingStyle.stroke
       ..strokeWidth = borderWidth;
     canvas.drawCircle(center, borderRadius, borderPaint);
@@ -782,7 +936,7 @@ class CircleBorderPainter extends CustomPainter {
     if (progress > 0) {
       final progressRadius = size.width / 2 - progressWidth / 2;
       final trackPaint = Paint()
-        ..color = Colors.white.withOpacity(0.2)
+        ..color = Colors.white.withValues(alpha: 0.2)
         ..style = PaintingStyle.stroke
         ..strokeWidth = progressWidth;
       canvas.drawCircle(center, progressRadius, trackPaint);

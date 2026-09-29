@@ -5,11 +5,22 @@ import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
 import 'package:mone_task_app/core/constants/urls.dart';
 import 'package:mone_task_app/core/di/di.dart';
+import 'package:mone_task_app/core/l10n/app_script.dart';
 import 'package:mone_task_app/worker/model/response_task_model.dart';
 import 'package:mone_task_app/worker/model/task_worker_model.dart';
 
+/// Yuklash jarayoni: [sent] / [total] bayt.
+typedef UploadProgress = void Function(int sent, int total);
+
 class TaskWorkerService {
   final Dio _dio = sl<Dio>();
+
+  /// Katta (bir necha MB) videolar uchun kutish muddatlari: sekin internetda
+  /// ham uzilib qolmasin, lekin cheksiz osilib ham turmasin.
+  static final Options _videoUploadOptions = Options(
+    sendTimeout: Duration(minutes: 10),
+    receiveTimeout: Duration(minutes: 5),
+  );
 
   /// [date] berilmasa bugungi kun ishlatiladi
   Future<List<TaskModel>> fetchTasks({DateTime? date}) async {
@@ -24,13 +35,13 @@ class TaskWorkerService {
       );
 
       if (response.data == null) {
-        throw Exception("Данные задачи отсутствуют");
+        throw Exception(tr("Vazifalar maʼlumoti kelmadi"));
       }
 
       final data = response.data["data"];
 
       if (data is! List) {
-        throw Exception("Сервер вернул неверный формат");
+        throw Exception(tr("Server notoʻgʻri javob qaytardi"));
       }
 
       return data.map((e) => TaskModel.fromJson(e)).toList();
@@ -39,7 +50,10 @@ class TaskWorkerService {
     }
   }
 
-  Future<bool> completeTask(RequestTaskModel request) async {
+  Future<bool> completeTask(
+    RequestTaskModel request, {
+    UploadProgress? onProgress,
+  }) async {
     try {
       final compressedVideo = File(request.file!.path);
 
@@ -53,6 +67,8 @@ class TaskWorkerService {
       final response = await _dio.post(
         "${AppUrls.tasks}/${request.id}/submit",
         data: formData,
+        options: _videoUploadOptions,
+        onSendProgress: onProgress,
       );
       return response.statusCode == 200;
     } catch (e) {
@@ -65,6 +81,7 @@ class TaskWorkerService {
     required XFile segment,
     required int segmentNumber,
     required int totalSegments,
+    UploadProgress? onProgress,
   }) async {
     try {
       final videoFile = File(segment.path);
@@ -81,10 +98,8 @@ class TaskWorkerService {
       final response = await _dio.post(
         "${AppUrls.tasks}/$taskId/submit-segment",
         data: formData,
-        onSendProgress: (sent, total) {
-          final progress = (sent / total * 100).toStringAsFixed(0);
-          print('📤 Segment $segmentNumber yuklanyapti: $progress%');
-        },
+        options: _videoUploadOptions,
+        onSendProgress: onProgress,
       );
 
       return response.statusCode == 200;
@@ -96,9 +111,10 @@ class TaskWorkerService {
   Future<bool> completeTaskWithSegments({
     required int taskId,
     required List<XFile> segments,
+    UploadProgress? onProgress,
   }) async {
     try {
-      if (segments.isEmpty) throw Exception('Сегменты отсутствуют');
+      if (segments.isEmpty) throw Exception(tr('Video topilmadi'));
 
       Map<String, dynamic> formDataMap = {'segment_count': segments.length};
 
@@ -115,10 +131,8 @@ class TaskWorkerService {
       final response = await _dio.post(
         "${AppUrls.tasks}/$taskId/submit",
         data: formData,
-        onSendProgress: (sent, total) {
-          final progress = (sent / total * 100).toStringAsFixed(0);
-          print('📤 Barcha segmentlar yuklanmoqda: $progress%');
-        },
+        options: _videoUploadOptions,
+        onSendProgress: onProgress,
       );
 
       return response.statusCode == 200;

@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:dio/dio.dart';
 import 'package:mone_task_app/core/constants/urls.dart';
 import 'package:mone_task_app/core/network/print.dart';
@@ -12,8 +13,11 @@ class AppDioClient {
     final dio = Dio(
       BaseOptions(
         baseUrl: AppUrls.baseUrl,
-        connectTimeout: const Duration(seconds: 30),
-        receiveTimeout: const Duration(seconds: 30),
+        // Oddiy so'rovlar uchun 30 s. Katta video/audio yuklash uchun
+        // alohida (so'rov darajasidagi) Options ishlatiladi.
+        connectTimeout: Duration(seconds: 25),
+        sendTimeout: Duration(minutes: 10),
+        receiveTimeout: Duration(seconds: 30),
       ),
     );
 
@@ -37,11 +41,13 @@ class AppDioClient {
 
     dio.interceptors.add(
       TalkerDioLogger(
-        settings: const TalkerDioLoggerSettings(
-          enabled: true,
-          printRequestHeaders: true,
+        // Katta javoblarni to'liq chop etish ilovani sekinlashtiradi —
+        // faqat debug rejimida, javob tanasisiz.
+        settings: TalkerDioLoggerSettings(
+          enabled: kDebugMode,
+          printRequestHeaders: false,
           printRequestData: true,
-          printResponseData: true,
+          printResponseData: false,
           printErrorData: true,
           printErrorMessage: true,
         ),
@@ -90,7 +96,7 @@ class AppInterceptors extends QueuedInterceptorsWrapper {
 
   @override
   void onError(DioException err, ErrorInterceptorHandler handler) async {
-    print("onError: ${err.message}");
+    pPrint("onError: ${err.message}", 4);
 
     if (err.response?.statusCode == 401) {
       // Tokenni o'chirish

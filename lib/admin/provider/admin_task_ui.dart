@@ -8,22 +8,37 @@ import 'package:mone_task_app/admin/model/filial_model.dart';
 import 'package:mone_task_app/admin/provider/admin_task_list_widget.dart';
 import 'package:mone_task_app/admin/provider/admin_tasks_provider.dart';
 import 'package:mone_task_app/admin/provider/circle_video_player.dart';
-import 'package:mone_task_app/admin/service/get_excel_ui.dart';
-import 'package:mone_task_app/admin/ui/all_task_ui.dart';
-import 'package:mone_task_app/admin/ui/user_list_page.dart';
+import 'package:mone_task_app/admin/provider/my_drawer.dart';
 import 'package:mone_task_app/checker/model/checker_check_task_model.dart';
 import 'package:mone_task_app/core/context_extension.dart';
 import 'package:mone_task_app/core/data/local/active_filial.dart';
 import 'package:mone_task_app/core/data/local/token_storage.dart';
 import 'package:mone_task_app/core/di/di.dart';
+import 'package:mone_task_app/core/l10n/app_script.dart';
+import 'package:mone_task_app/core/theme/app_theme.dart';
+import 'package:mone_task_app/core/widgets/app_widgets.dart';
 import 'package:mone_task_app/home/service/login_service.dart';
 import 'package:mone_task_app/home/ui/filial_select_page.dart';
 import 'package:mone_task_app/home/ui/role_home.dart';
-import 'package:mone_task_app/shared/widgets/user_avatar.dart';
 import 'package:mone_task_app/core/network/ws_service.dart';
 import 'package:mone_task_app/worker/model/user_model.dart';
 import 'package:mone_task_app/worker/service/log_out.dart';
 import 'package:provider/provider.dart';
+
+const _monthNames = [
+  'Yanvar',
+  'Fevral',
+  'Mart',
+  'Aprel',
+  'May',
+  'Iyun',
+  'Iyul',
+  'Avgust',
+  'Sentabr',
+  'Oktabr',
+  'Noyabr',
+  'Dekabr',
+];
 
 class AdminTaskUi extends StatefulWidget {
   const AdminTaskUi({super.key});
@@ -33,7 +48,7 @@ class AdminTaskUi extends StatefulWidget {
 }
 
 class _AdminTaskUiState extends State<AdminTaskUi>
-    with SingleTickerProviderStateMixin {
+    with TickerProviderStateMixin {
   final TokenStorage _tokenStorage = sl<TokenStorage>();
   UserModel? _user;
   TabController? _tabController;
@@ -73,11 +88,31 @@ class _AdminTaskUiState extends State<AdminTaskUi>
     super.dispose();
   }
 
+  // Filiallar soni o'zgarsa controller qayta yaratiladi (shuning uchun
+  // TickerProviderStateMixin) — joriy tab indeksi saqlanadi va chegaralanadi.
   void _initTabController(int length) {
     if (_tabController == null || _lastCategoryLength != length) {
+      final previousIndex = _tabController?.index ?? _shownTabIndex;
+      final initialIndex = previousIndex.clamp(0, length - 1);
+      _tabController?.removeListener(_onTabChanged);
       _tabController?.dispose();
-      _tabController = TabController(length: length, vsync: this);
+      _tabController = TabController(
+        length: length,
+        vsync: this,
+        initialIndex: initialIndex,
+      )..addListener(_onTabChanged);
       _lastCategoryLength = length;
+      _shownTabIndex = initialIndex;
+    }
+  }
+
+  int _shownTabIndex = 0;
+
+  // Sarlavhadagi aktiv filial nomini yangilash uchun.
+  void _onTabChanged() {
+    final i = _tabController?.index ?? 0;
+    if (i != _shownTabIndex && mounted) {
+      setState(() => _shownTabIndex = i);
     }
   }
 
@@ -110,30 +145,26 @@ class _AdminTaskUiState extends State<AdminTaskUi>
     );
   }
 
+  static bool _sameDay(DateTime a, DateTime b) =>
+      a.year == b.year && a.month == b.month && a.day == b.day;
+
   String _buildDateLabel(DateTime selectedDate) {
     final now = DateTime.now();
-    final isToday = selectedDate.year == now.year &&
-        selectedDate.month == now.month &&
-        selectedDate.day == now.day;
-    if (isToday) return "Сегодня";
-    final day = selectedDate.day.toString().padLeft(2, '0');
-    final month = selectedDate.month.toString().padLeft(2, '0');
-    if (selectedDate.year != now.year || selectedDate.month == 12) {
-      return "$day/$month/${selectedDate.year}";
+    if (_sameDay(selectedDate, now)) return tr('Bugun');
+    if (_sameDay(selectedDate, now.subtract(Duration(days: 1)))) {
+      return tr('Kecha');
     }
-    return "$day/$month";
+    final month = tr(_monthNames[selectedDate.month - 1]).toLowerCase();
+    final label = '${selectedDate.day}-$month';
+    if (selectedDate.year != now.year) return '$label ${selectedDate.year}';
+    return label;
   }
 
   Future<void> _handleDateSelection() async {
     final provider = context.read<AdminTasksProvider>();
     final currentDate = provider.selectedDate;
-    final firstDate = DateTime.now().subtract(const Duration(days: 30));
+    final firstDate = DateTime.now().subtract(Duration(days: 30));
     final lastDate = DateTime.now();
-
-    const monthNames = [
-      'Январь', 'Февраль', 'Март', 'Апрель', 'Май', 'Июнь',
-      'Июль', 'Август', 'Сентябрь', 'Октябрь', 'Ноябрь', 'Декабрь',
-    ];
 
     final months = <DateTime>[];
     var mCursor = DateTime(firstDate.year, firstDate.month);
@@ -169,88 +200,129 @@ class _AdminTaskUiState extends State<AdminTaskUi>
       provider.setSelectedDate(DateTime(m.year, m.month, days[dayIdx]));
     }
 
-    await showCupertinoModalPopup<void>(
+    await showModalBottomSheet<void>(
       context: context,
+      showDragHandle: true,
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setSt) {
           final selectedMonth = months[monthIdx];
           final showYearCol =
               months.first.year != months.last.year ||
               selectedMonth.month == 12;
-          return Container(
-            height: 260,
-            color: CupertinoColors.systemBackground.resolveFrom(ctx),
-            child: SafeArea(
-              top: false,
-              child: Row(
-                children: [
-                  Expanded(
-                    flex: 1,
-                    child: CupertinoPicker(
-                      scrollController: FixedExtentScrollController(
-                        initialItem: monthIdx,
-                      ),
-                      itemExtent: 36,
-                      looping: months.length > 1,
-                      onSelectedItemChanged: (i) {
-                        setSt(() {
-                          monthIdx = i;
-                          days = daysFor(months[monthIdx]);
-                          if (dayIdx >= days.length) {
-                            dayIdx = days.length - 1;
-                          }
-                        });
-                        applySelection();
-                      },
-                      children: [
-                        for (final m in months)
-                          Center(
-                            child: Text(
-                              monthNames[m.month - 1],
-                              style: const TextStyle(fontSize: 18),
-                            ),
-                          ),
-                      ],
-                    ),
-                  ),
-                  Expanded(
-                    flex: 1,
-                    child: CupertinoPicker(
-                      key: ValueKey('day-$monthIdx'),
-                      scrollController: FixedExtentScrollController(
-                        initialItem: dayIdx,
-                      ),
-                      itemExtent: 40,
-                      onSelectedItemChanged: (i) {
-                        setSt(() => dayIdx = i);
-                        applySelection();
-                      },
-                      children: [
-                        for (final d in days)
-                          Center(
-                            child: Text(
-                              '$d',
-                              style: const TextStyle(
-                                fontSize: 28,
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                          ),
-                      ],
-                    ),
-                  ),
-                  if (showYearCol)
-                    SizedBox(
-                      width: 70,
-                      child: Center(
+          final t = Theme.of(ctx).textTheme;
+          return SafeArea(
+            top: false,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Padding(
+                  padding: EdgeInsets.fromLTRB(20, 0, 12, 4),
+                  child: Row(
+                    children: [
+                      Expanded(
                         child: Text(
-                          '${selectedMonth.year}',
-                          style: const TextStyle(fontSize: 18),
+                          tr('Sanani tanlang'),
+                          style: t.titleMedium?.copyWith(
+                            fontWeight: FontWeight.w700,
+                          ),
                         ),
                       ),
+                      TextButton(
+                        onPressed: () {
+                          final now = DateTime.now();
+                          if (!_sameDay(provider.selectedDate, now)) {
+                            provider.setSelectedDate(
+                              DateTime(now.year, now.month, now.day),
+                            );
+                          }
+                          Navigator.pop(ctx);
+                        },
+                        child: Text(tr('Bugun')),
+                      ),
+                    ],
+                  ),
+                ),
+                SizedBox(
+                  height: 216,
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: CupertinoPicker(
+                          scrollController: FixedExtentScrollController(
+                            initialItem: monthIdx,
+                          ),
+                          itemExtent: 40,
+                          looping: months.length > 1,
+                          onSelectedItemChanged: (i) {
+                            setSt(() {
+                              monthIdx = i;
+                              days = daysFor(months[monthIdx]);
+                              if (dayIdx >= days.length) {
+                                dayIdx = days.length - 1;
+                              }
+                            });
+                            applySelection();
+                          },
+                          children: [
+                            for (final m in months)
+                              Center(
+                                child: Text(
+                                  tr(_monthNames[m.month - 1]),
+                                  style: TextStyle(fontSize: 20),
+                                ),
+                              ),
+                          ],
+                        ),
+                      ),
+                      Expanded(
+                        child: CupertinoPicker(
+                          key: ValueKey('day-$monthIdx'),
+                          scrollController: FixedExtentScrollController(
+                            initialItem: dayIdx,
+                          ),
+                          itemExtent: 40,
+                          onSelectedItemChanged: (i) {
+                            setSt(() => dayIdx = i);
+                            applySelection();
+                          },
+                          children: [
+                            for (final d in days)
+                              Center(
+                                child: Text(
+                                  '$d',
+                                  style: TextStyle(
+                                    fontSize: 22,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              ),
+                          ],
+                        ),
+                      ),
+                      if (showYearCol)
+                        SizedBox(
+                          width: 70,
+                          child: Center(
+                            child: Text(
+                              '${selectedMonth.year}',
+                              style: TextStyle(fontSize: 20),
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+                Padding(
+                  padding: EdgeInsets.fromLTRB(16, 8, 16, 12),
+                  child: SizedBox(
+                    width: double.infinity,
+                    child: FilledButton(
+                      onPressed: () => Navigator.pop(ctx),
+                      child: Text(tr('Tayyor')),
                     ),
-                ],
-              ),
+                  ),
+                ),
+              ],
             ),
           );
         },
@@ -261,54 +333,68 @@ class _AdminTaskUiState extends State<AdminTaskUi>
   Future<void> _clearVideoCache() async {
     // Qaysi kungacha bo'lgan videolarni o'chirishni so'raymiz
     DateTime selectedDate = DateTime.now();
-    final confirm = await showCupertinoModalPopup<bool>(
+    final confirm = await showModalBottomSheet<bool>(
       context: context,
-      builder: (ctx) => Container(
-        height: 320,
-        color: CupertinoColors.systemBackground.resolveFrom(ctx),
-        child: SafeArea(
-          top: false,
-          child: Column(
-            children: [
-              Padding(
-                padding: const EdgeInsets.all(12),
-                child: Text(
-                  'До какого дня удалить видео?',
-                  style: Theme.of(ctx).textTheme.titleMedium,
-                ),
-              ),
-              Expanded(
-                child: CupertinoDatePicker(
-                  mode: CupertinoDatePickerMode.date,
-                  initialDateTime: selectedDate,
-                  maximumDate: DateTime.now(),
-                  onDateTimeChanged: (d) => selectedDate = d,
-                ),
-              ),
-              Padding(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 16,
-                  vertical: 8,
-                ),
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: CupertinoButton(
-                        onPressed: () => Navigator.pop(ctx, false),
-                        child: const Text('Отмена'),
-                      ),
+      showDragHandle: true,
+      builder: (ctx) => SafeArea(
+        top: false,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Padding(
+              padding: EdgeInsets.fromLTRB(20, 0, 20, 4),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    tr('Keshni tozalash'),
+                    style: Theme.of(ctx).textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.w700,
                     ),
-                    Expanded(
-                      child: CupertinoButton.filled(
-                        onPressed: () => Navigator.pop(ctx, true),
-                        child: const Text('Удалить'),
-                      ),
+                  ),
+                  SizedBox(height: 4),
+                  Text(
+                    tr(
+                      "Tanlangan kungacha (shu kun ham) yuklab olingan videolar qurilmadan o'chiriladi.",
                     ),
-                  ],
-                ),
+                    style: TextStyle(color: AppColors.textSecondary),
+                  ),
+                ],
               ),
-            ],
-          ),
+            ),
+            SizedBox(
+              height: 200,
+              child: CupertinoDatePicker(
+                mode: CupertinoDatePickerMode.date,
+                initialDateTime: selectedDate,
+                maximumDate: DateTime.now(),
+                onDateTimeChanged: (d) => selectedDate = d,
+              ),
+            ),
+            Padding(
+              padding: EdgeInsets.fromLTRB(16, 8, 16, 12),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton(
+                      onPressed: () => Navigator.pop(ctx, false),
+                      child: Text(tr('Bekor qilish')),
+                    ),
+                  ),
+                  SizedBox(width: AppSpacing.md),
+                  Expanded(
+                    child: FilledButton(
+                      style: FilledButton.styleFrom(
+                        backgroundColor: AppColors.danger,
+                      ),
+                      onPressed: () => Navigator.pop(ctx, true),
+                      child: Text(tr("O'chirish")),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
         ),
       ),
     );
@@ -343,21 +429,15 @@ class _AdminTaskUiState extends State<AdminTaskUi>
       }
 
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Удалено видео: $deleted'),
-            backgroundColor: Colors.green,
-          ),
+        showAppSnack(
+          context,
+          "${tr("O'chirilgan videolar")}: $deleted",
+          type: SnackType.success,
         );
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Ошибка: $e'),
-            backgroundColor: Colors.red,
-          ),
-        );
+        showAppSnack(context, '${tr('Xatolik')}: $e', type: SnackType.error);
       }
     }
   }
@@ -372,11 +452,13 @@ class _AdminTaskUiState extends State<AdminTaskUi>
   void _switchFilial() {
     final ids = _user?.filialIds;
     if (ids == null || ids.length <= 1) return;
-    context.push(FilialSelectPage(
-      role: _user?.role ?? 'checker',
-      allowedIds: ids,
-      isSwitch: true,
-    ));
+    context.push(
+      FilialSelectPage(
+        role: _user?.role ?? 'checker',
+        allowedIds: ids,
+        isSwitch: true,
+      ),
+    );
   }
 
   Future<void> _handleLogout() async {
@@ -388,6 +470,22 @@ class _AdminTaskUiState extends State<AdminTaskUi>
     if (mounted) context.pushAndRemove(LoginPage());
   }
 
+  AppBar _simpleAppBar({Widget? leading}) => AppBar(
+    leading: leading,
+    title: Text(
+      'MONE TASK',
+      style: TextStyle(fontWeight: FontWeight.w800, letterSpacing: 0.5),
+    ),
+    actions: [
+      Center(child: ThemeToggle(compact: true)),
+      SizedBox(width: 8),
+      Padding(
+        padding: EdgeInsets.only(right: 12),
+        child: Center(child: ScriptToggle(compact: true)),
+      ),
+    ],
+  );
+
   @override
   Widget build(BuildContext context) {
     final tasksProvider = context.watch<AdminTasksProvider>();
@@ -397,43 +495,36 @@ class _AdminTaskUiState extends State<AdminTaskUi>
 
     // ── Loading state ────────────────────────────────────────────────────
     if (tasksProvider.filialsState == LoadingState.loading) {
-      return Scaffold(
-        appBar: AppBar(title: Text(_user?.username ?? "")),
-        body: const Center(child: CircularProgressIndicator.adaptive()),
-      );
+      return Scaffold(appBar: _simpleAppBar(), body: AppLoader());
     }
 
     // ── Filials error ────────────────────────────────────────────────────
     if (tasksProvider.filialsState == LoadingState.error) {
       return Scaffold(
-        appBar: AppBar(
+        appBar: _simpleAppBar(
           leading: IconButton(
-            icon: const Icon(Icons.logout),
-            onPressed: () {
+            icon: Icon(Icons.logout_rounded),
+            tooltip: tr('Chiqish'),
+            onPressed: () async {
+              final ok = await showConfirmDialog(
+                context,
+                title: tr('Hisobdan chiqish'),
+                message: tr('Hisobdan chiqishni xohlaysizmi?'),
+                confirmLabel: tr('Chiqish'),
+                destructive: true,
+              );
+              if (!ok || !context.mounted) return;
               _tokenStorage.removeToken();
               _tokenStorage.putUserData({});
               context.pushAndRemove(LoginPage());
             },
           ),
-          title: Text(_user?.username ?? ""),
         ),
-        body: Center(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              const Icon(Icons.error_outline, color: Colors.red, size: 48),
-              const SizedBox(height: 16),
-              Text(
-                'Ошибка при загрузке категорий:\n${tasksProvider.filialsError}',
-                textAlign: TextAlign.center,
-              ),
-              const SizedBox(height: 16),
-              ElevatedButton(
-                onPressed: () => tasksProvider.fetchFilials(),
-                child: const Text('Повторить'),
-              ),
-            ],
+        body: AppErrorState(
+          message: tr(
+            "Filiallar roʻyxatini yuklab boʻlmadi. Internet aloqasini tekshirib, qayta urinib koʻring.",
           ),
+          onRetry: () => tasksProvider.fetchFilials(),
         ),
       );
     }
@@ -441,12 +532,20 @@ class _AdminTaskUiState extends State<AdminTaskUi>
     // ── Empty filials ────────────────────────────────────────────────────
     if (tasksProvider.filials.isEmpty) {
       return Scaffold(
-        appBar: AppBar(title: Text(_user?.username ?? "")),
-        body: const Center(child: Text("Филиалы не найдены")),
+        appBar: _simpleAppBar(),
+        body: AppEmptyState(
+          icon: Icons.storefront_rounded,
+          title: tr('Filiallar topilmadi'),
+          message: tr(
+            "Sizga hali filial biriktirilmagan. Administratorga murojaat qiling.",
+          ),
+          actionLabel: tr('Yangilash'),
+          onAction: () => tasksProvider.fetchFilials(),
+        ),
       );
     }
 
-    // super_admin va checker (Корректор) barcha filiallarni ko'radi.
+    // super_admin va checker (Tekshiruvchi) barcha filiallarni ko'radi.
     // Aks holda aktiv filial tanlangan bo'lsa — faqat o'sha filial tabi ko'rinadi.
     final allFilials = tasksProvider.filials;
     final visible = (!_seesAllFilials && ActiveFilial.id != null)
@@ -455,123 +554,104 @@ class _AdminTaskUiState extends State<AdminTaskUi>
     final categories = visible.isEmpty ? allFilials : visible;
     _initTabController(categories.length);
 
+    final activeIndex = (_tabController?.index ?? 0).clamp(
+      0,
+      categories.length - 1,
+    );
+    final activeFilial = displayName(categories[activeIndex].name);
+    final isNarrow = MediaQuery.sizeOf(context).width < 420;
+    final textTheme = Theme.of(context).textTheme;
+
     return Scaffold(
+      drawer: MyDrawer(
+        categories: categories,
+        user: _user,
+        onLogout: _handleLogout,
+        onClearCache: _clearVideoCache,
+        onSwitchFilial: _canSwitchFilial ? _switchFilial : null,
+      ),
       appBar: AppBar(
-        titleSpacing: 8,
-        title: Row(
+        titleSpacing: 0,
+        title: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
           mainAxisSize: MainAxisSize.min,
           children: [
-            UserAvatar(user: _user, radius: 16),
-            const SizedBox(width: 8),
-            Flexible(
-              child: Text(
-                _user?.fullName ?? "",
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(fontWeight: FontWeight.w700),
+            Text(
+              tr('Vazifalar'),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: textTheme.titleLarge?.copyWith(
+                fontWeight: FontWeight.w700,
+                fontSize: 19,
               ),
+            ),
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(
+                  Icons.storefront_rounded,
+                  size: 14,
+                  color: AppColors.textSecondary,
+                ),
+                SizedBox(width: 4),
+                Flexible(
+                  child: Text(
+                    activeFilial,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w500,
+                      color: AppColors.textSecondary,
+                    ),
+                  ),
+                ),
+              ],
             ),
           ],
         ),
         actions: [
-          if (_canSwitchFilial)
-            IconButton(
-              onPressed: _switchFilial,
-              icon: const Icon(Icons.swap_horiz),
-              tooltip: 'Сменить филиал',
-            ),
-          _StatusFilterButton(
-            status: 3,
-            color: Colors.green,
-            provider: tasksProvider,
-          ),
-          _StatusFilterButton(
-            status: 2,
-            color: Colors.orange,
-            provider: tasksProvider,
-          ),
-          _StatusFilterButton(
-            status: 1,
-            color: Colors.red,
-            provider: tasksProvider,
-          ),
-          _NoVideoFilterButton(provider: tasksProvider),
-
-          if (tasksProvider.isFilterActive)
-            IconButton(
-              onPressed: () => tasksProvider.clearStatusFilter(),
-              icon: const Icon(Icons.filter_alt_off, size: 18),
-              tooltip: 'Сбросить фильтр',
-              padding: EdgeInsets.zero,
-              constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
-            ),
-
-          GestureDetector(
+          _DateChip(
+            label: _buildDateLabel(selectedDate),
             onTap: _handleDateSelection,
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 8),
-              child: Center(
-                child: Text(
-                  _buildDateLabel(selectedDate),
-                  style: const TextStyle(fontSize: 13),
-                ),
-              ),
-            ),
           ),
-
-          // ── Menyu elementlari (drawer o'rniga) ─────────────────────────
-          IconButton(
-            onPressed: () => context.push(
-              TemplateTaskAdminUi(
-                name: _user?.username ?? "",
-                category: categories,
-              ),
-            ),
-            icon: const Icon(CupertinoIcons.list_bullet),
-            tooltip: 'Все задачи',
-          ),
-          IconButton(
-            onPressed: _clearVideoCache,
-            icon: const Icon(CupertinoIcons.trash),
-            tooltip: 'Очистить кэш видео',
-          ),
-          IconButton(
-            onPressed: () => context.push(ExcelReportPage(filials: categories)),
-            icon: const Icon(CupertinoIcons.doc_plaintext),
-            tooltip: 'Отчеты',
-          ),
-          IconButton(
-            onPressed: _handleLogout,
-            icon: const Icon(Icons.logout, color: Colors.red),
-            tooltip: 'Выйти',
-          ),
+          SizedBox(width: 6),
+          Center(child: ThemeToggle(compact: true)),
+          SizedBox(width: 6),
+          isNarrow ? _ScriptMiniToggle() : ScriptToggle(compact: true),
+          SizedBox(width: 12),
         ],
         bottom: PreferredSize(
-          preferredSize: const Size.fromHeight(kTextTabBarHeight),
-          child: Row(
-            children: [
-              Expanded(
-                child: TabBar(
-                  controller: _tabController,
-                  padding: EdgeInsets.zero,
-                  isScrollable: true,
-                  tabAlignment: TabAlignment.start,
-                  tabs: categories.map((c) => Tab(text: c.name)).toList(),
-                ),
-              ),
-              // checker (Корректор) foydalanuvchilar ro'yxatini ko'ra olmaydi.
-              if (_user?.role != 'checker')
-                IconButton(
-                  onPressed: () =>
-                      context.push(UsersPage(filialModel: categories)),
-                  icon: const Icon(Icons.groups, color: Colors.green),
-                  tooltip: 'Все пользователи',
-                ),
-            ],
+          preferredSize: Size.fromHeight(kTextTabBarHeight),
+          child: Align(
+            alignment: Alignment.centerLeft,
+            child: TabBar(
+              controller: _tabController,
+              isScrollable: true,
+              tabAlignment: TabAlignment.start,
+              padding: EdgeInsets.symmetric(horizontal: 4),
+              tabs: [
+                for (int i = 0; i < categories.length; i++)
+                  _FilialTab(
+                    name: displayName(categories[i].name),
+                    count: tasksProvider.tasksState == LoadingState.loaded
+                        ? tasksProvider
+                              .tasksForFilial(categories[i].filialId)
+                              .length
+                        : null,
+                    selected: i == activeIndex,
+                  ),
+              ],
+            ),
           ),
         ),
       ),
-      body: _buildBody(tasksProvider, categories, selectedDate),
+      body: Column(
+        children: [
+          _FilterBar(provider: tasksProvider),
+          Expanded(child: _buildBody(tasksProvider, categories, selectedDate)),
+        ],
+      ),
     );
   }
 
@@ -581,32 +661,37 @@ class _AdminTaskUiState extends State<AdminTaskUi>
     DateTime selectedDate,
   ) {
     if (tasksProvider.tasksState == LoadingState.loading) {
-      return const Center(child: CircularProgressIndicator.adaptive());
+      return AppLoader();
     }
 
     if (tasksProvider.tasksState == LoadingState.error) {
-      return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            const Icon(Icons.error_outline, color: Colors.red, size: 48),
-            const SizedBox(height: 16),
-            Text(
-              'Ошибка: ${tasksProvider.tasksError}',
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 16),
-            ElevatedButton(
-              onPressed: () => tasksProvider.fetchTasks(),
-              child: const Text('Qayta urinish'),
-            ),
-          ],
+      return AppErrorState(
+        message: tr(
+          "Vazifalarni yuklab boʻlmadi. Internet aloqasini tekshirib, qayta urinib koʻring.",
         ),
+        onRetry: () => tasksProvider.fetchTasks(),
       );
     }
 
     if (tasksProvider.tasks.isEmpty) {
-      return const Center(child: Text("Задачи не найдены"));
+      return RefreshIndicator(
+        onRefresh: () => tasksProvider.fetchTasks(),
+        child: LayoutBuilder(
+          builder: (context, c) => SingleChildScrollView(
+            physics: AlwaysScrollableScrollPhysics(),
+            child: ConstrainedBox(
+              constraints: BoxConstraints(minHeight: c.maxHeight),
+              child: AppEmptyState(
+                icon: Icons.event_available_rounded,
+                title: tr("Bu kunga vazifa yoʻq"),
+                message: tr("Boshqa sanani tanlang yoki keyinroq yangilang."),
+                actionLabel: tr('Sanani tanlash'),
+                onAction: _handleDateSelection,
+              ),
+            ),
+          ),
+        ),
+      );
     }
 
     return TabBarView(
@@ -627,94 +712,277 @@ class _AdminTaskUiState extends State<AdminTaskUi>
   }
 }
 
-// ─── Status filter button ────────────────────────────────────────────────────
+// ─── Filial tab (nom + vazifalar soni) ───────────────────────────────────────
 
-class _StatusFilterButton extends StatelessWidget {
-  final int status;
-  final Color color;
-  final AdminTasksProvider provider;
-
-  const _StatusFilterButton({
-    required this.status,
-    required this.color,
-    required this.provider,
+class _FilialTab extends StatelessWidget {
+  const _FilialTab({
+    required this.name,
+    required this.count,
+    required this.selected,
   });
+
+  final String name;
+  final int? count;
+  final bool selected;
 
   @override
   Widget build(BuildContext context) {
-    final bool isSelected = provider.selectedStatuses.contains(status);
-    final isPhone = MediaQuery.of(context).size.shortestSide < 600;
-    final double size = isPhone ? 30 : 50;
-    final double iconSize = isPhone ? 18 : 32;
-    final double hPadding = isPhone ? 6 : 20;
-
-    return GestureDetector(
-      onTap: () => provider.toggleStatusFilter(status),
-      child: Padding(
-        padding: EdgeInsets.symmetric(horizontal: hPadding),
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 200),
-          width: size,
-          height: size,
-          decoration: BoxDecoration(
-            shape: BoxShape.circle,
-            color: isSelected ? color : color.withValues(alpha: 0.2),
-            border: Border.all(
-              color: isSelected ? color : color.withValues(alpha: 0.4),
-              width: isSelected ? 2.5 : 1.5,
-            ),
-            boxShadow: isSelected
-                ? [BoxShadow(color: color.withValues(alpha: 0.4), blurRadius: 6)]
-                : [],
+    return Tab(
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          ConstrainedBox(
+            constraints: BoxConstraints(maxWidth: 180),
+            child: Text(name, maxLines: 1, overflow: TextOverflow.ellipsis),
           ),
-          child: isSelected
-              ? Icon(Icons.check, size: iconSize, color: Colors.white)
-              : null,
+          if (count != null) ...[
+            SizedBox(width: 6),
+            Container(
+              padding: EdgeInsets.symmetric(horizontal: 7, vertical: 1),
+              decoration: BoxDecoration(
+                color: selected ? AppColors.primary : AppColors.surfaceMuted,
+                borderRadius: BorderRadius.circular(999),
+              ),
+              child: Text(
+                '$count',
+                style: TextStyle(
+                  fontSize: selected ? 13 : 12,
+                  fontWeight: FontWeight.w700,
+                  color: selected ? Colors.white : AppColors.textSecondary,
+                ),
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+// ─── Sana tugmasi ────────────────────────────────────────────────────────────
+
+class _DateChip extends StatelessWidget {
+  const _DateChip({required this.label, required this.onTap});
+
+  final String label;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Tooltip(
+      message: tr('Sanani tanlash'),
+      child: Material(
+        color: AppColors.primarySoft,
+        borderRadius: BorderRadius.circular(999),
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(999),
+          child: Container(
+            height: 36,
+            padding: EdgeInsets.symmetric(horizontal: 12),
+            constraints: BoxConstraints(maxWidth: 150),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(
+                  CupertinoIcons.calendar,
+                  size: 16,
+                  color: AppColors.primary,
+                ),
+                SizedBox(width: 6),
+                Flexible(
+                  child: Text(
+                    label,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                      color: AppColors.primary,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
         ),
       ),
     );
   }
 }
 
-// ─── No-video filter button ──────────────────────────────────────────────────
+// ─── Tor ekran uchun kichik alifbo almashtirgich ─────────────────────────────
 
-class _NoVideoFilterButton extends StatelessWidget {
-  final AdminTasksProvider provider;
-
-  const _NoVideoFilterButton({required this.provider});
+class _ScriptMiniToggle extends StatelessWidget {
+  const _ScriptMiniToggle();
 
   @override
   Widget build(BuildContext context) {
-    final bool isSelected = provider.filterNoVideo;
-    const Color color = Colors.blueGrey;
-    final isPhone = MediaQuery.of(context).size.shortestSide < 600;
-    final double size = isPhone ? 30 : 50;
-    final double iconSize = isPhone ? 16 : 26;
-    final double hPadding = isPhone ? 6 : 20;
-
-    return GestureDetector(
-      onTap: () => provider.toggleNoVideoFilter(),
-      child: Padding(
-        padding: EdgeInsets.symmetric(horizontal: hPadding),
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 200),
-          width: size,
-          height: size,
-          decoration: BoxDecoration(
-            shape: BoxShape.circle,
-            color: isSelected ? color : color.withValues(alpha: 0.2),
-            border: Border.all(
-              color: isSelected ? color : color.withValues(alpha: 0.4),
-              width: isSelected ? 2.5 : 1.5,
+    return ValueListenableBuilder<AppScript>(
+      valueListenable: AppScriptController.instance,
+      builder: (context, script, _) {
+        final latin = script == AppScript.latin;
+        return Tooltip(
+          message: tr('Yozuv: lotin / kirill'),
+          child: Material(
+            color: AppColors.surfaceMuted,
+            borderRadius: BorderRadius.circular(999),
+            child: InkWell(
+              onTap: AppScriptController.instance.toggle,
+              borderRadius: BorderRadius.circular(999),
+              child: Container(
+                height: 36,
+                padding: EdgeInsets.symmetric(horizontal: 10),
+                alignment: Alignment.center,
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      Icons.translate_rounded,
+                      size: 15,
+                      color: AppColors.textSecondary,
+                    ),
+                    SizedBox(width: 4),
+                    Text(
+                      latin ? 'Lot' : 'Кир',
+                      style: TextStyle(
+                        fontSize: 12.5,
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.textPrimary,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
             ),
-            boxShadow: isSelected
-                ? [BoxShadow(color: color.withValues(alpha: 0.4), blurRadius: 6)]
-                : [],
           ),
-          child: Icon(
-            Icons.videocam_off,
-            size: iconSize,
-            color: isSelected ? Colors.white : color,
+        );
+      },
+    );
+  }
+}
+
+// ─── Holat filtri ────────────────────────────────────────────────────────────
+
+/// To'q rangli (holat) fon ustidagi matn/ikonka rangi. Tungi rejimda
+/// fon ranglari och (yashil/sariq) bo'lgani uchun oq emas, to'q rang olinadi.
+Color _onFill() =>
+    AppThemeController.instance.isDark ? AppColors.background : Colors.white;
+
+class _FilterBar extends StatelessWidget {
+  const _FilterBar({required this.provider});
+
+  final AdminTasksProvider provider;
+
+  @override
+  Widget build(BuildContext context) {
+    Widget statusChip(int status) {
+      final selected = provider.selectedStatuses.contains(status);
+      final color = statusColor(status);
+      return _FilterChipButton(
+        label: taskStatusLabel(status),
+        selected: selected,
+        color: color,
+        leading: Container(
+          width: 8,
+          height: 8,
+          decoration: BoxDecoration(
+            color: selected ? _onFill() : color,
+            shape: BoxShape.circle,
+          ),
+        ),
+        onTap: () => provider.toggleStatusFilter(status),
+      );
+    }
+
+    return Container(
+      height: 52,
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        border: Border(bottom: BorderSide(color: AppColors.divider)),
+      ),
+      child: ListView(
+        scrollDirection: Axis.horizontal,
+        padding: EdgeInsets.symmetric(horizontal: 16, vertical: 9),
+        children: [
+          statusChip(3),
+          SizedBox(width: 8),
+          statusChip(2),
+          SizedBox(width: 8),
+          statusChip(1),
+          SizedBox(width: 8),
+          _FilterChipButton(
+            label: tr('Videosiz'),
+            selected: provider.filterNoVideo,
+            color: AppColors.textSecondary,
+            leading: Icon(
+              Icons.videocam_off_rounded,
+              size: 15,
+              color: provider.filterNoVideo
+                  ? _onFill()
+                  : AppColors.textSecondary,
+            ),
+            onTap: provider.toggleNoVideoFilter,
+          ),
+          if (provider.isFilterActive) ...[
+            SizedBox(width: 4),
+            TextButton.icon(
+              onPressed: provider.clearStatusFilter,
+              style: TextButton.styleFrom(
+                minimumSize: Size(0, 34),
+                padding: EdgeInsets.symmetric(horizontal: 10),
+              ),
+              icon: Icon(Icons.close_rounded, size: 16),
+              label: Text(tr('Tozalash')),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _FilterChipButton extends StatelessWidget {
+  const _FilterChipButton({
+    required this.label,
+    required this.selected,
+    required this.color,
+    required this.leading,
+    required this.onTap,
+  });
+
+  final String label;
+  final bool selected;
+  final Color color;
+  final Widget leading;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: selected ? color : AppColors.surface,
+      shape: StadiumBorder(
+        side: BorderSide(color: selected ? color : AppColors.border),
+      ),
+      child: InkWell(
+        onTap: onTap,
+        customBorder: StadiumBorder(),
+        child: Padding(
+          padding: EdgeInsets.symmetric(horizontal: 12),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              leading,
+              SizedBox(width: 6),
+              Text(
+                label,
+                style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                  color: selected ? _onFill() : AppColors.textPrimary,
+                ),
+              ),
+            ],
           ),
         ),
       ),

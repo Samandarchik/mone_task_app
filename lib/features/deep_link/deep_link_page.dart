@@ -5,6 +5,7 @@ import 'package:mone_task_app/core/constants/urls.dart';
 import 'package:mone_task_app/core/context_extension.dart';
 import 'package:mone_task_app/core/data/local/token_storage.dart';
 import 'package:mone_task_app/core/di/di.dart';
+import 'package:mone_task_app/core/l10n/app_script.dart';
 import 'package:mone_task_app/deep_link_service.dart';
 import 'package:mone_task_app/home/service/login_service.dart';
 import 'package:mone_task_app/home/ui/role_home.dart';
@@ -22,7 +23,7 @@ class DeepLinkPage extends StatefulWidget {
 
 class _DeepLinkPageState extends State<DeepLinkPage> {
   bool _isLoading = true;
-  String? _error;
+  _DlError? _error;
   String? _taskName;
   String? _videoUrl;
   String? _submittedBy;
@@ -39,7 +40,7 @@ class _DeepLinkPageState extends State<DeepLinkPage> {
       if (token.isEmpty) {
         if (mounted) {
           setState(() {
-            _error = 'Войдите в систему';
+            _error = _DlError.auth;
             _isLoading = false;
           });
         }
@@ -64,7 +65,7 @@ class _DeepLinkPageState extends State<DeepLinkPage> {
         });
       } else {
         setState(() {
-          _error = 'Задача не найдена';
+          _error = _DlError.notFound;
           _isLoading = false;
         });
       }
@@ -72,19 +73,19 @@ class _DeepLinkPageState extends State<DeepLinkPage> {
       if (!mounted) return;
       if (e.response?.statusCode == 401) {
         setState(() {
-          _error = 'Войдите в систему';
+          _error = _DlError.auth;
           _isLoading = false;
         });
       } else {
         setState(() {
-          _error = 'Ошибка сервера';
+          _error = _DlError.server;
           _isLoading = false;
         });
       }
     } catch (e) {
       if (!mounted) return;
       setState(() {
-        _error = 'Произошла ошибка';
+        _error = _DlError.unknown;
         _isLoading = false;
       });
     }
@@ -105,6 +106,13 @@ class _DeepLinkPageState extends State<DeepLinkPage> {
     context.pushAndRemove(landingForUser(user));
   }
 
+  String _errorText(_DlError e) => switch (e) {
+    _DlError.auth => tr('Videoni koʻrish uchun tizimga kiring'),
+    _DlError.notFound => tr('Vazifa topilmadi'),
+    _DlError.server => tr("Serverda xatolik yuz berdi. Keyinroq urinib koʻring."),
+    _DlError.unknown => tr('Xatolik yuz berdi'),
+  };
+
   String _fullVideoUrl(String url) {
     if (url.startsWith('http')) return url;
     return '${AppUrls.baseUrl}/$url';
@@ -119,7 +127,7 @@ class _DeepLinkPageState extends State<DeepLinkPage> {
           children: [
             // Tepada: task nomi + ilovaga kirish tugmasi
             Container(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
               color: Colors.black,
               child: Row(
                 children: [
@@ -129,8 +137,8 @@ class _DeepLinkPageState extends State<DeepLinkPage> {
                       children: [
                         if (_taskName != null)
                           Text(
-                            _taskName!,
-                            style: const TextStyle(
+                            trData(_taskName!),
+                            style: TextStyle(
                               color: Colors.white,
                               fontSize: 16,
                               fontWeight: FontWeight.bold,
@@ -140,8 +148,10 @@ class _DeepLinkPageState extends State<DeepLinkPage> {
                           ),
                         if (_submittedBy != null)
                           Text(
-                            _submittedBy!,
-                            style: const TextStyle(
+                            trData(_submittedBy!),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
                               color: Colors.white60,
                               fontSize: 13,
                             ),
@@ -149,11 +159,11 @@ class _DeepLinkPageState extends State<DeepLinkPage> {
                       ],
                     ),
                   ),
-                  const SizedBox(width: 12),
+                  SizedBox(width: 12),
                   ElevatedButton.icon(
                     onPressed: _goToApp,
-                    icon: const Icon(Icons.arrow_forward, size: 18),
-                    label: const Text('Открыть приложение'),
+                    icon: Icon(Icons.arrow_forward, size: 18),
+                    label: Text(tr('Ilovaga oʻtish')),
                     style: ElevatedButton.styleFrom(
                       backgroundColor: Colors.white,
                       foregroundColor: Colors.black,
@@ -169,21 +179,29 @@ class _DeepLinkPageState extends State<DeepLinkPage> {
             // Video yoki loading/error
             Expanded(
               child: _isLoading
-                  ? const Center(
+                  ? Center(
                       child: CircularProgressIndicator.adaptive(
                         valueColor: AlwaysStoppedAnimation(Colors.white),
                       ),
                     )
                   : _error != null
-                  ? Center(
-                      child: Text(
-                        _error!,
-                        style: const TextStyle(
-                          color: Colors.white70,
-                          fontSize: 16,
-                        ),
-                        textAlign: TextAlign.center,
-                      ),
+                  ? _Message(
+                      icon: _error == _DlError.auth
+                          ? Icons.lock_outline_rounded
+                          : Icons.error_outline_rounded,
+                      text: _errorText(_error!),
+                      actionLabel: _error == _DlError.auth
+                          ? tr('Kirish')
+                          : tr('Qayta urinish'),
+                      onAction: _error == _DlError.auth
+                          ? _goToApp
+                          : () {
+                              setState(() {
+                                _isLoading = true;
+                                _error = null;
+                              });
+                              _loadTask();
+                            },
                     )
                   : _videoUrl != null && _videoUrl!.isNotEmpty
                   ? Center(
@@ -191,13 +209,60 @@ class _DeepLinkPageState extends State<DeepLinkPage> {
                         videoUrl: _fullVideoUrl(_videoUrl!),
                       ),
                     )
-                  : const Center(
-                      child: Text(
-                        'Видео ещё не отправлено',
-                        style: TextStyle(color: Colors.white70, fontSize: 16),
-                      ),
+                  : _Message(
+                      icon: Icons.videocam_off_outlined,
+                      text: tr('Video hali yuborilmagan'),
                     ),
             ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+enum _DlError { auth, notFound, server, unknown }
+
+class _Message extends StatelessWidget {
+  const _Message({
+    required this.icon,
+    required this.text,
+    this.actionLabel,
+    this.onAction,
+  });
+
+  final IconData icon;
+  final String text;
+  final String? actionLabel;
+  final VoidCallback? onAction;
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Padding(
+        padding: EdgeInsets.all(32),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, color: Colors.white54, size: 44),
+            SizedBox(height: 14),
+            Text(
+              text,
+              style: TextStyle(color: Colors.white70, fontSize: 16),
+              textAlign: TextAlign.center,
+            ),
+            if (actionLabel != null && onAction != null) ...[
+              SizedBox(height: 20),
+              FilledButton(
+                style: FilledButton.styleFrom(
+                  backgroundColor: Colors.white,
+                  foregroundColor: Colors.black,
+                  minimumSize: Size(160, 48),
+                ),
+                onPressed: onAction,
+                child: Text(actionLabel!),
+              ),
+            ],
           ],
         ),
       ),

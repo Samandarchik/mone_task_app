@@ -13,9 +13,9 @@
 
 	<!-- Kamera va mikrofon ruxsatlari -->
 	<key>NSCameraUsageDescription</key>
-	<string>Камера необходима для записи видео с выполнением заданий, которое отправляется проверяющему</string>
+	<string>Kamera vazifa bajarilganini tasdiqlovchi videoni yozish uchun kerak. Video tekshiruvchiga yuboriladi.</string>
 	<key>NSMicrophoneUsageDescription</key>
-	<string>Микрофон необходим для записи звукового видео с выполнением заданий, которое отправляется проверяющему</string>
+	<string>Mikrofon vazifa videosini ovoz bilan yozish va ovozli xabar yuborish uchun kerak. Yozuv tekshiruvchiga yuboriladi.</string>
 	<!-- ProMotion display (120fps) -->
 	<key>CADisableMinimumFrameDurationOnPhone</key>
 	<true/>

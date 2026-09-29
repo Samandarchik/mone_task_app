@@ -5,6 +5,9 @@ import 'package:mone_task_app/core/context_extension.dart';
 import 'package:mone_task_app/core/data/local/active_filial.dart';
 import 'package:mone_task_app/core/data/local/token_storage.dart';
 import 'package:mone_task_app/core/di/di.dart';
+import 'package:mone_task_app/core/l10n/app_script.dart';
+import 'package:mone_task_app/core/theme/app_theme.dart';
+import 'package:mone_task_app/core/widgets/app_widgets.dart';
 import 'package:mone_task_app/home/service/login_service.dart';
 import 'package:mone_task_app/home/ui/role_home.dart';
 import 'package:mone_task_app/worker/service/log_out.dart';
@@ -36,6 +39,8 @@ class FilialSelectPage extends StatefulWidget {
 class _FilialSelectPageState extends State<FilialSelectPage> {
   late Future<List<FilialModel>> _future;
   final TokenStorage _tokenStorage = sl<TokenStorage>();
+  final _searchCtrl = TextEditingController();
+  String _query = '';
 
   @override
   void initState() {
@@ -58,6 +63,14 @@ class _FilialSelectPageState extends State<FilialSelectPage> {
   }
 
   Future<void> _handleLogout() async {
+    final ok = await showConfirmDialog(
+      context,
+      title: tr('Hisobdan chiqish'),
+      message: tr('Ishonchingiz komilmi? Qayta kirish uchun parol kerak boʻladi.'),
+      confirmLabel: tr('Chiqish'),
+      destructive: true,
+    );
+    if (!ok) return;
     WsService().disconnect();
     await LogOutService().logOut();
     _tokenStorage.removeToken();
@@ -66,74 +79,149 @@ class _FilialSelectPageState extends State<FilialSelectPage> {
     if (mounted) context.pushAndRemove(LoginPage());
   }
 
+  bool _matches(FilialModel f, String q) {
+    if (q.isEmpty) return true;
+    final lq = q.toLowerCase();
+    return f.name.toLowerCase().contains(lq) ||
+        displayName(f.name).toLowerCase().contains(trData(q).toLowerCase());
+  }
+
+  Future<void> _refresh() async {
+    final f = _loadFilials();
+    setState(() => _future = f);
+    try {
+      await f;
+    } catch (_) {}
+  }
+
+  @override
+  void dispose() {
+    _searchCtrl.dispose();
+    super.dispose();
+  }
+
   @override
   Widget build(BuildContext context) {
+    final t = Theme.of(context).textTheme;
     return Scaffold(
-      backgroundColor: const Color(0xFFF2F3F7),
+      backgroundColor: AppColors.background,
       appBar: AppBar(
-        backgroundColor: const Color(0xFFF2F3F7),
-        elevation: 0,
         automaticallyImplyLeading: widget.isSwitch,
-        title: const Text(
-          'Выберите филиал',
-          style: TextStyle(fontWeight: FontWeight.w700, color: Colors.black),
+        title: Text(
+          widget.isSwitch ? tr('Filialni almashtirish') : tr('Filialni tanlang'),
         ),
-        centerTitle: true,
         actions: [
+          Center(child: ThemeToggle(compact: true)),
+          SizedBox(width: 8),
+          Padding(
+            padding: EdgeInsets.symmetric(horizontal: 4),
+            child: Center(child: ScriptToggle(compact: true)),
+          ),
           if (!widget.isSwitch)
             IconButton(
-              tooltip: 'Выйти',
-              icon: const Icon(Icons.logout, color: Colors.red),
+              tooltip: tr('Chiqish'),
+              icon: Icon(Icons.logout_rounded, color: AppColors.danger),
               onPressed: _handleLogout,
             ),
+          SizedBox(width: 4),
         ],
       ),
       body: FutureBuilder<List<FilialModel>>(
         future: _future,
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
-            return const Center(child: CircularProgressIndicator.adaptive());
+            return AppLoader();
           }
           if (snapshot.hasError) {
-            return Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
+            return AppErrorState(
+              onRetry: () => setState(() => _future = _loadFilials()),
+            );
+          }
+
+          final all = snapshot.data ?? [];
+          if (all.isEmpty) {
+            return RefreshIndicator(
+              onRefresh: _refresh,
+              child: ListView(
                 children: [
-                  const Icon(Icons.error_outline, color: Colors.red, size: 48),
-                  const SizedBox(height: 16),
-                  Text(
-                    'Ошибка: ${snapshot.error}',
-                    textAlign: TextAlign.center,
-                  ),
-                  const SizedBox(height: 16),
-                  ElevatedButton(
-                    onPressed: () =>
-                        setState(() => _future = _loadFilials()),
-                    child: const Text('Повторить'),
+                  SizedBox(
+                    height: 420,
+                    child: AppEmptyState(
+                      icon: Icons.storefront_rounded,
+                      title: tr('Filiallar topilmadi'),
+                      message: tr(
+                        "Sizga hali filial biriktirilmagan. Rahbaringizga murojaat qiling.",
+                      ),
+                      actionLabel: tr('Yangilash'),
+                      onAction: _refresh,
+                    ),
                   ),
                 ],
               ),
             );
           }
 
-          final filials = snapshot.data ?? [];
-          if (filials.isEmpty) {
-            return const Center(child: Text('Филиалы не найдены'));
-          }
+          final filials = all.where((f) => _matches(f, _query)).toList();
 
-          return ListView.separated(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 16),
-            itemCount: filials.length,
-            separatorBuilder: (_, __) => const SizedBox(height: 10),
-            itemBuilder: (_, i) {
-              final f = filials[i];
-              final isActive = ActiveFilial.id == f.filialId;
-              return _FilialCard(
-                name: f.name,
-                isActive: isActive,
-                onTap: () => _onSelect(f),
-              );
-            },
+          return Center(
+            child: ConstrainedBox(
+              constraints: BoxConstraints(maxWidth: 720),
+              child: RefreshIndicator(
+                onRefresh: _refresh,
+                child: ListView(
+                  padding: EdgeInsets.fromLTRB(16, 8, 16, 24),
+                  children: [
+                    Text(
+                      tr('Qaysi filialda ishlaysiz? Keyinroq uni almashtirishingiz mumkin.'),
+                      style: t.bodyMedium?.copyWith(
+                        color: AppColors.textSecondary,
+                      ),
+                    ),
+                    if (all.length > 5) ...[
+                      SizedBox(height: AppSpacing.md),
+                      TextField(
+                        controller: _searchCtrl,
+                        onChanged: (v) => setState(() => _query = v.trim()),
+                        textInputAction: TextInputAction.search,
+                        decoration: InputDecoration(
+                          hintText: tr('Filial nomi boʻyicha qidirish'),
+                          prefixIcon: Icon(Icons.search_rounded),
+                          suffixIcon: _query.isEmpty
+                              ? null
+                              : IconButton(
+                                  tooltip: tr('Tozalash'),
+                                  icon: Icon(Icons.close_rounded),
+                                  onPressed: () {
+                                    _searchCtrl.clear();
+                                    setState(() => _query = '');
+                                  },
+                                ),
+                        ),
+                      ),
+                    ],
+                    SizedBox(height: AppSpacing.lg),
+                    if (filials.isEmpty)
+                      Padding(
+                        padding: EdgeInsets.only(top: 32),
+                        child: AppEmptyState(
+                          icon: Icons.search_off_rounded,
+                          title: tr('Hech narsa topilmadi'),
+                          message: tr('Boshqa soʻz bilan qidirib koʻring.'),
+                        ),
+                      )
+                    else
+                      for (final f in filials) ...[
+                        _FilialCard(
+                          name: displayName(f.name),
+                          isActive: ActiveFilial.id == f.filialId,
+                          onTap: () => _onSelect(f),
+                        ),
+                        SizedBox(height: AppSpacing.sm + 2),
+                      ],
+                  ],
+                ),
+              ),
+            ),
           );
         },
       ),
@@ -155,50 +243,74 @@ class _FilialCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Material(
-      color: Colors.white,
-      borderRadius: BorderRadius.circular(16),
+      color: AppColors.surface,
+      borderRadius: AppRadius.lgAll,
       child: InkWell(
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: AppRadius.lgAll,
         onTap: onTap,
         child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 16),
+          constraints: BoxConstraints(minHeight: 68),
+          padding: EdgeInsets.symmetric(horizontal: 14, vertical: 12),
           decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(16),
+            borderRadius: AppRadius.lgAll,
             border: Border.all(
-              color: isActive
-                  ? const Color(0xFF3699ff)
-                  : const Color(0xFFE5E7EB),
-              width: isActive ? 2 : 1,
+              color: isActive ? AppColors.primary : AppColors.border,
+              width: isActive ? 1.6 : 1,
             ),
           ),
           child: Row(
             children: [
               Container(
-                width: 48,
-                height: 48,
+                width: 44,
+                height: 44,
                 decoration: BoxDecoration(
-                  color: const Color(0xFFE9EBF2),
-                  shape: BoxShape.circle,
+                  color: isActive
+                      ? AppColors.primarySoft
+                      : AppColors.surfaceMuted,
+                  borderRadius: AppRadius.mdAll,
                 ),
                 alignment: Alignment.center,
-                child: const Icon(Icons.storefront,
-                    color: Color(0xFF6B7280)),
+                child: Icon(
+                  Icons.storefront_rounded,
+                  color: isActive ? AppColors.primary : AppColors.textSecondary,
+                ),
               ),
-              const SizedBox(width: 14),
+              SizedBox(width: 14),
               Expanded(
-                child: Text(
-                  name,
-                  style: const TextStyle(
-                    fontWeight: FontWeight.w700,
-                    fontSize: 17,
-                    color: Color(0xFF1A1A2E),
-                  ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      name,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontWeight: FontWeight.w600,
+                        fontSize: 16,
+                        color: AppColors.textPrimary,
+                      ),
+                    ),
+                    if (isActive) ...[
+                      SizedBox(height: 2),
+                      Text(
+                        tr('Hozirgi filial'),
+                        style: TextStyle(
+                          fontSize: 12.5,
+                          color: AppColors.primary,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ],
+                  ],
                 ),
               ),
               if (isActive)
-                const Icon(Icons.check_circle, color: Color(0xFF3699ff))
+                Icon(Icons.check_circle_rounded, color: AppColors.primary)
               else
-                const Icon(Icons.chevron_right, color: Color(0xFF9CA3AF)),
+                Icon(
+                  Icons.chevron_right_rounded,
+                  color: AppColors.textTertiary,
+                ),
             ],
           ),
         ),

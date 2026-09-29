@@ -1,6 +1,7 @@
 import 'package:dio/dio.dart';
 import 'package:mone_task_app/core/constants/urls.dart';
 import 'package:mone_task_app/core/di/di.dart';
+import 'package:mone_task_app/core/l10n/app_script.dart';
 import 'package:mone_task_app/worker/model/user_model.dart';
 
 class UserService {
@@ -71,7 +72,7 @@ class UserService {
       final data = e.response?.data;
       final msg = (data is Map && data['error'] != null)
           ? data['error'].toString()
-          : 'Не удалось отправить';
+          : tr('Yuborib boʻlmadi');
       throw Exception(msg);
     }
   }

@@ -1,54 +1,47 @@
 import 'package:flutter/material.dart';
+import 'package:mone_task_app/core/l10n/app_script.dart';
+import 'package:mone_task_app/core/theme/app_theme.dart';
 
-/// 🔥 STATUS COLOR
-Color getStatusColor(int status) {
-  switch (status) {
-    case 3:
-      return Colors.green;
-    case 2:
-      return Colors.orange;
-    default:
-      return Colors.red;
-  }
-}
+/// Vazifa holati rangi (1 — bajarilmagan, 2 — tekshiruvda, 3 — bajarilgan).
+Color getStatusColor(int status) => statusColor(status);
 
-/// 🔥 TASK TYPE BO'YICHA FILTER
+/// Vazifa turi nomi.
 String getTypeName(int type) {
   switch (type) {
     case 1:
-      return "Ежедневно";
+      return tr('Har kuni');
     case 2:
-      return "Еженедельно: ";
+      return '${tr('Har hafta')}: ';
     case 3:
-      return "Ежемесячно: ";
+      return '${tr('Har oy')}: ';
     default:
-      return "Unknown";
+      return tr("Noma'lum");
   }
 }
 
+/// Hafta kuni qisqa nomi (1 — dushanba ... 7 — yakshanba).
 String getWeekday(int date) {
   switch (date) {
     case 1:
-      return "Пн";
+      return tr('Du');
     case 2:
-      return "Вт";
+      return tr('Se');
     case 3:
-      return "Ср";
+      return tr('Ch');
     case 4:
-      return "Чт";
+      return tr('Pa');
     case 5:
-      return "Пт";
+      return tr('Ju');
     case 6:
-      return "Сб";
+      return tr('Sh');
     case 7:
-      return "Вс";
+      return tr('Ya');
     default:
-      return "--";
+      return '--';
   }
 }
 
 String getWeekdaysString(List<int>? days) {
   if (days == null || days.isEmpty) return "";
-  // Har bir kunni 2 harf bilan qisqartirish
   return days.map((d) => getWeekday(d)).join(", ");
 }

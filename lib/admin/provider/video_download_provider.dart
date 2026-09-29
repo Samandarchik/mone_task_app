@@ -38,7 +38,7 @@ class VideoDownloadProvider extends ChangeNotifier {
   bool _isSequenceRunning = false;
 
   VideoDownloadState getState(String url) {
-    return _states[url] ?? const VideoDownloadState();
+    return _states[url] ?? VideoDownloadState();
   }
 
   bool isCached(String url) =>
@@ -94,12 +94,12 @@ class VideoDownloadProvider extends ChangeNotifier {
     if (getState(videoUrl).status == VideoStatus.downloading) {
       // Wait for existing download
       while (getState(videoUrl).status == VideoStatus.downloading) {
-        await Future.delayed(const Duration(milliseconds: 300));
+        await Future.delayed(Duration(milliseconds: 300));
       }
       return;
     }
 
-    _updateState(videoUrl, const VideoDownloadState(
+    _updateState(videoUrl, VideoDownloadState(
       status: VideoStatus.downloading,
       progress: 0.0,
     ));
@@ -148,7 +148,7 @@ class VideoDownloadProvider extends ChangeNotifier {
         ));
       } else {
         if (await tempFile.exists()) await tempFile.delete();
-        _updateState(videoUrl, const VideoDownloadState(
+        _updateState(videoUrl, VideoDownloadState(
           status: VideoStatus.error,
         ));
       }
@@ -159,7 +159,7 @@ class VideoDownloadProvider extends ChangeNotifier {
         if (await tempFile.exists()) await tempFile.delete();
       } catch (_) {}
 
-      _updateState(videoUrl, const VideoDownloadState(
+      _updateState(videoUrl, VideoDownloadState(
         status: VideoStatus.error,
       ));
     }

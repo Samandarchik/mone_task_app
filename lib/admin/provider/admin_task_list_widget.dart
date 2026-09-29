@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:mone_task_app/admin/provider/admin_task_item.dart';
+import 'package:mone_task_app/admin/provider/admin_tasks_provider.dart';
 import 'package:mone_task_app/admin/provider/video_download_provider.dart';
 import 'package:mone_task_app/checker/model/checker_check_task_model.dart';
+import 'package:mone_task_app/core/l10n/app_script.dart';
+import 'package:mone_task_app/core/widgets/app_widgets.dart';
 import 'package:provider/provider.dart';
 import 'package:mone_task_app/core/utils/share_helper.dart';
 
@@ -85,14 +88,51 @@ class _AdminTaskListWidgetState extends State<AdminTaskListWidget> {
     // tasks allaqachon filial + status bo'yicha filterlangan
     final filtered = widget.tasks;
 
-    if (filtered.isEmpty) {
-      return const Center(child: Text("Ushbu filial uchun task yo'q"));
+    // Tortib yangilash — fetch tugaguncha indikator ko'rinadi.
+    Future<void> refresh() async {
+      final provider = context.read<AdminTasksProvider>();
+      await provider.fetchTasks();
     }
 
+    if (filtered.isEmpty) {
+      final filterOn = context.read<AdminTasksProvider>().isFilterActive;
+      return RefreshIndicator(
+        onRefresh: refresh,
+        child: LayoutBuilder(
+          builder: (context, c) => SingleChildScrollView(
+            physics: AlwaysScrollableScrollPhysics(),
+            child: ConstrainedBox(
+              constraints: BoxConstraints(minHeight: c.maxHeight),
+              child: AppEmptyState(
+                icon: filterOn
+                    ? Icons.filter_alt_off_rounded
+                    : Icons.task_alt_rounded,
+                title: filterOn
+                    ? tr('Hech narsa topilmadi')
+                    : tr("Bu filialda vazifa yo'q"),
+                message: filterOn
+                    ? tr("Tanlangan filtr boʻyicha vazifa yoʻq. Filtrni oʻchirib koʻring.")
+                    : tr("Boshqa sanani tanlang yoki pastga tortib yangilang."),
+                actionLabel: filterOn ? tr('Filtrni tozalash') : null,
+                onAction: filterOn
+                    ? () => context.read<AdminTasksProvider>().clearStatusFilter()
+                    : null,
+              ),
+            ),
+          ),
+        ),
+      );
+    }
+
+    // Keng ekranlarda (Windows, planshet) kontent ~720px bilan cheklanadi.
+    final width = MediaQuery.sizeOf(context).width;
+    final hPad = width > 752 ? (width - 720) / 2 : 16.0;
+
     return RefreshIndicator(
-      onRefresh: () async => widget.onRefresh(),
+      onRefresh: refresh,
       child: ListView.builder(
-        padding: const EdgeInsets.all(8),
+        physics: AlwaysScrollableScrollPhysics(),
+        padding: EdgeInsets.fromLTRB(hPad, 12, hPad, 24),
         itemCount: filtered.length,
         itemBuilder: (_, i) {
           final task = filtered[i];
@@ -104,7 +144,7 @@ class _AdminTaskListWidgetState extends State<AdminTaskListWidget> {
 
           final videoState = fullVideoUrl != null
               ? downloadProvider.getState(fullVideoUrl)
-              : const VideoDownloadState();
+              : VideoDownloadState();
 
           String? videoPath;
           if (fullVideoUrl != null) {

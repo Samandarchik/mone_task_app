@@ -1,11 +1,13 @@
 import 'dart:convert';
 import 'package:dio/dio.dart';
-import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:mone_task_app/admin/model/filial_model.dart';
 import 'package:mone_task_app/admin/service/user_service.dart';
 import 'package:mone_task_app/checker/service/task_worker_service.dart';
+import 'package:mone_task_app/core/l10n/app_script.dart';
+import 'package:mone_task_app/core/theme/app_theme.dart';
+import 'package:mone_task_app/core/widgets/app_widgets.dart';
 import 'package:mone_task_app/worker/model/user_model.dart';
 import 'package:mone_task_app/worker/service/log_out.dart';
 
@@ -93,14 +95,14 @@ class _EditUserPageState extends State<EditUserPage> {
       final url = '$_rezumeBaseUrl/api/public/rezume-by-phone/$normalized';
       final resp = await Dio(
         BaseOptions(
-          connectTimeout: const Duration(seconds: 20),
-          receiveTimeout: const Duration(seconds: 20),
+          connectTimeout: Duration(seconds: 20),
+          receiveTimeout: Duration(seconds: 20),
         ),
       ).get(url, options: Options(validateStatus: (_) => true));
 
       if (resp.statusCode != 200) {
         setState(() {
-          _rezumeError = 'Резюме не найдено (${resp.statusCode})';
+          _rezumeError = '${tr('Rezyume topilmadi')} (${resp.statusCode})';
           _fetchingRezume = false;
         });
         return;
@@ -126,7 +128,7 @@ class _EditUserPageState extends State<EditUserPage> {
       });
     } catch (e) {
       setState(() {
-        _rezumeError = 'Ошибка: $e';
+        _rezumeError = '${tr('Xatolik')}: $e';
         _fetchingRezume = false;
       });
     }
@@ -136,16 +138,16 @@ class _EditUserPageState extends State<EditUserPage> {
 
   Future<void> _saveUser() async {
     if (_usernameController.text.trim().isEmpty) {
-      _showError('Имя не указано');
+      _showError(tr('Ismni kiriting'));
       return;
     }
     if (_selectedRole == 'worker' && _selectedFilialIds.isEmpty) {
-      _showError('Филиал не выбран');
+      _showError(tr('Kamida bitta filialni tanlang'));
       return;
     }
     final password = _passwordController.text.trim();
     if (password.isNotEmpty && password.length < 6) {
-      _showError('Код: минимум 6 символов');
+      _showError(tr('Kirish kodi kamida 6 ta belgidan iborat boʻlsin'));
       return;
     }
 
@@ -153,8 +155,9 @@ class _EditUserPageState extends State<EditUserPage> {
 
     final phone = _phoneController.text.trim();
     // Kod o'zgartirilgan bo'lsagina yuboramiz
-    final changedPassword =
-        password.isNotEmpty && password != widget.user.password ? password : null;
+    final changedPassword = password.isNotEmpty && password != widget.user.password
+        ? password
+        : null;
     final success = await _userService.updateUser(
       userId: widget.user.userId,
       username: _usernameController.text.trim(),
@@ -165,124 +168,201 @@ class _EditUserPageState extends State<EditUserPage> {
       profileJson: _rezume != null ? jsonEncode(_rezume) : null,
     );
 
+    if (!mounted) return;
     setState(() => _isLoading = false);
 
-    if (success && mounted) {
+    if (success) {
+      showAppSnack(context, tr('Saqlandi'), type: SnackType.success);
       Navigator.pop(context, true);
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Сохранено')),
-      );
-    } else if (mounted) {
-      _showError('Произошла ошибка');
+    } else {
+      _showError(tr('Saqlab boʻlmadi. Qayta urinib koʻring'));
     }
   }
 
+  Future<void> _forceLogout() async {
+    final ok = await showConfirmDialog(
+      context,
+      title: tr('Hisobdan chiqarish'),
+      message: tr(
+        'Foydalanuvchi barcha qurilmalarda hisobdan chiqariladi. Davom etasizmi?',
+      ),
+      confirmLabel: tr('Chiqarish'),
+      destructive: true,
+    );
+    if (!ok) return;
+    await LogOutService().logOutUser(widget.user.userId);
+    if (!mounted) return;
+    showAppSnack(
+      context,
+      tr('Foydalanuvchi hisobdan chiqarildi'),
+      type: SnackType.success,
+    );
+  }
+
   void _showError(String message) {
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+    showAppSnack(context, message, type: SnackType.error);
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Редактировать'),
-        actions: [
-          if (_isLoading)
-            const Center(
-              child: Padding(
-                padding: EdgeInsets.all(16),
-                child: SizedBox(
-                  width: 20,
-                  height: 20,
-                  child: CircularProgressIndicator.adaptive(strokeWidth: 2),
-                ),
-              ),
-            )
-          else
-            IconButton(onPressed: _saveUser, icon: const Icon(Icons.check)),
-        ],
-      ),
+      appBar: AppBar(title: Text(tr('Foydalanuvchini tahrirlash'))),
       body: FutureBuilder<List<FilialModel>>(
         future: _filialsFuture,
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
-            return const Center(child: CircularProgressIndicator.adaptive());
+            return AppLoader();
           }
           if (!snapshot.hasData) {
-            return const Center(child: Text('Данные не загружены'));
+            return AppErrorState(
+              onRetry: () => setState(() {
+                _filialsFuture = TaskViewService().fetchFilials();
+              }),
+            );
           }
 
           final filials = snapshot.data!;
 
-          return SingleChildScrollView(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // Telefon — rezumeni yangilash uchun
-                _buildPhoneField(),
-                const SizedBox(height: 16),
-
-                if (_rezumeError != null) ...[
-                  Container(
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: Colors.red.shade50,
-                      borderRadius: BorderRadius.circular(8),
+          return Center(
+            child: ConstrainedBox(
+              constraints: BoxConstraints(maxWidth: 720),
+              child: ListView(
+                padding: EdgeInsets.all(AppSpacing.lg),
+                children: [
+                  _card([
+                    // Telefon — rezumeni yangilash uchun
+                    _buildPhoneField(),
+                    if (_rezumeError != null) ...[
+                      SizedBox(height: AppSpacing.md),
+                      Container(
+                        padding: EdgeInsets.all(AppSpacing.md),
+                        decoration: BoxDecoration(
+                          color: AppColors.dangerSoft,
+                          borderRadius: AppRadius.mdAll,
+                        ),
+                        child: Row(
+                          children: [
+                            Icon(
+                              Icons.error_outline_rounded,
+                              color: AppColors.danger,
+                              size: 20,
+                            ),
+                            SizedBox(width: AppSpacing.sm),
+                            Expanded(
+                              child: Text(
+                                _rezumeError!,
+                                style: TextStyle(color: AppColors.danger),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                    if (_rezume != null) ...[
+                      SizedBox(height: AppSpacing.md),
+                      _buildRezumePreview(_rezume!),
+                    ],
+                  ]),
+                  SizedBox(height: AppSpacing.md),
+                  _card([
+                    TextField(
+                      controller: _usernameController,
+                      textCapitalization: TextCapitalization.words,
+                      decoration: InputDecoration(
+                        labelText: tr('Ism'),
+                        prefixIcon: Icon(Icons.person_outline_rounded),
+                      ),
                     ),
-                    child: Text(_rezumeError!,
-                        style: TextStyle(color: Colors.red.shade900)),
+                    SizedBox(height: AppSpacing.lg),
+                    // Kod / parol — foydalanuvchi shu bilan tizimga kiradi
+                    _buildPasswordField(),
+                  ]),
+                  if (_selectedRole == 'worker') ...[
+                    SizedBox(height: AppSpacing.md),
+                    _card([
+                      _buildSectionTitle(tr('Filiallar')),
+                      SizedBox(height: AppSpacing.xs),
+                      Text(
+                        tr('Xodim qaysi filiallarda ishlashini belgilang'),
+                        style: TextStyle(
+                          fontSize: 13,
+                          color: AppColors.textSecondary,
+                        ),
+                      ),
+                      SizedBox(height: AppSpacing.sm),
+                      ...filials.map(
+                        (filial) => _buildSwitchRow(
+                          title: displayName(filial.name),
+                          value: _selectedFilialIds.contains(filial.filialId),
+                          onChanged: (value) {
+                            setState(() {
+                              if (value) {
+                                _selectedFilialIds.add(filial.filialId);
+                              } else {
+                                _selectedFilialIds.remove(filial.filialId);
+                              }
+                            });
+                          },
+                        ),
+                      ),
+                    ]),
+                  ],
+                  SizedBox(height: AppSpacing.md),
+                  OutlinedButton.icon(
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: AppColors.danger,
+                      side: BorderSide(color: AppColors.border),
+                    ),
+                    onPressed: _forceLogout,
+                    icon: Icon(Icons.logout_rounded),
+                    label: Text(tr('Hisobdan chiqarish')),
                   ),
-                  const SizedBox(height: 16),
+                  SizedBox(height: AppSpacing.xl),
                 ],
-
-                if (_rezume != null) ...[
-                  _buildRezumePreview(_rezume!),
-                  const SizedBox(height: 16),
-                ],
-
-                TextField(
-                  controller: _usernameController,
-                  decoration: const InputDecoration(
-                    labelText: 'Имя',
-                    border: OutlineInputBorder(),
-                  ),
-                ),
-                const SizedBox(height: 16),
-
-                // Kod / parol — foydalanuvchi shu bilan tizimga kiradi
-                _buildPasswordField(),
-                const SizedBox(height: 16),
-
-                if (_selectedRole == 'worker') ...[
-                  _buildSectionTitle('Филиал'),
-                  const SizedBox(height: 8),
-                  ...filials.map((filial) => _buildSwitchRow(
-                        title: filial.name,
-                        value: _selectedFilialIds.contains(filial.filialId),
-                        onChanged: (value) {
-                          setState(() {
-                            if (value) {
-                              _selectedFilialIds.add(filial.filialId);
-                            } else {
-                              _selectedFilialIds.remove(filial.filialId);
-                            }
-                          });
-                        },
-                      )),
-                  const SizedBox(height: 16),
-                ],
-
-                ElevatedButton(
-                  onPressed: () async {
-                    await LogOutService().logOutUser(widget.user.userId);
-                  },
-                  child: const Text("Выйти из аккаунта"),
-                ),
-              ],
+              ),
             ),
           );
         },
+      ),
+      bottomNavigationBar: SafeArea(
+        child: Padding(
+          padding: EdgeInsets.fromLTRB(16, 8, 16, 12),
+          child: Center(
+            heightFactor: 1,
+            child: ConstrainedBox(
+              constraints: BoxConstraints(maxWidth: 720),
+              child: SizedBox(
+                width: double.infinity,
+                child: FilledButton(
+                  onPressed: _isLoading ? null : _saveUser,
+                  child: _isLoading
+                      ? SizedBox(
+                          width: 22,
+                          height: 22,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2.4,
+                            color: Colors.white,
+                          ),
+                        )
+                      : Text(tr('Saqlash')),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _card(List<Widget> children) {
+    return Card(
+      margin: EdgeInsets.zero,
+      child: Padding(
+        padding: EdgeInsets.all(AppSpacing.lg),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: children,
+        ),
       ),
     );
   }
@@ -293,16 +373,14 @@ class _EditUserPageState extends State<EditUserPage> {
     return TextField(
       controller: _phoneController,
       keyboardType: TextInputType.phone,
-      inputFormatters: [
-        FilteringTextInputFormatter.allow(RegExp(r'[0-9+]')),
-      ],
+      inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[0-9+]'))],
       decoration: InputDecoration(
-        labelText: 'Телефон (обновить резюме)',
+        labelText: tr('Telefon'),
+        helperText: tr('Rezyumeni yangilash uchun raqamni kiriting'),
         hintText: '998901234567',
-        border: const OutlineInputBorder(),
-        prefixIcon: const Icon(Icons.phone),
+        prefixIcon: Icon(Icons.phone_outlined),
         suffixIcon: _fetchingRezume
-            ? const Padding(
+            ? Padding(
                 padding: EdgeInsets.all(14),
                 child: SizedBox(
                   width: 18,
@@ -311,9 +389,9 @@ class _EditUserPageState extends State<EditUserPage> {
                 ),
               )
             : IconButton(
-                icon: const Icon(Icons.refresh),
+                icon: Icon(Icons.refresh_rounded),
                 onPressed: _fetchRezume,
-                tooltip: 'Обновить резюме',
+                tooltip: tr('Rezyumeni yangilash'),
               ),
       ),
       onChanged: _onPhoneChanged,
@@ -334,11 +412,11 @@ class _EditUserPageState extends State<EditUserPage> {
         : (rasm.startsWith('http') ? rasm : '$_rezumeBaseUrl$rasm');
 
     return Container(
-      padding: const EdgeInsets.all(16),
+      padding: EdgeInsets.all(AppSpacing.lg),
       decoration: BoxDecoration(
-        color: Colors.green.shade50,
-        border: Border.all(color: Colors.green.shade200),
-        borderRadius: BorderRadius.circular(8),
+        color: AppColors.surfaceMuted,
+        border: Border.all(color: AppColors.border),
+        borderRadius: AppRadius.mdAll,
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -348,80 +426,107 @@ class _EditUserPageState extends State<EditUserPage> {
             children: [
               if (photoUrl != null)
                 ClipRRect(
-                  borderRadius: BorderRadius.circular(8),
+                  borderRadius: AppRadius.smAll,
                   child: Image.network(
                     photoUrl,
-                    width: 80,
-                    height: 100,
+                    width: 72,
+                    height: 90,
                     fit: BoxFit.cover,
-                    errorBuilder: (_, __, ___) => Container(
-                      width: 80,
-                      height: 100,
-                      color: Colors.grey.shade200,
-                      child: const Icon(Icons.person, size: 40),
+                    errorBuilder: (_, _, _) => Container(
+                      width: 72,
+                      height: 90,
+                      color: AppColors.border,
+                      child: Icon(
+                        Icons.person_rounded,
+                        size: 36,
+                        color: AppColors.textTertiary,
+                      ),
                     ),
                   ),
                 ),
-              if (photoUrl != null) const SizedBox(width: 12),
+              if (photoUrl != null) SizedBox(width: AppSpacing.md),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      fio.isEmpty ? '(имя не найдено)' : fio,
-                      style: const TextStyle(
-                          fontSize: 16, fontWeight: FontWeight.bold),
+                      fio.isEmpty ? tr('Ism topilmadi') : trData(fio),
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w600,
+                        color: AppColors.textPrimary,
+                      ),
                     ),
                     if ((r['lavozim'] ?? '').toString().isNotEmpty) ...[
-                      const SizedBox(height: 4),
-                      Text(r['lavozim'].toString(),
-                          style: const TextStyle(color: Colors.grey)),
+                      SizedBox(height: 2),
+                      Text(
+                        trData(r['lavozim'].toString()),
+                        style: TextStyle(color: AppColors.textSecondary),
+                      ),
                     ],
-                    const SizedBox(height: 4),
-                    Text((r['telefon'] ?? '').toString()),
+                    SizedBox(height: 4),
+                    Text(
+                      (r['telefon'] ?? '').toString(),
+                      style: TextStyle(color: AppColors.textSecondary),
+                    ),
                   ],
                 ),
               ),
             ],
           ),
-          const Divider(height: 24),
-          _kv('Дата рождения', r['tugilgan_sana']),
-          _kv('Рост / Вес', '${r['boy_sm'] ?? '?'} см / ${r['vazn_kg'] ?? '?'} кг'),
-          _kv('Адрес', r['yashash_manzili']),
-          _kv('Ориентир', r['moljal']),
-          _kv('Общий стаж', r['umumiy_tajriba']),
-          _kv('Зарубежный опыт', r['chet_el_tajribasi']),
-          _kv('Образование', r['malumot']),
-          _kv('Семейное положение', r['oilaviy_holat']),
+          Divider(height: 24),
+          _kv(tr('Tugʻilgan sana'), r['tugilgan_sana'], raw: true),
+          _kv(
+            tr('Boʻyi / vazni'),
+            '${r['boy_sm'] ?? '?'} ${tr('sm')} / ${r['vazn_kg'] ?? '?'} ${tr('kg')}',
+            raw: true,
+          ),
+          _kv(tr('Manzil'), r['yashash_manzili']),
+          _kv(tr('Moʻljal'), r['moljal']),
+          _kv(tr('Umumiy tajriba'), r['umumiy_tajriba']),
+          _kv(tr('Chet eldagi tajriba'), r['chet_el_tajribasi']),
+          _kv(tr('Maʼlumoti'), r['malumot']),
+          _kv(tr('Oilaviy holati'), r['oilaviy_holat']),
           if (r['tillar'] is List)
             _kv(
-                'Языки',
-                (r['tillar'] as List)
-                    .map((t) => '${(t as Map)['til']}: ${t['daraja']}')
-                    .join(', ')),
+              tr('Tillar'),
+              (r['tillar'] as List)
+                  .map((t) => '${(t as Map)['til']}: ${t['daraja']}')
+                  .join(', '),
+            ),
           if ((r['qoshimcha'] ?? '').toString().isNotEmpty)
-            _kv('Дополнительно', r['qoshimcha']),
+            _kv(tr('Qoʻshimcha'), r['qoshimcha']),
           if ((r['tg_username'] ?? '').toString().isNotEmpty)
-            _kv('Telegram', '@${r['tg_username']}'),
+            _kv('Telegram', '@${r['tg_username']}', raw: true),
         ],
       ),
     );
   }
 
-  Widget _kv(String label, dynamic value) {
+  Widget _kv(String label, dynamic value, {bool raw = false}) {
     final v = (value ?? '').toString();
-    if (v.isEmpty) return const SizedBox.shrink();
+    if (v.isEmpty) return SizedBox.shrink();
     return Padding(
-      padding: const EdgeInsets.only(bottom: 6),
+      padding: EdgeInsets.only(bottom: 6),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           SizedBox(
-            width: 130,
-            child: Text(label,
-                style: TextStyle(fontSize: 13, color: Colors.grey.shade700)),
+            width: 120,
+            child: Text(
+              label,
+              style: TextStyle(
+                fontSize: 13,
+                color: AppColors.textSecondary,
+              ),
+            ),
           ),
-          Expanded(child: Text(v, style: const TextStyle(fontSize: 13))),
+          Expanded(
+            child: Text(
+              raw ? v : trData(v),
+              style: TextStyle(fontSize: 13),
+            ),
+          ),
         ],
       ),
     );
@@ -432,25 +537,30 @@ class _EditUserPageState extends State<EditUserPage> {
       controller: _passwordController,
       obscureText: _obscurePassword,
       decoration: InputDecoration(
-        labelText: 'Код входа',
-        hintText: 'Код для входа в приложение',
-        border: const OutlineInputBorder(),
-        prefixIcon: const Icon(Icons.key),
+        labelText: tr('Kirish kodi'),
+        hintText: tr('Ilovaga kirish uchun kod'),
+        helperText: tr('Kamida 6 ta belgi'),
+        prefixIcon: Icon(Icons.key_outlined),
         suffixIcon: IconButton(
+          tooltip: _obscurePassword ? tr('Koʻrsatish') : tr('Yashirish'),
           icon: Icon(
-              _obscurePassword ? Icons.visibility_off : Icons.visibility),
-          onPressed: () =>
-              setState(() => _obscurePassword = !_obscurePassword),
+            _obscurePassword
+                ? Icons.visibility_off_outlined
+                : Icons.visibility_outlined,
+          ),
+          onPressed: () => setState(() => _obscurePassword = !_obscurePassword),
         ),
       ),
     );
   }
 
   Widget _buildSectionTitle(String title) {
-    return Center(
-      child: Text(
-        title,
-        style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+    return Text(
+      title,
+      style: TextStyle(
+        fontSize: 14,
+        fontWeight: FontWeight.w600,
+        color: AppColors.textPrimary,
       ),
     );
   }
@@ -460,19 +570,11 @@ class _EditUserPageState extends State<EditUserPage> {
     required bool value,
     required ValueChanged<bool> onChanged,
   }) {
-    return Row(
-      children: [
-        Expanded(
-          child: GestureDetector(
-            onTap: () => onChanged(!value),
-            child: Padding(
-              padding: const EdgeInsets.symmetric(vertical: 8),
-              child: Text(title, style: const TextStyle(fontSize: 16)),
-            ),
-          ),
-        ),
-        CupertinoSwitch(value: value, onChanged: onChanged),
-      ],
+    return SwitchListTile.adaptive(
+      contentPadding: EdgeInsets.zero,
+      value: value,
+      onChanged: onChanged,
+      title: Text(title, maxLines: 2, overflow: TextOverflow.ellipsis),
     );
   }
 }

@@ -1,11 +1,12 @@
-import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:mone_task_app/admin/model/add_admin_task.dart';
 import 'package:mone_task_app/admin/model/filial_model.dart';
 import 'package:mone_task_app/admin/service/task_worker_service.dart';
 import 'package:mone_task_app/admin/ui/widgets/category_selector.dart';
-import 'package:mone_task_app/admin/ui/widgets/filial_selector.dart';
 import 'package:mone_task_app/admin/ui/widgets/task_type_selector.dart';
+import 'package:mone_task_app/core/l10n/app_script.dart';
+import 'package:mone_task_app/core/theme/app_theme.dart';
+import 'package:mone_task_app/core/widgets/app_widgets.dart';
 
 class AddAdminTask extends StatefulWidget {
   const AddAdminTask({super.key});
@@ -25,7 +26,7 @@ class _AddAdminTaskState extends State<AddAdminTask> {
   List<int> _selectedWeekDays = [];
   List<int> _selectedDays = [];
   int? _selectedCategoryId;
-  DateTime? _selectedTime;
+  bool _isSubmitting = false;
 
   @override
   void initState() {
@@ -39,31 +40,33 @@ class _AddAdminTaskState extends State<AddAdminTask> {
     super.dispose();
   }
 
-  void _submitTask() {
-    if (_controller.text.isEmpty) {
-      _showError("Пожалуйста, введите задание.");
-      return;
-    }
-    if (_selectedFilials.isEmpty) {
-      _showError("Пожалуйста, выберите филиалы.");
-      return;
-    }
-    if (_type == 2 && _selectedWeekDays.isEmpty) {
-      _showError("Пожалуйста, выберите дни недели.");
-      return;
-    }
-    if (_type == 3 && _selectedDays.isEmpty) {
-      _showError("Пожалуйста, выберите даты.");
+  Future<void> _submitTask() async {
+    if (_controller.text.trim().isEmpty) {
+      _showError(tr('Vazifa matnini kiriting'));
       return;
     }
     if (_selectedCategoryId == null) {
-      _showError("Пожалуйста, выберите категорию.");
+      _showError(tr('Kategoriyani tanlang'));
+      return;
+    }
+    if (_type == 2 && _selectedWeekDays.isEmpty) {
+      _showError(tr('Hafta kunlarini tanlang'));
+      return;
+    }
+    if (_type == 3 && _selectedDays.isEmpty) {
+      _showError(tr('Oyning kunlarini tanlang'));
+      return;
+    }
+    if (_selectedFilials.isEmpty) {
+      _showError(tr('Kamida bitta filialni tanlang'));
       return;
     }
 
-    final categoryName = _categoryKey.currentState?.getCategoryName(_selectedCategoryId!);
+    final categoryName = _categoryKey.currentState?.getCategoryName(
+      _selectedCategoryId!,
+    );
     if (categoryName == null) {
-      _showError("Категория не найдена.");
+      _showError(tr('Kategoriya topilmadi'));
       return;
     }
 
@@ -71,126 +74,248 @@ class _AddAdminTaskState extends State<AddAdminTask> {
       taskType: _type,
       filialsId: _selectedFilials,
       task: _controller.text,
-      days: _type == 1 ? null : _type == 2 ? _selectedWeekDays : _selectedDays,
+      days: _type == 1
+          ? null
+          : _type == 2
+          ? _selectedWeekDays
+          : _selectedDays,
       category: categoryName,
     );
-    _taskService.addTask(model);
-    Navigator.pop(context, true);
+
+    setState(() => _isSubmitting = true);
+    final ok = await _taskService.addTask(model);
+    if (!mounted) return;
+    if (ok) {
+      showAppSnack(context, tr('Vazifa qoʻshildi'), type: SnackType.success);
+      Navigator.pop(context, true);
+    } else {
+      setState(() => _isSubmitting = false);
+      _showError(tr('Vazifani qoʻshib boʻlmadi. Qayta urinib koʻring'));
+    }
   }
 
   void _showError(String message) {
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+    showAppSnack(context, message, type: SnackType.error);
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text("Добавить задачу")),
+      appBar: AppBar(title: Text(tr('Yangi vazifa'))),
       body: FutureBuilder<List<FilialModel>>(
         future: _filialsFuture,
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
-            return const Center(child: CircularProgressIndicator.adaptive());
+            return AppLoader();
           }
           if (snapshot.hasError) {
-            return Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  const Icon(Icons.error_outline, color: Colors.red, size: 48),
-                  const SizedBox(height: 16),
-                  Text('Ошибка: ${snapshot.error}'),
-                  const SizedBox(height: 16),
-                  ElevatedButton(
-                    onPressed: () {
-                      setState(() {
-                        _filialsFuture = TemplateService().fetchFilials();
-                      });
-                    },
-                    child: const Text('Повторить попытку'),
-                  ),
-                ],
-              ),
+            return AppErrorState(
+              onRetry: () => setState(() {
+                _filialsFuture = TemplateService().fetchFilials();
+              }),
             );
           }
 
           final filials = snapshot.data ?? [];
           if (filials.isEmpty) {
-            return const Center(child: Text("Филиалы не найдены"));
+            return AppEmptyState(
+              icon: Icons.storefront_outlined,
+              title: tr('Filiallar topilmadi'),
+              message: tr(
+                'Vazifa qoʻshishdan oldin kamida bitta filial yarating.',
+              ),
+            );
           }
 
-          return SingleChildScrollView(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                TextField(
-                  controller: _controller,
-                  decoration: const InputDecoration(
-                    labelText: 'Задача',
-                    border: OutlineInputBorder(),
-                  ),
-                  maxLines: 3,
-                ),
-                const SizedBox(height: 20),
-
-                CategorySelector(
-                  key: _categoryKey,
-                  selectedCategoryId: _selectedCategoryId,
-                  onChanged: (id) => setState(() => _selectedCategoryId = id),
-                ),
-                const SizedBox(height: 12),
-
-                TaskTypeSelector(
-                  selectedType: _type,
-                  onTypeChanged: (value) => setState(() {
-                    _type = value;
-                    _selectedWeekDays.clear();
-                    _selectedDays.clear();
-                  }),
-                  selectedWeekDays: _selectedWeekDays,
-                  onWeekDaysChanged: (days) => setState(() => _selectedWeekDays = days),
-                  selectedDays: _selectedDays,
-                  onDaysChanged: (days) => setState(() => _selectedDays = days),
-                ),
-
-                FilialSelector(
-                  filials: filials,
-                  selectedIds: _selectedFilials,
-                  onChanged: (ids) => setState(() => _selectedFilials = ids),
-                ),
-                const SizedBox(height: 20),
-
-                const Text(
-                  "Время:",
-                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-                ),
-                const SizedBox(height: 10),
-                SizedBox(
-                  height: 216,
-                  child: CupertinoDatePicker(
-                    mode: CupertinoDatePickerMode.time,
-                    initialDateTime: DateTime.now(),
-                    onDateTimeChanged: (value) => _selectedTime = value,
-                  ),
-                ),
-                const SizedBox(height: 30),
-
-                SizedBox(
-                  width: double.infinity,
-                  child: CupertinoButton.filled(
-                    onPressed: _submitTask,
-                    child: const Text(
-                      "Добавить задачу",
-                      style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+          // SingleChildScrollView — CategorySelector (GlobalKey orqali o'qiladi)
+          // pastga aylantirilganda ham o'chib ketmaydi.
+          return Align(
+            alignment: Alignment.topCenter,
+            child: ConstrainedBox(
+              constraints: BoxConstraints(maxWidth: 720),
+              child: SingleChildScrollView(
+                padding: EdgeInsets.all(AppSpacing.lg),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    _FormCard(
+                      children: [
+                        TextField(
+                          controller: _controller,
+                          autofocus: true,
+                          textCapitalization: TextCapitalization.sentences,
+                          decoration: InputDecoration(
+                            labelText: tr('Vazifa'),
+                            hintText: tr('Nima qilish kerakligini yozing'),
+                            alignLabelWithHint: true,
+                          ),
+                          minLines: 2,
+                          maxLines: 4,
+                        ),
+                        SizedBox(height: AppSpacing.lg),
+                        CategorySelector(
+                          key: _categoryKey,
+                          selectedCategoryId: _selectedCategoryId,
+                          onChanged: (id) =>
+                              setState(() => _selectedCategoryId = id),
+                        ),
+                      ],
                     ),
-                  ),
+                    SizedBox(height: AppSpacing.md),
+                    _FormCard(
+                      children: [
+                        TaskTypeSelector(
+                          selectedType: _type,
+                          onTypeChanged: (value) => setState(() {
+                            _type = value;
+                            _selectedWeekDays = [];
+                            _selectedDays = [];
+                          }),
+                          selectedWeekDays: _selectedWeekDays,
+                          onWeekDaysChanged: (days) =>
+                              setState(() => _selectedWeekDays = days),
+                          selectedDays: _selectedDays,
+                          onDaysChanged: (days) =>
+                              setState(() => _selectedDays = days),
+                        ),
+                      ],
+                    ),
+                    SizedBox(height: AppSpacing.md),
+                    _FormCard(
+                      children: [
+                        _FilialChips(
+                          filials: filials,
+                          selectedIds: _selectedFilials,
+                          onChanged: (ids) =>
+                              setState(() => _selectedFilials = ids),
+                        ),
+                      ],
+                    ),
+                    SizedBox(height: AppSpacing.xl),
+                  ],
                 ),
-                const SizedBox(height: 20),
-              ],
+              ),
             ),
           );
         },
+      ),
+      bottomNavigationBar: SafeArea(
+        child: Padding(
+          padding: EdgeInsets.fromLTRB(16, 8, 16, 12),
+          child: Center(
+            heightFactor: 1,
+            child: ConstrainedBox(
+              constraints: BoxConstraints(maxWidth: 720),
+              child: SizedBox(
+                width: double.infinity,
+                child: FilledButton(
+                  onPressed: _isSubmitting ? null : _submitTask,
+                  child: _isSubmitting
+                      ? SizedBox(
+                          width: 22,
+                          height: 22,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2.4,
+                            color: Colors.white,
+                          ),
+                        )
+                      : Text(tr('Saqlash')),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Filiallarni tanlash — chiplar ko'rinishida, "Barchasi" tugmasi bilan.
+class _FilialChips extends StatelessWidget {
+  const _FilialChips({
+    required this.filials,
+    required this.selectedIds,
+    required this.onChanged,
+  });
+
+  final List<FilialModel> filials;
+  final List<int> selectedIds;
+  final ValueChanged<List<int>> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final allSelected =
+        filials.isNotEmpty &&
+        filials.every((f) => selectedIds.contains(f.filialId));
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Expanded(
+              child: Text(
+                tr('Filiallar'),
+                style: TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w600,
+                  color: AppColors.textPrimary,
+                ),
+              ),
+            ),
+            TextButton(
+              onPressed: () => onChanged(
+                allSelected ? [] : filials.map((f) => f.filialId).toList(),
+              ),
+              child: Text(
+                allSelected ? tr('Tozalash') : tr('Barchasini tanlash'),
+              ),
+            ),
+          ],
+        ),
+        Text(
+          selectedIds.isEmpty
+              ? tr('Vazifa qaysi filiallarda bajarilishini tanlang')
+              : '${tr('Tanlandi')}: ${selectedIds.length} / ${filials.length}',
+          style: TextStyle(fontSize: 13, color: AppColors.textSecondary),
+        ),
+        SizedBox(height: AppSpacing.md),
+        Wrap(
+          spacing: AppSpacing.sm,
+          runSpacing: AppSpacing.sm,
+          children: filials.map((filial) {
+            final selected = selectedIds.contains(filial.filialId);
+            return FilterChip(
+              label: Text(displayName(filial.name)),
+              selected: selected,
+              onSelected: (value) {
+                final updated = List<int>.from(selectedIds);
+                value
+                    ? updated.add(filial.filialId)
+                    : updated.remove(filial.filialId);
+                onChanged(updated);
+              },
+            );
+          }).toList(),
+        ),
+      ],
+    );
+  }
+}
+
+class _FormCard extends StatelessWidget {
+  const _FormCard({required this.children});
+  final List<Widget> children;
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      margin: EdgeInsets.zero,
+      child: Padding(
+        padding: EdgeInsets.all(AppSpacing.lg),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: children,
+        ),
       ),
     );
   }

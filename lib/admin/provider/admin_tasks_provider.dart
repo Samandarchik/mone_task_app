@@ -89,6 +89,8 @@ class AdminTasksProvider extends ChangeNotifier {
   }
 
   // ── Fetch tasks ──────────────────────────────────────────────────────────
+  int _tasksRequestSeq = 0;
+
   Future<void> fetchTasks() async {
     // ❌ OLDIN: _tasksState = LoadingState.loading + notifyListeners()
     //    Bu sana tanlanganda darhol rebuild → dialog yopilardi
@@ -99,10 +101,16 @@ class AdminTasksProvider extends ChangeNotifier {
     _tasksError = null;
     // notifyListeners() — BU YERDA CHAQIRMAYMIZ
 
+    // Sana tez-tez almashtirilganda (picker aylantirilganda) bir nechta so'rov
+    // parallel ketadi — faqat eng oxirgi so'rov natijasi qo'llanadi.
+    final requestId = ++_tasksRequestSeq;
     try {
-      _tasks = await _service.fetchTasks(_selectedDate);
+      final result = await _service.fetchTasks(_selectedDate);
+      if (requestId != _tasksRequestSeq) return;
+      _tasks = result;
       _tasksState = LoadingState.loaded;
     } catch (e) {
+      if (requestId != _tasksRequestSeq) return;
       _tasksError = e.toString();
       _tasksState = LoadingState.error;
     }
@@ -182,8 +190,12 @@ class AdminTasksProvider extends ChangeNotifier {
         final taskIdRaw = data['taskId'];
         final statusRaw = data['status'];
         if (taskIdRaw != null && statusRaw != null) {
-          final taskId = taskIdRaw is int ? taskIdRaw : int.tryParse('$taskIdRaw');
-          final status = statusRaw is int ? statusRaw : int.tryParse('$statusRaw');
+          final taskId = taskIdRaw is int
+              ? taskIdRaw
+              : int.tryParse('$taskIdRaw');
+          final status = statusRaw is int
+              ? statusRaw
+              : int.tryParse('$statusRaw');
           if (taskId != null && status != null) {
             final idx = _tasks.indexWhere((t) => t.taskId == taskId);
             if (idx != -1) {

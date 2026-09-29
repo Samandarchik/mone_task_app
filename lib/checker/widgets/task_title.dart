@@ -6,7 +6,9 @@ import 'package:mone_task_app/checker/model/checker_check_task_model.dart';
 import 'package:mone_task_app/checker/service/task_worker_service.dart';
 import 'package:mone_task_app/checker/ui/player2.dart';
 import 'package:mone_task_app/core/constants/urls.dart';
-import 'package:mone_task_app/utils/get_color.dart';
+import 'package:mone_task_app/core/l10n/app_script.dart';
+import 'package:mone_task_app/core/theme/app_theme.dart';
+import 'package:mone_task_app/core/widgets/app_widgets.dart';
 import 'package:mone_task_app/core/utils/share_helper.dart';
 import 'package:dio/dio.dart';
 import 'package:path_provider/path_provider.dart';
@@ -198,12 +200,36 @@ class _TaskListWidgetState extends State<TaskListWidget> {
         .toList();
 
     if (filtered.isEmpty) {
-      return const Center(child: Text("Для этого филиала нет задач"));
+      return RefreshIndicator(
+        onRefresh: () async => widget.onRefresh(),
+        child: LayoutBuilder(
+          builder: (context, c) => SingleChildScrollView(
+            physics: AlwaysScrollableScrollPhysics(),
+            child: SizedBox(
+              height: c.maxHeight,
+              child: AppEmptyState(
+                icon: Icons.task_alt_rounded,
+                title: tr('Bu filialda vazifa yoʻq'),
+                message: tr(
+                  'Boshqa filial yoki sanani tanlang. Yangilash uchun pastga torting.',
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
     }
 
     return RefreshIndicator(
       onRefresh: () async => widget.onRefresh(),
       child: ListView.builder(
+        physics: AlwaysScrollableScrollPhysics(),
+        padding: EdgeInsets.fromLTRB(
+          AppSpacing.lg,
+          AppSpacing.sm,
+          AppSpacing.lg,
+          AppSpacing.xl,
+        ),
         itemCount: filtered.length,
         itemBuilder: (_, i) {
           String? videoUrl = filtered[i].videoUrl;
@@ -283,158 +309,274 @@ class _TaskListItemState extends State<TaskListItem> {
     }
   }
 
+  bool get _hasVideo => task.videoUrl != null && task.videoUrl!.isNotEmpty;
+
+  /// Vazifa takrorlanishi: Har kuni / Har hafta: Du, Se / Har oy: 1, 15.
+  String _typeLabel() {
+    final days = task.days ?? <int>[];
+    switch (task.type) {
+      case 1:
+        return tr('Har kuni');
+      case 2:
+        final names = days.map(_weekdayShort).join(', ');
+        return names.isEmpty ? tr('Har hafta') : '${tr('Har hafta')}: $names';
+      case 3:
+        return days.isEmpty
+            ? tr('Har oy')
+            : '${tr('Har oy')}: ${days.join(', ')}';
+      default:
+        return '';
+    }
+  }
+
+  static String _weekdayShort(int d) => switch (d) {
+    1 => tr('Du'),
+    2 => tr('Se'),
+    3 => tr('Ch'),
+    4 => tr('Pa'),
+    5 => tr('Ju'),
+    6 => tr('Sh'),
+    7 => tr('Ya'),
+    _ => '--',
+  };
+
+  String? _submittedLine() {
+    if (task.submittedBy == null) return null;
+    final at = task.submittedAt?.toLocal();
+    final time = at == null
+        ? ''
+        : ' · ${at.hour.toString().padLeft(2, '0')}:'
+              '${at.minute.toString().padLeft(2, '0')}';
+    return '${trData(task.submittedBy)}$time';
+  }
+
+  Future<void> _resetStatus() async {
+    if (!_hasVideo) return;
+    final ok = await showConfirmDialog(
+      context,
+      title: tr('Holatni qaytarasizmi?'),
+      message: tr(
+        'Vazifa «Bajarilmagan» holatiga qaytariladi. Ishonchingiz komilmi?',
+      ),
+      confirmLabel: tr('Ha, qaytarish'),
+      destructive: true,
+    );
+    if (!ok) return;
+    final bool isDelete = await TaskViewService().updateTaskStatus(
+      task.taskId,
+      1,
+      widget.selectedDate,
+      null,
+    );
+    if (!mounted) return;
+    if (isDelete) {
+      showAppSnack(context, tr('Holat yangilandi'), type: SnackType.success);
+      widget.onRefresh();
+    } else {
+      showAppSnack(
+        context,
+        tr('Holatni oʻzgartirib boʻlmadi. Qayta urinib koʻring.'),
+        type: SnackType.error,
+      );
+    }
+  }
+
+  void _openVideo() {
+    if (!_hasVideo) {
+      showAppSnack(context, tr('Video yoʻq'));
+      return;
+    }
+    final videoPath = widget.getVideoPath(task.videoUrl);
+    if (videoPath == null) return;
+
+    showDialog(
+      context: context,
+      barrierColor: Colors.white12,
+      builder: (context) => BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+        child: Center(
+          child: CircleVideoPlayer2(
+            videoUrl: videoPath,
+            onHalfWatched: () async {
+              // Status allaqachon 3 bo'lsa qayta so'rov ketmasin
+              if (task.status == 3) return;
+              final bool isSuccess = await TaskViewService().updateTaskStatus(
+                task.taskId,
+                3,
+                widget.selectedDate,
+                null,
+              );
+              if (isSuccess && mounted) {
+                setState(() => task.status = 3);
+              }
+            },
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _videoBadge() {
+    final (IconData icon, Color color, Color bg, String tip) =
+        widget.isVideoCached
+        ? (
+            Icons.download_done_rounded,
+            AppColors.success,
+            AppColors.successSoft,
+            tr('Video yuklab olindi'),
+          )
+        : widget.isDownloading
+        ? (
+            Icons.downloading_rounded,
+            AppColors.warning,
+            AppColors.warningSoft,
+            tr('Video yuklanmoqda...'),
+          )
+        : (
+            Icons.cloud_outlined,
+            AppColors.info,
+            AppColors.infoSoft,
+            tr('Video serverda'),
+          );
+    return Tooltip(
+      message: tip,
+      child: Container(
+        width: 32,
+        height: 32,
+        decoration: BoxDecoration(color: bg, shape: BoxShape.circle),
+        alignment: Alignment.center,
+        child: widget.isDownloading
+            ? SizedBox(
+                width: 14,
+                height: 14,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  color: AppColors.warning,
+                ),
+              )
+            : Icon(icon, size: 18, color: color),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.all(5.0),
-      child: Material(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-        elevation: 2,
-        color: Colors.white70,
-        child: InkWell(
-          borderRadius: BorderRadius.circular(10),
-          onLongPress: () async {
-            if (task.videoUrl == null || task.videoUrl!.isEmpty) return;
-            final bool isDelete = await TaskViewService().updateTaskStatus(
-              task.taskId,
-              1,
-              widget.selectedDate,
-              null,
-            );
-            if (isDelete) widget.onRefresh();
-          },
-          onTap: () {
-            if (task.videoUrl == null || task.videoUrl!.isEmpty) return;
-            final videoPath = widget.getVideoPath(task.videoUrl);
-            if (videoPath == null) return;
+    final t = Theme.of(context).textTheme;
+    final submitted = _submittedLine();
+    final typeLabel = _typeLabel();
 
-            showDialog(
-              context: context,
-              barrierColor: Colors.white12,
-              builder: (context) => BackdropFilter(
-                filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
-                child: Center(
-                  child: CircleVideoPlayer2(
-                    videoUrl: videoPath,
-                    onHalfWatched: () async {
-                      // Status allaqachon 3 bo'lsa qayta so'rov ketmasin
-                      if (task.status == 3) return;
-                      final bool isSuccess = await TaskViewService()
-                          .updateTaskStatus(
-                            task.taskId,
-                            3,
-                            widget.selectedDate,
-                            null,
-                          );
-                      if (isSuccess && mounted) {
-                        setState(() => task.status = 3);
-                      }
-                    },
-                  ),
-                ),
-              ),
-            );
-          },
+    return Padding(
+      padding: EdgeInsets.only(bottom: AppSpacing.sm),
+      child: Material(
+        color: AppColors.surface,
+        shape: RoundedRectangleBorder(
+          borderRadius: AppRadius.lgAll,
+          side: BorderSide(color: AppColors.border),
+        ),
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          onLongPress: _resetStatus,
+          onTap: _openVideo,
           child: Padding(
-            padding: const EdgeInsets.all(12),
+            padding: EdgeInsets.fromLTRB(
+              AppSpacing.lg,
+              AppSpacing.md,
+              AppSpacing.sm,
+              AppSpacing.md,
+            ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 // ── Asosiy qator: info + tugmalar ─────────────────────────
                 Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Expanded(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            "${widget.index + 1}. ${task.task}",
-                            style: const TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.bold,
+                            "${widget.index + 1}. ${trData(task.task)}",
+                            style: t.titleSmall?.copyWith(
+                              fontSize: 15.5,
+                              fontWeight: FontWeight.w600,
+                              height: 1.3,
                             ),
+                            maxLines: 3,
+                            overflow: TextOverflow.ellipsis,
                           ),
-                          if (task.submittedBy != null)
-                            Text(
-                              "${task.submittedBy} | "
-                              "${task.submittedAt?.toLocal().hour.toString().padLeft(2, '0')}:"
-                              "${task.submittedAt?.minute.toString().padLeft(2, '0')}",
-                            ),
-                          const SizedBox(height: 2),
-                          Text(
-                            "${task.type == 1
-                                ? "Ежедневно"
-                                : task.type == 2
-                                ? getWeekdaysString(task.days)
-                                : task.days ?? ""}",
-                            style: const TextStyle(
-                              fontSize: 12,
-                              color: Colors.black,
-                            ),
+                          SizedBox(height: 6),
+                          Wrap(
+                            spacing: AppSpacing.sm,
+                            runSpacing: 4,
+                            crossAxisAlignment: WrapCrossAlignment.center,
+                            children: [
+                              StatusBadge.forTask(task.status ?? 1),
+                              if (typeLabel.isNotEmpty)
+                                Text(
+                                  typeLabel,
+                                  style: TextStyle(
+                                    fontSize: 12.5,
+                                    color: AppColors.textSecondary,
+                                  ),
+                                ),
+                            ],
                           ),
+                          if (submitted != null) ...[
+                            SizedBox(height: 6),
+                            Row(
+                              children: [
+                                Icon(
+                                  Icons.person_outline_rounded,
+                                  size: 15,
+                                  color: AppColors.textTertiary,
+                                ),
+                                SizedBox(width: 4),
+                                Expanded(
+                                  child: Text(
+                                    submitted,
+                                    style: TextStyle(
+                                      fontSize: 12.5,
+                                      color: AppColors.textSecondary,
+                                    ),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
                         ],
                       ),
                     ),
-                    Row(
-                      children: [
-                        if (task.videoUrl != null && task.videoUrl!.isNotEmpty)
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 8,
-                              vertical: 4,
-                            ),
-                            decoration: BoxDecoration(
-                              color: widget.isVideoCached
-                                  ? Colors.green
-                                  : (widget.isDownloading
-                                        ? Colors.orange
-                                        : Colors.blue),
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                            child: widget.isDownloading
-                                ? const SizedBox(
-                                    width: 14,
-                                    height: 14,
-                                    child: CircularProgressIndicator.adaptive(),
-                                  )
-                                : Icon(
-                                    widget.isVideoCached
-                                        ? Icons.check_circle
-                                        : Icons.cloud_download,
-                                    size: 16,
-                                    color: Colors.white,
-                                  ),
-                          ),
-                        IconButton(
-                          onPressed: () {
-                            if (task.videoUrl != null &&
-                                task.videoUrl!.isNotEmpty) {
-                              widget.onShareVideo();
-                            } else {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(
-                                  content: Text('Видео отсутствует'),
-                                ),
-                              );
-                            }
-                          },
-                          icon:
-                              task.videoUrl != null && task.videoUrl!.isNotEmpty
-                              ? Icon(
-                                  Platform.isWindows
-                                      ? CupertinoIcons.doc_on_doc
-                                      : CupertinoIcons.share,
-                                )
-                              : const SizedBox(),
+                    if (_hasVideo) ...[
+                      SizedBox(width: AppSpacing.sm),
+                      Padding(
+                        padding: EdgeInsets.only(top: 8),
+                        child: _videoBadge(),
+                      ),
+                      IconButton(
+                        tooltip: Platform.isWindows
+                            ? tr('Havolani nusxalash')
+                            : tr('Ulashish'),
+                        onPressed: widget.onShareVideo,
+                        color: AppColors.textSecondary,
+                        icon: Icon(
+                          Platform.isWindows
+                              ? CupertinoIcons.doc_on_doc
+                              : CupertinoIcons.share,
+                          size: 20,
                         ),
-                      ],
-                    ),
+                      ),
+                    ],
                   ],
                 ),
 
                 // ── Audio yozish / tinglash (video bo'lsa chiqadi) ─────────
-                AudioTaskRow.fromCheckerTask(task: task, selectedDate: widget.selectedDate),
+                AudioTaskRow.fromCheckerTask(
+                  task: task,
+                  selectedDate: widget.selectedDate,
+                ),
               ],
             ),
           ),

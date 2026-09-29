@@ -7,6 +7,7 @@ import 'package:media_kit/media_kit.dart' as mk;
 import 'package:media_kit_video/media_kit_video.dart' as mkv;
 import 'package:mone_task_app/checker/model/checker_check_task_model.dart';
 import 'package:mone_task_app/checker/service/task_worker_service.dart';
+import 'package:mone_task_app/core/l10n/app_script.dart';
 import 'package:video_player/video_player.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
 
@@ -27,6 +28,13 @@ class VideoPlayerProvider extends ChangeNotifier {
   StreamSubscription? _mkDurationSub;
   StreamSubscription? _mkCompletedSub;
   StreamSubscription? _mkErrorSub;
+  StreamSubscription? _mkBufferingSub;
+  bool _mkBuffering = false;
+
+  /// Har bir yuklash urinishi raqami — eskirgan (parallel) yuklashlar
+  /// natijasi e'tiborsiz qoldiriladi va controller'lari yopiladi.
+  int _loadGen = 0;
+  bool _disposed = false;
 
   int _currentIndex;
   bool _isInitialized = false;
@@ -74,10 +82,27 @@ class VideoPlayerProvider extends ChangeNotifier {
   bool get isInitialized => _isInitialized;
   bool get isPlaying => _isPlaying;
   bool get hasError => _hasError;
-  String? get errorMessage => _errorMessage;
+  /// Foydalanuvchiga ko'rsatiladigan xato matni (tanlangan alifboda).
+  String? get errorMessage =>
+      _errorMessage == null ? null : tr(_errorMessage!);
   bool get isMuted => _isMuted;
   double get playbackSpeed => _playbackSpeed;
   bool get isLoading => _isLoading;
+
+  /// Video ijro paytida tarmoqdan ma'lumot kutilmoqda.
+  bool get isBuffering {
+    if (!_isInitialized || _hasError) return false;
+    if (_useMediaKit) return _mkBuffering;
+    return _controller?.value.isBuffering ?? false;
+  }
+
+  bool _isCurrent(int gen) => !_disposed && gen == _loadGen;
+
+  @override
+  void notifyListeners() {
+    if (_disposed) return;
+    super.notifyListeners();
+  }
 
   bool get hasPrev => _currentIndex > 0;
   bool get hasNext => _currentIndex < videoUrls.length - 1;
@@ -124,12 +149,12 @@ class VideoPlayerProvider extends ChangeNotifier {
       if (w != null && h != null && w > 0 && h > 0) {
         return Size(w.toDouble(), h.toDouble());
       }
-      return const Size(1920, 1080);
+      return Size(1920, 1080);
     }
     if (_controller != null && _controller!.value.isInitialized) {
       return _controller!.value.size;
     }
-    return const Size(1920, 1080);
+    return Size(1920, 1080);
   }
 
   // ── Task status update ──────────────────────────────────────────────────
@@ -172,18 +197,23 @@ class VideoPlayerProvider extends ChangeNotifier {
 
   // ── Initialize video ────────────────────────────────────────────────────
   Future<void> initializeVideo() async {
+    if (_disposed) return;
     if (_isLoading) return;
     _isLoading = true;
+    final gen = ++_loadGen;
 
-    // Dispose previous
+    // Dispose previous (xato bilan tugagan controller ham yopiladi)
     if (_useMediaKit) {
       await _disposeMkPlayer();
     } else {
-      if (_isInitialized && _controller != null) {
-        _controller!.removeListener(_onVideoListener);
-        await _controller!.dispose();
+      final old = _controller;
+      _controller = null;
+      if (old != null) {
+        old.removeListener(_onVideoListener);
+        await _safeDisposeController(old);
       }
     }
+    if (!_isCurrent(gen)) return;
 
     _isInitialized = false;
     _hasError = false;
@@ -193,6 +223,7 @@ class VideoPlayerProvider extends ChangeNotifier {
     _lastPositionMs = 0;
     _mkPosition = Duration.zero;
     _mkDuration = Duration.zero;
+    _mkBuffering = false;
     notifyListeners();
 
     try {
@@ -212,40 +243,73 @@ class VideoPlayerProvider extends ChangeNotifier {
       if (isLocal) {
         final file = File(videoPath);
         if (!await file.exists()) {
-          _setError('Файл не найден: $videoPath');
+          if (!_isCurrent(gen)) return;
+          debugPrint('Video fayl topilmadi: $videoPath');
+          _setError('Video fayl topilmadi. Keyingi videoga oʻting.');
           return;
         }
         if (await file.length() == 0) {
-          _setError("Видеофайл пуст");
+          if (!_isCurrent(gen)) return;
+          _setError('Video fayl boʻsh. Keyingi videoga oʻting.');
           return;
         }
       }
 
+      // Fayl tekshiruvi paytida yangi yuklash boshlangan bo'lsa — to'xtaymiz.
+      if (!_isCurrent(gen)) return;
+
       if (_useMediaKit) {
-        await _initMkPlayer(videoPath, isLocal);
+        await _initMkPlayer(videoPath, isLocal, gen);
       } else {
-        await _initVideoPlayer(videoPath, isLocal);
+        await _initVideoPlayer(videoPath, isLocal, gen);
       }
     } catch (e) {
-      _setError(e.toString());
+      if (!_isCurrent(gen)) return;
+      debugPrint('Video ochilmadi: $e');
+      _setError(_networkErrorKey);
     }
   }
 
   // ── video_player initialization ──
-  Future<void> _initVideoPlayer(String videoPath, bool isLocal) async {
-    if (isLocal) {
-      _controller = VideoPlayerController.file(File(videoPath));
-    } else {
-      _controller = VideoPlayerController.networkUrl(Uri.parse(videoPath));
+  Future<void> _initVideoPlayer(
+    String videoPath,
+    bool isLocal,
+    int gen,
+  ) async {
+    final ctrl = isLocal
+        ? VideoPlayerController.file(File(videoPath))
+        : VideoPlayerController.networkUrl(Uri.parse(videoPath));
+    // Faqat joriy yuklash controller'ni egallaydi.
+    if (!_isCurrent(gen)) {
+      await _safeDisposeController(ctrl);
+      return;
+    }
+    _controller = ctrl;
+
+    try {
+      await ctrl.initialize();
+      if (!_isCurrent(gen)) {
+        if (identical(_controller, ctrl)) _controller = null;
+        await _safeDisposeController(ctrl);
+        return;
+      }
+      await ctrl.setLooping(false);
+      await ctrl.setVolume(_isMuted ? 0.0 : 1.0);
+      await ctrl.setPlaybackSpeed(_playbackSpeed);
+      await ctrl.play();
+    } catch (e) {
+      // Muvaffaqiyatsiz controller'ni darhol yopamiz
+      if (identical(_controller, ctrl)) _controller = null;
+      await _safeDisposeController(ctrl);
+      rethrow;
+    }
+    if (!_isCurrent(gen)) {
+      if (identical(_controller, ctrl)) _controller = null;
+      await _safeDisposeController(ctrl);
+      return;
     }
 
-    await _controller!.initialize();
-    await _controller!.setLooping(false);
-    await _controller!.setVolume(_isMuted ? 0.0 : 1.0);
-    await _controller!.setPlaybackSpeed(_playbackSpeed);
-    await _controller!.play();
-
-    _controller!.addListener(_onVideoListener);
+    ctrl.addListener(_onVideoListener);
 
     _isInitialized = true;
     _isPlaying = true;
@@ -254,9 +318,15 @@ class VideoPlayerProvider extends ChangeNotifier {
   }
 
   // ── media_kit initialization (Windows) ──
-  Future<void> _initMkPlayer(String videoPath, bool isLocal) async {
-    _mkPlayer = mk.Player();
-    _mkController = mkv.VideoController(_mkPlayer!);
+  Future<void> _initMkPlayer(String videoPath, bool isLocal, int gen) async {
+    final player = mk.Player();
+    _mkPlayer = player;
+    _mkController = mkv.VideoController(player);
+
+    _mkBufferingSub = player.stream.buffering.listen((b) {
+      _mkBuffering = b;
+      notifyListeners();
+    });
 
     // Subscribe to streams
     _mkPlayingSub = _mkPlayer!.stream.playing.listen((playing) {
@@ -302,20 +372,33 @@ class VideoPlayerProvider extends ChangeNotifier {
 
     _mkErrorSub = _mkPlayer!.stream.error.listen((error) {
       if (error.isNotEmpty) {
-        _setError(error);
+        debugPrint('media_kit xatosi: $error');
+        _setError(_networkErrorKey);
       }
     });
 
     // Open and play
     final mediaUri = isLocal ? 'file://$videoPath' : videoPath;
-    await _mkPlayer!.open(mk.Media(mediaUri));
-    await _mkPlayer!.setVolume(_isMuted ? 0.0 : 100.0);
-    await _mkPlayer!.setRate(_playbackSpeed);
+    await player.open(mk.Media(mediaUri));
+    if (!_isCurrent(gen)) return; // eski player _disposeMkPlayer'da yopiladi
+    await player.setVolume(_isMuted ? 0.0 : 100.0);
+    await player.setRate(_playbackSpeed);
+    if (!_isCurrent(gen)) return;
 
     _isInitialized = true;
     _isPlaying = true;
     _isLoading = false;
     notifyListeners();
+  }
+
+  static const _networkErrorKey =
+      'Internet aloqasini tekshirib, qayta urinib koʻring.';
+
+  /// [message] — o'zbek lotin kalit; ko'rsatishda tr() orqali o'giriladi.
+  Future<void> _safeDisposeController(VideoPlayerController c) async {
+    try {
+      await c.dispose();
+    } catch (_) {}
   }
 
   void _setError(String message) {
@@ -329,6 +412,12 @@ class VideoPlayerProvider extends ChangeNotifier {
     if (_controller == null || !_controller!.value.isInitialized) return;
 
     final value = _controller!.value;
+
+    if (value.hasError && !_hasError) {
+      debugPrint('Video ijro xatosi: ${value.errorDescription}');
+      _setError(_networkErrorKey);
+      return;
+    }
     final total = value.duration.inMilliseconds;
     final current = value.position.inMilliseconds;
 
@@ -438,6 +527,8 @@ class VideoPlayerProvider extends ChangeNotifier {
     _mkDurationSub?.cancel();
     _mkCompletedSub?.cancel();
     _mkErrorSub?.cancel();
+    _mkBufferingSub?.cancel();
+    _mkBufferingSub = null;
     _mkPlayingSub = null;
     _mkPositionSub = null;
     _mkDurationSub = null;
@@ -450,12 +541,15 @@ class VideoPlayerProvider extends ChangeNotifier {
 
   @override
   void dispose() {
+    _disposed = true;
+    _loadGen++;
     WakelockPlus.disable();
     if (_useMediaKit) {
       _disposeMkPlayer();
     } else if (_controller != null) {
       _controller!.removeListener(_onVideoListener);
-      _controller!.dispose();
+      _safeDisposeController(_controller!);
+      _controller = null;
     }
     super.dispose();
   }

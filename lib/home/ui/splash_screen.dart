@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:mone_task_app/core/context_extension.dart';
 import 'package:mone_task_app/core/data/local/token_storage.dart';
 import 'package:mone_task_app/core/di/di.dart';
+import 'package:mone_task_app/core/l10n/app_script.dart';
+import 'package:mone_task_app/core/theme/app_theme.dart';
 import 'package:mone_task_app/features/deep_link/deep_link_page.dart';
 import 'package:mone_task_app/home/service/check_version.dart';
 import 'package:mone_task_app/home/service/login_service.dart';
@@ -55,8 +57,50 @@ class SpleshScreenState extends State<SpleshScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return const Scaffold(
-      body: Center(child: CircularProgressIndicator.adaptive()),
+    return Scaffold(
+      backgroundColor: AppColors.background,
+      body: Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 64,
+              height: 64,
+              decoration: BoxDecoration(
+                color: AppColors.primary,
+                borderRadius: AppRadius.lgAll,
+                boxShadow: AppShadows.raised,
+              ),
+              child: Icon(
+                Icons.task_alt_rounded,
+                color: Colors.white,
+                size: 34,
+              ),
+            ),
+            SizedBox(height: AppSpacing.lg),
+            Text(
+              'MONE TASK',
+              style: TextStyle(
+                fontSize: 22,
+                fontWeight: FontWeight.w800,
+                letterSpacing: 1.2,
+                color: AppColors.textPrimary,
+              ),
+            ),
+            SizedBox(height: AppSpacing.xl),
+            SizedBox(
+              width: 24,
+              height: 24,
+              child: CircularProgressIndicator(strokeWidth: 2.4),
+            ),
+            SizedBox(height: AppSpacing.md),
+            Text(
+              tr('Yuklanmoqda...'),
+              style: TextStyle(color: AppColors.textSecondary),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }

@@ -6,6 +6,7 @@ import 'package:mone_task_app/admin/model/category_model.dart';
 import 'package:mone_task_app/checker/model/checker_check_task_model.dart';
 import 'package:mone_task_app/core/constants/urls.dart';
 import 'package:mone_task_app/core/di/di.dart';
+import 'package:mone_task_app/core/l10n/app_script.dart';
 import 'package:mone_task_app/worker/model/response_task_model.dart';
 
 /// Task ko'rish, status o'zgartirish, audio yuborish/o'chirish.
@@ -21,13 +22,13 @@ class TaskViewService {
       );
 
       if (response.data == null) {
-        throw Exception("Данные задачи отсутствуют");
+        throw Exception(tr("Vazifalar maʼlumoti kelmadi"));
       }
 
       final data = response.data['data'];
 
       if (data is! List) {
-        throw Exception("Сервер вернул неверный формат");
+        throw Exception(tr("Server notoʻgʻri formatda javob qaytardi"));
       }
 
       return data.map((e) => TaskModel.fromJson(e)).toList();

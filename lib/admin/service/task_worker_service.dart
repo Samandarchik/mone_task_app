@@ -7,6 +7,7 @@ import 'package:mone_task_app/admin/model/filial_model.dart';
 import 'package:mone_task_app/admin/model/category_model.dart';
 import 'package:mone_task_app/core/constants/urls.dart';
 import 'package:mone_task_app/core/di/di.dart';
+import 'package:mone_task_app/core/l10n/app_script.dart';
 
 /// Admin template CRUD — task yaratish, tahrirlash, o'chirish, tartib.
 /// Filial va Category boshqaruvi ham shu yerda.
@@ -18,13 +19,13 @@ class TemplateService {
       final response = await _dio.get(AppUrls.tasks);
 
       if (response.data == null) {
-        throw Exception("Данные задачи отсутствуют");
+        throw Exception(tr("Vazifa maʼlumotlari yoʻq"));
       }
 
       final data = response.data["data"];
 
       if (data is! List) {
-        throw Exception("Сервер вернул неверный формат");
+        throw Exception(tr("Server notoʻgʻri formatda javob qaytardi"));
       }
 
       return data.map((e) => AdminTaskModel.fromJson(e)).toList();
@@ -74,13 +75,13 @@ class TemplateService {
       final response = await _dio.get(AppUrls.tasksAll);
 
       if (response.data == null) {
-        throw Exception("Данные задачи отсутствуют");
+        throw Exception(tr("Vazifa maʼlumotlari yoʻq"));
       }
 
       final data = response.data["data"];
 
       if (data is! List) {
-        throw Exception("Сервер вернул неверный формат");
+        throw Exception(tr("Server notoʻgʻri formatda javob qaytardi"));
       }
 
       return data.map((e) => TemplateTaskModel.fromJson(e)).toList();

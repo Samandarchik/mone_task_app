@@ -1,6 +1,7 @@
 import 'package:dio/dio.dart';
 import 'package:mone_task_app/core/constants/urls.dart';
 import 'package:mone_task_app/core/di/di.dart';
+import 'package:mone_task_app/core/l10n/app_script.dart';
 
 class ExcelReportService {
   final Dio _dio = sl<Dio>();
@@ -35,13 +36,15 @@ class ExcelReportService {
       if (response.statusCode == 200) {
         return response.data as List<int>;
       } else {
-        throw Exception('Ошибка при скачивании Excel: ${response.statusCode}');
+        throw Exception(
+          "${tr("Excel faylni yuklab bo'lmadi")} (${response.statusCode})",
+        );
       }
     } on DioException catch (e) {
       if (e.response != null) {
-        throw Exception('Ошибка сервера: ${e.response?.statusCode}');
+        throw Exception('${tr('Server xatoligi')} (${e.response?.statusCode})');
       } else {
-        throw Exception('Ошибка подключения к интернету');
+        throw Exception(tr('Internetga ulanib boʻlmadi'));
       }
     } catch (e) {
       rethrow;
@@ -71,28 +74,26 @@ class ExcelReportService {
                 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
           },
         ),
-        onReceiveProgress: (received, total) {
-          if (total != -1) {
-            final progress = (received / total * 100).toStringAsFixed(0);
-            print('Загрузка: $progress%');
-          }
-        },
       );
 
       if (response.statusCode == 200) {
         return savePath;
       } else {
-        throw Exception('Ошибка при скачивании Excel: ${response.statusCode}');
+        throw Exception(
+          "${tr("Excel faylni yuklab bo'lmadi")} (${response.statusCode})",
+        );
       }
     } on DioException catch (e) {
       if (e.response != null) {
-        throw Exception('Ошибка сервера: ${e.response?.statusCode}');
+        throw Exception('${tr('Server xatoligi')} (${e.response?.statusCode})');
       } else if (e.type == DioExceptionType.connectionTimeout) {
-        throw Exception('Время ожидания подключения истекло');
+        throw Exception(tr('Ulanish vaqti tugadi. Qayta urinib koʻring.'));
       } else if (e.type == DioExceptionType.receiveTimeout) {
-        throw Exception('Время ожидания получения данных истекло');
+        throw Exception(
+          tr('Maʼlumot kutish vaqti tugadi. Qayta urinib koʻring.'),
+        );
       } else {
-        throw Exception('Ошибка подключения к интернету');
+        throw Exception(tr('Internetga ulanib boʻlmadi'));
       }
     } catch (e) {
       rethrow;

@@ -57,3 +57,7 @@ android {
 flutter {
     source = "../.."
 }
+dependencies {
+    // Hisobotni Telegram'ga to'g'ridan-to'g'ri yuborish (FileProvider)
+    implementation "androidx.core:core:1.13.1"
+}

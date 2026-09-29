@@ -5,6 +5,9 @@ import 'package:mone_task_app/admin/service/task_worker_service.dart';
 import 'package:mone_task_app/admin/ui/widgets/category_selector.dart';
 import 'package:mone_task_app/admin/ui/widgets/task_type_selector.dart';
 import 'package:mone_task_app/checker/model/checker_check_task_model.dart';
+import 'package:mone_task_app/core/l10n/app_script.dart';
+import 'package:mone_task_app/core/theme/app_theme.dart';
+import 'package:mone_task_app/core/widgets/app_widgets.dart';
 
 class EditTaskUi extends StatefulWidget {
   final TaskModel task;
@@ -32,11 +35,12 @@ class _EditTaskUiState extends State<EditTaskUi> {
   @override
   void initState() {
     super.initState();
+    // Tahrirlash uchun serverdagi xom matn qo'yiladi (trData qilinmaydi).
     _controller = TextEditingController(text: widget.task.task);
     _selectedType = widget.task.type == 0 ? 1 : widget.task.type;
     _selectedFilials = [widget.task.filialId];
-    _selectedDays = widget.task.days ?? [];
-    _selectedWeekDays = widget.task.days ?? [];
+    _selectedDays = List<int>.from(widget.task.days ?? []);
+    _selectedWeekDays = List<int>.from(widget.task.days ?? []);
 
     final time = widget.task.notificationTime;
     if (time != null && time != "null:null" && time.contains(':')) {
@@ -55,8 +59,9 @@ class _EditTaskUiState extends State<EditTaskUi> {
     if (state == null) return;
 
     void trySelect() {
+      if (!mounted) return;
       if (state.isLoading) {
-        Future.delayed(const Duration(milliseconds: 200), trySelect);
+        Future.delayed(Duration(milliseconds: 200), trySelect);
         return;
       }
       final taskCategory = widget.task.category;
@@ -78,26 +83,28 @@ class _EditTaskUiState extends State<EditTaskUi> {
   }
 
   Future<void> _submitTask() async {
-    if (_controller.text.isEmpty) {
-      _showError("Введите задание");
+    if (_controller.text.trim().isEmpty) {
+      _showError(tr('Vazifa matnini kiriting'));
       return;
     }
     if (_selectedType == 2 && _selectedWeekDays.isEmpty) {
-      _showError("Выберите дни недели");
+      _showError(tr('Hafta kunlarini tanlang'));
       return;
     }
     if (_selectedType == 3 && _selectedDays.isEmpty) {
-      _showError("Выберите дни");
+      _showError(tr('Oyning kunlarini tanlang'));
       return;
     }
     if (_selectedCategoryId == null) {
-      _showError("Выберите категорию");
+      _showError(tr('Kategoriyani tanlang'));
       return;
     }
 
-    final categoryName = _categoryKey.currentState?.getCategoryName(_selectedCategoryId!);
+    final categoryName = _categoryKey.currentState?.getCategoryName(
+      _selectedCategoryId!,
+    );
     if (categoryName == null) {
-      _showError("Категория не найдена");
+      _showError(tr('Kategoriya topilmadi'));
       return;
     }
 
@@ -111,170 +118,240 @@ class _EditTaskUiState extends State<EditTaskUi> {
       days: _selectedType == 1
           ? null
           : _selectedType == 2
-              ? _selectedWeekDays
-              : _selectedDays,
+          ? _selectedWeekDays
+          : _selectedDays,
       hour: _selectedHour,
       minute: _selectedMinute,
       category: categoryName,
     );
 
     try {
-      await _taskService.updateTaskStatus(model);
-      if (mounted) Navigator.pop(context, true);
+      final ok = await _taskService.updateTaskStatus(model);
+      if (!mounted) return;
+      if (ok) {
+        showAppSnack(context, tr('Saqlandi'), type: SnackType.success);
+        Navigator.pop(context, true);
+      } else {
+        setState(() => _isSubmitting = false);
+        _showError(tr('Saqlab boʻlmadi. Qayta urinib koʻring'));
+      }
     } catch (e) {
       if (mounted) {
         setState(() => _isSubmitting = false);
-        _showError("Ошибка: $e");
+        _showError('${tr('Xatolik')}: $e');
       }
     }
   }
 
   void _showError(String message) {
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+    showAppSnack(context, message, type: SnackType.error);
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text("Редактировать задачу"),
-        actions: [
-          IconButton(onPressed: () {}, icon: const Icon(Icons.delete_outline)),
-        ],
-      ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            TextField(
-              controller: _controller,
-              decoration: const InputDecoration(
-                labelText: 'Задача',
-                border: OutlineInputBorder(),
-              ),
-              maxLines: 3,
-            ),
-            const SizedBox(height: 20),
-
-            CategorySelector(
-              key: _categoryKey,
-              selectedCategoryId: _selectedCategoryId,
-              onChanged: (id) => setState(() => _selectedCategoryId = id),
-            ),
-            const SizedBox(height: 12),
-
-            TaskTypeSelector(
-              selectedType: _selectedType ?? 1,
-              onTypeChanged: (value) => setState(() {
-                _selectedType = value;
-                _selectedWeekDays.clear();
-                _selectedDays.clear();
-              }),
-              selectedWeekDays: _selectedWeekDays,
-              onWeekDaysChanged: (days) => setState(() => _selectedWeekDays = days),
-              selectedDays: _selectedDays,
-              onDaysChanged: (days) => setState(() => _selectedDays = days),
-            ),
-
-            _buildTimeSelector(),
-            const SizedBox(height: 30),
-
-            SizedBox(
-              width: double.infinity,
-              child: CupertinoButton.filled(
-                onPressed: _isSubmitting ? null : _submitTask,
-                child: _isSubmitting
-                    ? const CupertinoActivityIndicator(color: Colors.white)
-                    : const Text(
-                        "Сохранить изменения",
-                        style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+      appBar: AppBar(title: Text(tr('Vazifani tahrirlash'))),
+      // SingleChildScrollView — CategorySelector (GlobalKey orqali o'qiladi)
+      // pastga aylantirilganda ham o'chib ketmaydi.
+      body: Align(
+        alignment: Alignment.topCenter,
+        child: ConstrainedBox(
+          constraints: BoxConstraints(maxWidth: 720),
+          child: SingleChildScrollView(
+            padding: EdgeInsets.all(AppSpacing.lg),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                _FormCard(
+                  children: [
+                    TextField(
+                      controller: _controller,
+                      textCapitalization: TextCapitalization.sentences,
+                      decoration: InputDecoration(
+                        labelText: tr('Vazifa'),
+                        hintText: tr('Nima qilish kerakligini yozing'),
+                        alignLabelWithHint: true,
                       ),
+                      minLines: 2,
+                      maxLines: 4,
+                    ),
+                    SizedBox(height: AppSpacing.lg),
+                    CategorySelector(
+                      key: _categoryKey,
+                      selectedCategoryId: _selectedCategoryId,
+                      onChanged: (id) =>
+                          setState(() => _selectedCategoryId = id),
+                    ),
+                  ],
+                ),
+                SizedBox(height: AppSpacing.md),
+                _FormCard(
+                  children: [
+                    TaskTypeSelector(
+                      selectedType: _selectedType ?? 1,
+                      onTypeChanged: (value) => setState(() {
+                        _selectedType = value;
+                        _selectedWeekDays = [];
+                        _selectedDays = [];
+                      }),
+                      selectedWeekDays: _selectedWeekDays,
+                      onWeekDaysChanged: (days) =>
+                          setState(() => _selectedWeekDays = days),
+                      selectedDays: _selectedDays,
+                      onDaysChanged: (days) =>
+                          setState(() => _selectedDays = days),
+                    ),
+                  ],
+                ),
+                SizedBox(height: AppSpacing.md),
+                _FormCard(children: [_buildTimeSelector()]),
+                SizedBox(height: AppSpacing.xl),
+              ],
+            ),
+          ),
+        ),
+      ),
+      bottomNavigationBar: SafeArea(
+        child: Padding(
+          padding: EdgeInsets.fromLTRB(16, 8, 16, 12),
+          child: Center(
+            heightFactor: 1,
+            child: ConstrainedBox(
+              constraints: BoxConstraints(maxWidth: 720),
+              child: SizedBox(
+                width: double.infinity,
+                child: FilledButton(
+                  onPressed: _isSubmitting ? null : _submitTask,
+                  child: _isSubmitting
+                      ? SizedBox(
+                          width: 22,
+                          height: 22,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2.4,
+                            color: Colors.white,
+                          ),
+                        )
+                      : Text(tr('Saqlash')),
+                ),
               ),
             ),
-            const SizedBox(height: 20),
-          ],
+          ),
         ),
       ),
     );
   }
 
   Widget _buildTimeSelector() {
+    final hasTime = _selectedHour != null;
+    final timeText = hasTime
+        ? "${_selectedHour.toString().padLeft(2, '0')}:${(_selectedMinute ?? 0).toString().padLeft(2, '0')}"
+        : tr('Belgilanmagan');
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text(
-          "Время выполнения:",
-          style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+        Text(
+          tr('Eslatma vaqti'),
+          style: TextStyle(
+            fontSize: 14,
+            fontWeight: FontWeight.w600,
+            color: AppColors.textPrimary,
+          ),
         ),
-        const SizedBox(height: 10),
-        GestureDetector(
-          onTap: () {
-            setState(() {
-              _showTimePicker = !_showTimePicker;
-              if (_showTimePicker && _selectedHour == null) {
-                _selectedHour = DateTime.now().hour;
-                _selectedMinute = DateTime.now().minute;
-              }
-            });
-          },
-          child: Container(
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: _selectedHour != null ? Colors.blue.shade50 : Colors.grey.shade100,
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(
-                color: _selectedHour != null ? Colors.blue.shade200 : Colors.grey.shade300,
-              ),
+        SizedBox(height: 2),
+        Text(
+          tr('Ixtiyoriy — xodimga shu vaqtda eslatiladi'),
+          style: TextStyle(fontSize: 13, color: AppColors.textSecondary),
+        ),
+        SizedBox(height: AppSpacing.sm),
+        Material(
+          color: hasTime ? AppColors.primarySoft : AppColors.surfaceMuted,
+          shape: RoundedRectangleBorder(
+            borderRadius: AppRadius.mdAll,
+            side: BorderSide(
+              color: hasTime ? AppColors.primary : AppColors.border,
             ),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(
-                  Icons.access_time,
-                  color: _selectedHour != null ? Colors.blue : Colors.grey,
+          ),
+          child: InkWell(
+            borderRadius: AppRadius.mdAll,
+            onTap: () {
+              setState(() {
+                _showTimePicker = !_showTimePicker;
+                if (_showTimePicker && _selectedHour == null) {
+                  _selectedHour = DateTime.now().hour;
+                  _selectedMinute = DateTime.now().minute;
+                }
+              });
+            },
+            child: ConstrainedBox(
+              constraints: BoxConstraints(minHeight: 52),
+              child: Padding(
+                padding: EdgeInsets.only(left: 14, right: 4),
+                child: Row(
+                  children: [
+                    Icon(
+                      Icons.schedule_rounded,
+                      color: hasTime
+                          ? AppColors.primary
+                          : AppColors.textSecondary,
+                    ),
+                    SizedBox(width: AppSpacing.md),
+                    Expanded(
+                      child: Text(
+                        timeText,
+                        style: TextStyle(
+                          fontSize: hasTime ? 18 : 15,
+                          fontWeight: FontWeight.w600,
+                          color: hasTime
+                              ? AppColors.primary
+                              : AppColors.textSecondary,
+                        ),
+                      ),
+                    ),
+                    if (hasTime)
+                      IconButton(
+                        tooltip: tr('Vaqtni olib tashlash'),
+                        icon: Icon(
+                          Icons.close_rounded,
+                          color: AppColors.textSecondary,
+                        ),
+                        onPressed: () {
+                          setState(() {
+                            _selectedHour = null;
+                            _selectedMinute = null;
+                            _showTimePicker = false;
+                          });
+                        },
+                      )
+                    else
+                      Padding(
+                        padding: EdgeInsets.all(12),
+                        child: Icon(
+                          Icons.expand_more_rounded,
+                          color: AppColors.textSecondary,
+                        ),
+                      ),
+                  ],
                 ),
-                const SizedBox(width: 10),
-                Text(
-                  _selectedHour != null
-                      ? "${_selectedHour.toString().padLeft(2, '0')}:${_selectedMinute.toString().padLeft(2, '0')}"
-                      : "Выбрать время (необязательно)",
-                  style: TextStyle(
-                    fontSize: _selectedHour != null ? 24 : 16,
-                    fontWeight: FontWeight.bold,
-                    color: _selectedHour != null ? Colors.blue : Colors.grey,
-                  ),
-                ),
-                if (_selectedHour != null) ...[
-                  const SizedBox(width: 10),
-                  IconButton(
-                    icon: const Icon(Icons.clear, color: Colors.red),
-                    onPressed: () {
-                      setState(() {
-                        _selectedHour = null;
-                        _selectedMinute = null;
-                        _showTimePicker = false;
-                      });
-                    },
-                  ),
-                ],
-              ],
+              ),
             ),
           ),
         ),
-        const SizedBox(height: 15),
-        if (_showTimePicker)
+        if (_showTimePicker) ...[
+          SizedBox(height: AppSpacing.md),
           Container(
-            height: 200,
+            height: 180,
             decoration: BoxDecoration(
-              border: Border.all(color: Colors.grey.shade300),
-              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: AppColors.border),
+              borderRadius: AppRadius.mdAll,
             ),
             child: CupertinoDatePicker(
               mode: CupertinoDatePickerMode.time,
               use24hFormat: true,
               initialDateTime: DateTime(
-                2026, 1, 1,
+                2026,
+                1,
+                1,
                 _selectedHour ?? DateTime.now().hour,
                 _selectedMinute ?? DateTime.now().minute,
               ),
@@ -286,7 +363,27 @@ class _EditTaskUiState extends State<EditTaskUi> {
               },
             ),
           ),
+        ],
       ],
+    );
+  }
+}
+
+class _FormCard extends StatelessWidget {
+  const _FormCard({required this.children});
+  final List<Widget> children;
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      margin: EdgeInsets.zero,
+      child: Padding(
+        padding: EdgeInsets.all(AppSpacing.lg),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: children,
+        ),
+      ),
     );
   }
 }

@@ -2,12 +2,17 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:app_links/app_links.dart';
+import 'package:flutter/foundation.dart';
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:media_kit/media_kit.dart';
 import 'package:mone_task_app/admin/provider/admin_tasks_provider.dart';
 import 'package:mone_task_app/admin/provider/video_download_provider.dart';
 import 'package:mone_task_app/core/data/local/active_filial.dart';
 import 'package:mone_task_app/core/di/di.dart';
+import 'package:mone_task_app/core/l10n/app_script.dart';
+import 'package:mone_task_app/core/theme/app_theme.dart';
 import 'package:mone_task_app/deep_link_service.dart';
 import 'package:mone_task_app/features/deep_link/deep_link_page.dart';
 import 'package:mone_task_app/home/service/login_service.dart';
@@ -16,12 +21,14 @@ import 'package:provider/provider.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  if (Platform.isWindows) {
+  if (!kIsWeb && Platform.isWindows) {
     MediaKit.ensureInitialized();
   }
   await setupInit();
   await ActiveFilial.load();
-  runApp(const MyApp());
+  await AppScriptController.instance.load();
+  await AppThemeController.instance.load();
+  runApp(MyApp());
 }
 
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
@@ -86,9 +93,7 @@ class _MyAppState extends State<MyApp> {
       final nav = navigatorKey.currentState;
       if (nav != null) {
         // Ustiga push qilamiz (remove emas) — ilova holatini buzmaydi
-        nav.push(
-          MaterialPageRoute(builder: (_) => DeepLinkPage(data: data)),
-        );
+        nav.push(MaterialPageRoute(builder: (_) => DeepLinkPage(data: data)));
       }
     });
   }
@@ -106,20 +111,34 @@ class _MyAppState extends State<MyApp> {
         ChangeNotifierProvider(create: (_) => VideoDownloadProvider()),
         ChangeNotifierProvider(create: (_) => AdminTasksProvider()),
       ],
-      child: MaterialApp(
-        theme: ThemeData(
-          scaffoldBackgroundColor: Colors.white,
-          appBarTheme: const AppBarTheme(
-            backgroundColor: Colors.white,
-            surfaceTintColor: Colors.transparent,
+      child: ScriptScope(
+        extra: [AppThemeController.instance],
+        // Builder — rejim o'zgarganda MaterialApp yangi tema bilan quriladi
+        child: Builder(
+          builder: (context) => MaterialApp(
+            title: 'Mone Task',
+            theme: AppTheme.current(),
+            // Tizim matnlari (Nusxa olish, Qo'yish, Orqaga ...) — o'zbekcha
+            locale: Locale('uz'),
+            supportedLocales: [Locale('uz')],
+            localizationsDelegates: GlobalMaterialLocalizations.delegates,
+            routes: {"/login": (context) => LoginPage()},
+            navigatorKey: navigatorKey,
+            debugShowCheckedModeBanner: false,
+            // Qattiq bosilganda barmoq biroz siljisa ham bosish qabul qilinsin
+            // (standart 18 px juda sezgir).
+            builder: (context, child) {
+              final mq = MediaQuery.of(context);
+              return MediaQuery(
+                data: mq.copyWith(
+                  gestureSettings: DeviceGestureSettings(touchSlop: 24),
+                ),
+                child: child!,
+              );
+            },
+            home: SpleshScreen(),
           ),
         ),
-        routes: {
-          "/login": (context) => LoginPage(),
-        },
-        navigatorKey: navigatorKey,
-        debugShowCheckedModeBanner: false,
-        home: SpleshScreen(),
       ),
     );
   }

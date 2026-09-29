@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 import 'package:media_kit/media_kit.dart' as mk;
 import 'package:media_kit_video/media_kit_video.dart' as mkv;
 import 'package:video_player/video_player.dart';
+import 'package:mone_task_app/core/l10n/app_script.dart';
+import 'package:mone_task_app/core/widgets/app_widgets.dart';
 
 class VideoPreviewScreen extends StatefulWidget {
   final List<String> videoSegments;
@@ -32,6 +34,9 @@ class _VideoPreviewScreenState extends State<VideoPreviewScreen> {
   bool _isPlaying = false;
   int _currentSegmentIndex = 0;
   bool _isLoadingNextSegment = false;
+
+  /// Tugma ikki marta bosilmasin (ikki marta yuborish bo'lmasin).
+  bool _closing = false;
 
   @override
   void initState() {
@@ -94,7 +99,8 @@ class _VideoPreviewScreenState extends State<VideoPreviewScreen> {
         }
       }
     } catch (e) {
-      _showError("Ошибка при загрузке видео: $e");
+      debugPrint('Video preview xatolik: $e');
+      _showError(tr("Videoni ochib bo'lmadi. Baribir yuborishingiz mumkin."));
     }
   }
 
@@ -109,6 +115,7 @@ class _VideoPreviewScreenState extends State<VideoPreviewScreen> {
   }
 
   Future<void> _playNextSegment() async {
+    if (!mounted) return;
     setState(() {
       _isLoadingNextSegment = true;
     });
@@ -142,20 +149,22 @@ class _VideoPreviewScreenState extends State<VideoPreviewScreen> {
   }
 
   void _sendVideo() {
+    if (_closing) return;
+    setState(() => _closing = true);
     Navigator.of(
       context,
     ).pop({'action': 'send', 'segments': widget.videoSegments});
   }
 
   void _retakeVideo() {
+    if (_closing) return;
+    setState(() => _closing = true);
     Navigator.of(context).pop({'action': 'retake'});
   }
 
   void _showError(String message) {
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(message), backgroundColor: Colors.red),
-    );
+    showAppSnack(context, message, type: SnackType.error);
   }
 
   @override
@@ -195,15 +204,15 @@ class _VideoPreviewScreenState extends State<VideoPreviewScreen> {
                             child: VideoPlayer(_controller!),
                           ),
                         )
-                      : const SizedBox.shrink()),
+                      : SizedBox.shrink()),
             ),
 
           // Yuklash indikatori
           if (!_isInitialized || _isLoadingNextSegment)
             Positioned.fill(
               child: Container(
-                color: Colors.black.withOpacity(0.3),
-                child: const Center(
+                color: Colors.black.withValues(alpha: 0.3),
+                child: Center(
                   child: CircularProgressIndicator(
                     color: Colors.white,
                     strokeWidth: 3,
@@ -233,22 +242,22 @@ class _VideoPreviewScreenState extends State<VideoPreviewScreen> {
                 child: Container(
                   width: circleRadius * 2,
                   height: circleRadius * 2,
-                  decoration: const BoxDecoration(
+                  decoration: BoxDecoration(
                     shape: BoxShape.circle,
                     color: Colors.transparent,
                   ),
                   child: Center(
                     child: AnimatedOpacity(
                       opacity: _isPlaying ? 0.0 : 0.8,
-                      duration: const Duration(milliseconds: 300),
+                      duration: Duration(milliseconds: 300),
                       child: Container(
                         width: 80,
                         height: 80,
                         decoration: BoxDecoration(
-                          color: Colors.black.withOpacity(0.6),
+                          color: Colors.black.withValues(alpha: 0.6),
                           shape: BoxShape.circle,
                         ),
-                        child: const Icon(
+                        child: Icon(
                           Icons.play_arrow,
                           color: Colors.white,
                           size: 50,
@@ -263,10 +272,21 @@ class _VideoPreviewScreenState extends State<VideoPreviewScreen> {
           // Top bar
           SafeArea(
             child: Padding(
-              padding: const EdgeInsets.all(16.0),
+              padding: EdgeInsets.all(16.0),
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
+                  Expanded(
+                    child: Text(
+                      tr("Videoni ko'ring va yuboring"),
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 17,
+                        fontWeight: FontWeight.w600,
+                        shadows: [Shadow(color: Colors.black54, blurRadius: 6)],
+                      ),
+                    ),
+                  ),
                   // Segment counter va progress
                   Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -275,19 +295,19 @@ class _VideoPreviewScreenState extends State<VideoPreviewScreen> {
                       // Segment progress dots
                       if (widget.videoSegments.length > 1)
                         Padding(
-                          padding: const EdgeInsets.only(top: 8, left: 8),
+                          padding: EdgeInsets.only(top: 8, left: 8),
                           child: Row(
                             children: List.generate(
                               widget.videoSegments.length,
                               (index) => Container(
-                                margin: const EdgeInsets.only(right: 4),
+                                margin: EdgeInsets.only(right: 4),
                                 width: 8,
                                 height: 8,
                                 decoration: BoxDecoration(
                                   shape: BoxShape.circle,
                                   color: index <= _currentSegmentIndex
                                       ? Colors.white
-                                      : Colors.white.withOpacity(0.3),
+                                      : Colors.white38,
                                 ),
                               ),
                             ),
@@ -305,76 +325,41 @@ class _VideoPreviewScreenState extends State<VideoPreviewScreen> {
             bottom: 0,
             left: 0,
             right: 0,
-            child: Container(
-              padding: const EdgeInsets.symmetric(vertical: 30, horizontal: 20),
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.bottomCenter,
-                  end: Alignment.topCenter,
-                  colors: [Colors.black.withOpacity(0.8), Colors.transparent],
-                ),
-              ),
-              child: SafeArea(
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                  children: [
-                    // Qaytadan olish
-                    _buildActionButton(
-                      icon: Icons.refresh,
-                      label: 'Заново',
-                      onTap: _retakeVideo,
-                      color: Colors.white,
+            child: SafeArea(
+              top: false,
+              child: Padding(
+                padding: EdgeInsets.fromLTRB(16, 12, 16, 16),
+                child: Center(
+                  child: ConstrainedBox(
+                    constraints: BoxConstraints(maxWidth: 480),
+                    child: Row(
+                      children: [
+                        // Qaytadan olish
+                        Expanded(
+                          child: OutlinedButton.icon(
+                            onPressed: _closing ? null : _retakeVideo,
+                            icon: Icon(Icons.refresh_rounded),
+                            label: Text(tr('Qaytadan')),
+                          ),
+                        ),
+                        SizedBox(width: 12),
+                        // Yuborish
+                        Expanded(
+                          flex: 2,
+                          child: FilledButton.icon(
+                            onPressed: _closing ? null : _sendVideo,
+                            icon: Icon(Icons.send_rounded),
+                            label: Text(tr('Yuborish')),
+                          ),
+                        ),
+                      ],
                     ),
-
-                    // Yuborish
-                    _buildActionButton(
-                      icon: Icons.send,
-                      label: 'Отправить',
-                      onTap: _sendVideo,
-                      color: Colors.blue,
-                      isPrimary: true,
-                    ),
-                  ],
+                  ),
                 ),
               ),
             ),
           ),
         ],
-      ),
-    );
-  }
-
-  Widget _buildActionButton({
-    required IconData icon,
-    required String label,
-    required VoidCallback onTap,
-    required Color color,
-    bool isPrimary = false,
-  }) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-        decoration: BoxDecoration(
-          color: isPrimary ? color : Colors.black.withOpacity(0.5),
-          borderRadius: BorderRadius.circular(30),
-          border: Border.all(color: color, width: isPrimary ? 0 : 2),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(icon, color: Colors.white, size: 24),
-            const SizedBox(width: 8),
-            Text(
-              label,
-              style: const TextStyle(
-                color: Colors.white,
-                fontSize: 16,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-          ],
-        ),
       ),
     );
   }
