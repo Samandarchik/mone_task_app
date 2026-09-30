@@ -702,12 +702,28 @@ func authMiddleware(next http.HandlerFunc) http.HandlerFunc {
 			return
 		}
 
+		// Rol va filiallarni tokendan emas, bazadan o'qiymiz: token login
+		// paytidagi rolni saqlaydi, foydalanuvchi keyin boshqa rolga (masalan,
+		// super_admin) o'tkazilsa, eski token bilan "Ruxsat yo'q" olmasligi kerak.
+		db, _ := getMainDB()
+		var dbRole string
+		var dbFilialIDs sql.NullString
+		err = db.QueryRow("SELECT role, filial_ids FROM users WHERE id = ?", claims.UserID).Scan(&dbRole, &dbFilialIDs)
+		db.Close()
+		if err != nil {
+			respondJSON(w, http.StatusUnauthorized, map[string]interface{}{
+				"success": false,
+				"error":   "Foydalanuvchi topilmadi",
+			})
+			return
+		}
+
 		r.Header.Set("UserID", strconv.Itoa(claims.UserID))
 		r.Header.Set("Username", claims.Username)
-		r.Header.Set("Role", claims.Role)
-		if len(claims.FilialIDs) > 0 {
-			filialIDsStr := strings.Trim(strings.Join(strings.Fields(fmt.Sprint(claims.FilialIDs)), ","), "[]")
-			r.Header.Set("FilialIDs", filialIDsStr)
+		r.Header.Set("Role", dbRole)
+		r.Header.Del("FilialIDs")
+		if dbFilialIDs.Valid && dbFilialIDs.String != "" {
+			r.Header.Set("FilialIDs", dbFilialIDs.String)
 		}
 
 		next(w, r)

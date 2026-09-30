@@ -163,6 +163,8 @@ const Map<String, String> _l2cExceptions = {
   'litsenziya': 'лицензия',
   'konditsioner': 'кондиционер',
   'mebel': 'мебель',
+  'voditel': 'водитель',
+  'voditellar': 'водителлар',
 };
 
 /// Transliteratsiya qilinmaydigan so'zlar (brend, texnik nomlar).
