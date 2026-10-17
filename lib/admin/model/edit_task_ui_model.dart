@@ -7,6 +7,8 @@ class EditTaskUiModel {
   final int? hour;
   final int? minute;
   final String category;
+  final bool multiVideo;
+  final int videoCount;
 
   EditTaskUiModel({
     required this.taskId,
@@ -17,6 +19,8 @@ class EditTaskUiModel {
     this.hour,
     this.minute,
     required this.category,
+    this.multiVideo = false,
+    this.videoCount = 1,
   });
 
   Map<String, dynamic> toJson() {
@@ -27,6 +31,8 @@ class EditTaskUiModel {
       "time": "$hour:$minute",
       // "filialIds": filialsId,
       "category": category,
+      "multiVideo": multiVideo,
+      "videoCount": videoCount,
     };
   }
 }

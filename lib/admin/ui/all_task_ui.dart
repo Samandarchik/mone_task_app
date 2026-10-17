@@ -5,6 +5,8 @@ import 'package:mone_task_app/admin/service/task_worker_service.dart';
 import 'package:mone_task_app/admin/ui/add_admin_task.dart';
 import 'package:mone_task_app/admin/ui/edit_task_ui.dart';
 import 'package:mone_task_app/checker/model/checker_check_task_model.dart';
+import 'package:mone_task_app/core/data/local/token_storage.dart';
+import 'package:mone_task_app/core/di/di.dart';
 import 'package:mone_task_app/utils/get_color.dart';
 
 // ==================== UI ====================
@@ -26,6 +28,12 @@ class _TemplateTaskAdminUiState extends State<TemplateTaskAdminUi> {
   late Future<List<TemplateTaskModel>> templatesFuture;
   late Future<List<FilialModel>> categoriesFuture;
   int selectedFilter = -1; // -1: hammasi, 1-3: type bo'yicha
+
+  /// Filiallarni boshqarish va tartibni o'zgartirish — faqat super_admin.
+  /// «Задачи» ruxsati berilgan foydalanuvchi faqat vazifa qo'shadi,
+  /// tahrirlaydi va o'chiradi (o'z filiallari doirasida).
+  final bool _isSuperAdmin =
+      sl<TokenStorage>().getUserData()?.role == 'super_admin';
 
   @override
   void initState() {
@@ -82,7 +90,7 @@ class _TemplateTaskAdminUiState extends State<TemplateTaskAdminUi> {
         final categories = categorySnapshot.data ?? widget.category ?? [];
 
         return DefaultTabController(
-          length: categories.length + 1,
+          length: categories.length + (_isSuperAdmin ? 1 : 0),
           initialIndex: 0,
           child: Scaffold(
             appBar: AppBar(
@@ -112,20 +120,21 @@ class _TemplateTaskAdminUiState extends State<TemplateTaskAdminUi> {
                   ...List.generate(
                     categories.length,
                     (index) => GestureDetector(
-                      onLongPress: () {
-                        _showEditFilialDialog(categories[index]);
-                      },
+                      onLongPress: _isSuperAdmin
+                          ? () => _showEditFilialDialog(categories[index])
+                          : null,
                       child: Tab(text: categories[index].name),
                     ),
                   ),
-                  Tab(
-                    child: GestureDetector(
-                      onTap: () {
-                        _showAddFilialDialog();
-                      },
-                      child: const Icon(Icons.add_circle_outline),
+                  if (_isSuperAdmin)
+                    Tab(
+                      child: GestureDetector(
+                        onTap: () {
+                          _showAddFilialDialog();
+                        },
+                        child: const Icon(Icons.add_circle_outline),
+                      ),
                     ),
-                  ),
                 ],
               ),
             ),
@@ -144,7 +153,7 @@ class _TemplateTaskAdminUiState extends State<TemplateTaskAdminUi> {
                           child: CircularProgressIndicator.adaptive(),
                         ),
                       ),
-                      const SizedBox.shrink(),
+                      if (_isSuperAdmin) const SizedBox.shrink(),
                     ],
                   );
                 }
@@ -180,7 +189,7 @@ class _TemplateTaskAdminUiState extends State<TemplateTaskAdminUi> {
                           ),
                         ),
                       ),
-                      const SizedBox.shrink(),
+                      if (_isSuperAdmin) const SizedBox.shrink(),
                     ],
                   );
                 }
@@ -191,11 +200,9 @@ class _TemplateTaskAdminUiState extends State<TemplateTaskAdminUi> {
                     children: [
                       ...List.generate(
                         categoryCount,
-                        (_) => const Center(
-                          child: Text("Шаблоны не найдены"),
-                        ),
+                        (_) => const Center(child: Text("Шаблоны не найдены")),
                       ),
-                      const SizedBox.shrink(),
+                      if (_isSuperAdmin) const SizedBox.shrink(),
                     ],
                   );
                 }
@@ -211,7 +218,7 @@ class _TemplateTaskAdminUiState extends State<TemplateTaskAdminUi> {
                         categories[index].filialId,
                       ),
                     ),
-                    const SizedBox.shrink(),
+                    if (_isSuperAdmin) const SizedBox.shrink(),
                   ],
                 );
               },
@@ -394,6 +401,7 @@ class _TemplateTaskAdminUiState extends State<TemplateTaskAdminUi> {
         await newTemplates;
       },
       child: ReorderableListView.builder(
+        buildDefaultDragHandles: _isSuperAdmin,
         padding: const EdgeInsets.all(12),
         itemCount: filtered.length,
         itemBuilder: (context, index) {
@@ -404,6 +412,7 @@ class _TemplateTaskAdminUiState extends State<TemplateTaskAdminUi> {
           );
         },
         onReorder: (oldIndex, newIndex) async {
+          if (!_isSuperAdmin) return;
           // MUHIM: oldIndex va newIndex bu list indekslari (0-dan boshlanadi)
           // Lekin backend orderIndex kutadi (1-dan boshlanadi)
 
@@ -477,6 +486,8 @@ class _TemplateTaskAdminUiState extends State<TemplateTaskAdminUi> {
                       filialId: currentFilialId,
                       days: template.days,
                       notificationTime: template.notificationTime,
+                      multiVideo: template.multiVideo,
+                      videoCount: template.videoCount,
                       status: 1,
                     ),
                   ),

@@ -1,5 +1,9 @@
 abstract final class AppUrls {
-  static const String baseUrl = "https://taskapi.monebakeryuz.uz";
+  // Lokal test: flutter run --dart-define=API_URL=http://localhost:8000
+  static const String baseUrl = String.fromEnvironment(
+    'API_URL',
+    defaultValue: "https://taskapi.monebakeryuz.uz",
+  );
   // static const String baseUrl = "http://localhost:8000";
   // static const String baseUrl = "http://localhost:8000";
   // https://apps.apple.com/us/app/task-app-mone/id6756741172

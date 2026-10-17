@@ -21,7 +21,7 @@ class _AddWorkerPageState extends State<AddWorkerPage> {
   final _passwordController = TextEditingController();
   final _phoneController = TextEditingController();
 
-  final String _selectedRole = 'worker';
+  String _selectedRole = 'worker';
   final List<int> _selectedFilialIds = [];
   final List<String> _selectedCategories = [];
   bool _isLoading = false;
@@ -94,16 +94,18 @@ class _AddWorkerPageState extends State<AddWorkerPage> {
 
     if (success && mounted) {
       Navigator.pop(context, true);
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Пользователь добавлен')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Пользователь добавлен')));
     } else if (mounted) {
       _showError('Произошла ошибка');
     }
   }
 
   void _showError(String message) {
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(message)));
   }
 
   // ── Build ───────────────────────────────────────────────────────────────
@@ -119,7 +121,8 @@ class _AddWorkerPageState extends State<AddWorkerPage> {
               child: Padding(
                 padding: EdgeInsets.all(16),
                 child: SizedBox(
-                  width: 20, height: 20,
+                  width: 20,
+                  height: 20,
                   child: CircularProgressIndicator.adaptive(strokeWidth: 2),
                 ),
               ),
@@ -137,6 +140,34 @@ class _AddWorkerPageState extends State<AddWorkerPage> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
+                    // Rol: Ревизор / Корректор / Супер админ
+                    SizedBox(
+                      width: double.infinity,
+                      child: SegmentedButton<String>(
+                        segments: const [
+                          ButtonSegment(
+                            value: 'worker',
+                            label: Text('Ревизор'),
+                            icon: Icon(Icons.person_outline),
+                          ),
+                          ButtonSegment(
+                            value: 'checker',
+                            label: Text('Корректор'),
+                            icon: Icon(Icons.fact_check_outlined),
+                          ),
+                          ButtonSegment(
+                            value: 'super_admin',
+                            label: Text('Супер админ'),
+                            icon: Icon(Icons.shield_outlined),
+                          ),
+                        ],
+                        selected: {_selectedRole},
+                        onSelectionChanged: (s) =>
+                            setState(() => _selectedRole = s.first),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+
                     // Telefon raqam — birinchi
                     _buildPhoneField(),
                     const SizedBox(height: 16),
@@ -146,7 +177,8 @@ class _AddWorkerPageState extends State<AddWorkerPage> {
                       controller: _usernameController,
                       label: 'Имя *',
                       icon: Icons.person,
-                      validator: (v) => v == null || v.trim().isEmpty ? 'Введите имя' : null,
+                      validator: (v) =>
+                          v == null || v.trim().isEmpty ? 'Введите имя' : null,
                     ),
                     const SizedBox(height: 16),
 
@@ -156,7 +188,9 @@ class _AddWorkerPageState extends State<AddWorkerPage> {
                       label: 'Логин *',
                       icon: Icons.account_circle,
                       hint: 'Номер телефона или логин',
-                      validator: (v) => v == null || v.trim().isEmpty ? 'Введите логин' : null,
+                      validator: (v) => v == null || v.trim().isEmpty
+                          ? 'Введите логин'
+                          : null,
                     ),
                     const SizedBox(height: 16),
 
@@ -184,9 +218,7 @@ class _AddWorkerPageState extends State<AddWorkerPage> {
     return TextField(
       controller: _phoneController,
       keyboardType: TextInputType.phone,
-      inputFormatters: [
-        FilteringTextInputFormatter.allow(RegExp(r'[0-9+]')),
-      ],
+      inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[0-9+]'))],
       decoration: const InputDecoration(
         labelText: 'Телефон',
         hintText: '998901234567',
@@ -226,7 +258,9 @@ class _AddWorkerPageState extends State<AddWorkerPage> {
         border: const OutlineInputBorder(),
         prefixIcon: const Icon(Icons.lock),
         suffixIcon: IconButton(
-          icon: Icon(_obscurePassword ? Icons.visibility_off : Icons.visibility),
+          icon: Icon(
+            _obscurePassword ? Icons.visibility_off : Icons.visibility,
+          ),
           onPressed: () => setState(() => _obscurePassword = !_obscurePassword),
         ),
       ),
@@ -244,7 +278,10 @@ class _AddWorkerPageState extends State<AddWorkerPage> {
         Row(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            const Text('Филиалы *', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+            const Text(
+              'Филиалы *',
+              style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+            ),
             if (_selectedFilialIds.isEmpty) ...[
               const SizedBox(width: 8),
               Container(
@@ -253,7 +290,10 @@ class _AddWorkerPageState extends State<AddWorkerPage> {
                   color: Colors.red.shade100,
                   borderRadius: BorderRadius.circular(12),
                 ),
-                child: const Text('Выбрать', style: TextStyle(fontSize: 12, color: Colors.red)),
+                child: const Text(
+                  'Выбрать',
+                  style: TextStyle(fontSize: 12, color: Colors.red),
+                ),
               ),
             ],
           ],
@@ -262,22 +302,27 @@ class _AddWorkerPageState extends State<AddWorkerPage> {
         if (_filials!.isEmpty)
           const Padding(
             padding: EdgeInsets.all(16),
-            child: Text('Филиалы не найдены', style: TextStyle(color: Colors.grey)),
+            child: Text(
+              'Филиалы не найдены',
+              style: TextStyle(color: Colors.grey),
+            ),
           )
         else
-          ..._filials!.map((filial) => _buildSwitchRow(
-                title: filial.name,
-                value: _selectedFilialIds.contains(filial.filialId),
-                onChanged: (value) {
-                  setState(() {
-                    if (value) {
-                      _selectedFilialIds.add(filial.filialId);
-                    } else {
-                      _selectedFilialIds.remove(filial.filialId);
-                    }
-                  });
-                },
-              )),
+          ..._filials!.map(
+            (filial) => _buildSwitchRow(
+              title: filial.name,
+              value: _selectedFilialIds.contains(filial.filialId),
+              onChanged: (value) {
+                setState(() {
+                  if (value) {
+                    _selectedFilialIds.add(filial.filialId);
+                  } else {
+                    _selectedFilialIds.remove(filial.filialId);
+                  }
+                });
+              },
+            ),
+          ),
         const SizedBox(height: 16),
       ],
     );
@@ -289,7 +334,10 @@ class _AddWorkerPageState extends State<AddWorkerPage> {
         Row(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            const Text('Категории *', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+            const Text(
+              'Категории *',
+              style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+            ),
             if (_selectedCategories.isEmpty) ...[
               const SizedBox(width: 8),
               Container(
@@ -298,7 +346,10 @@ class _AddWorkerPageState extends State<AddWorkerPage> {
                   color: Colors.red.shade100,
                   borderRadius: BorderRadius.circular(12),
                 ),
-                child: const Text('Выбрать', style: TextStyle(fontSize: 12, color: Colors.red)),
+                child: const Text(
+                  'Выбрать',
+                  style: TextStyle(fontSize: 12, color: Colors.red),
+                ),
               ),
             ],
           ],
@@ -307,22 +358,27 @@ class _AddWorkerPageState extends State<AddWorkerPage> {
         if (_categories!.isEmpty)
           const Padding(
             padding: EdgeInsets.all(16),
-            child: Text('Категории не найдены', style: TextStyle(color: Colors.grey)),
+            child: Text(
+              'Категории не найдены',
+              style: TextStyle(color: Colors.grey),
+            ),
           )
         else
-          ..._categories!.map((category) => _buildSwitchRow(
-                title: category.name,
-                value: _selectedCategories.contains(category.name),
-                onChanged: (value) {
-                  setState(() {
-                    if (value) {
-                      _selectedCategories.add(category.name);
-                    } else {
-                      _selectedCategories.remove(category.name);
-                    }
-                  });
-                },
-              )),
+          ..._categories!.map(
+            (category) => _buildSwitchRow(
+              title: category.name,
+              value: _selectedCategories.contains(category.name),
+              onChanged: (value) {
+                setState(() {
+                  if (value) {
+                    _selectedCategories.add(category.name);
+                  } else {
+                    _selectedCategories.remove(category.name);
+                  }
+                });
+              },
+            ),
+          ),
         const SizedBox(height: 16),
       ],
     );

@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:mone_task_app/admin/provider/admin_task_item.dart';
+import 'package:mone_task_app/admin/provider/admin_tasks_provider.dart';
+import 'package:mone_task_app/shared/widgets/task_reorder_list.dart';
 import 'package:mone_task_app/admin/provider/video_download_provider.dart';
 import 'package:mone_task_app/checker/model/checker_check_task_model.dart';
 import 'package:provider/provider.dart';
@@ -11,11 +13,7 @@ class AdminTaskListWidget extends StatefulWidget {
   final DateTime selectedDate;
   final String role;
   final VoidCallback onRefresh;
-  final Function(
-    List<String> videoPaths,
-    int startIndex,
-    List<TaskModel> task,
-  )
+  final Function(List<String> videoPaths, int startIndex, List<TaskModel> task)
   onShowVideoPlayer;
 
   const AdminTaskListWidget({
@@ -47,40 +45,59 @@ class _AdminTaskListWidgetState extends State<AdminTaskListWidget> {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.tasks != widget.tasks ||
         oldWidget.filialId != widget.filialId) {
-      final downloadProvider = context.read<VideoDownloadProvider>();
-      downloadProvider.startDownloadsForTasks(widget.tasks, widget.filialId);
+      // didUpdateWidget build paytida chaqiriladi — provider notifyListeners
+      // qilsa "element.dirty" assertion chiqadi. Shuning uchun frame'dan keyin.
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        context.read<VideoDownloadProvider>().startDownloadsForTasks(
+          widget.tasks,
+          widget.filialId,
+        );
+      });
     }
   }
 
-  /// Faqat videoli tasklar ro'yxati
+  /// Taskning barcha videolari (multiVideo bo'lsa bir nechta)
+  List<String> _taskVideos(TaskModel t) {
+    if (t.videoUrls.isNotEmpty) return t.videoUrls;
+    if (t.videoUrl != null && t.videoUrl!.isNotEmpty) return [t.videoUrl!];
+    return const [];
+  }
+
+  /// Har bir video uchun bitta yozuv — ko'p videoli task necha marta takrorlanadi,
+  /// shunda player barcha videolarni ketma-ket ko'rsatadi
   List<TaskModel> _getVideoTasks() {
-    return widget.tasks
-        .where((t) => t.videoUrl != null && t.videoUrl!.isNotEmpty)
-        .toList();
+    return [
+      for (final t in widget.tasks)
+        for (final _ in _taskVideos(t)) t,
+    ];
   }
 
-  /// Faqat videoli tasklar uchun resolved path'lar
+  /// _getVideoTasks bilan bir xil tartibdagi resolved path'lar
   List<String> _getVideoPaths(VideoDownloadProvider downloadProvider) {
-    return _getVideoTasks().map((t) {
-      final fullUrl = downloadProvider.getFullUrl(t.videoUrl!);
-      return downloadProvider.resolvedPath(fullUrl);
-    }).toList();
+    return [
+      for (final t in widget.tasks)
+        for (final url in _taskVideos(t))
+          downloadProvider.resolvedPath(downloadProvider.getFullUrl(url)),
+    ];
   }
 
-  /// Berilgan task videoli tasklar ichida nechanchi index da turganini topish
+  /// Berilgan taskning birinchi videosi playlist ichida nechanchi index da
   int _getVideoIndex(TaskModel task) {
     final videoTasks = _getVideoTasks();
     return videoTasks.indexWhere((t) => t.taskId == task.taskId);
   }
 
   void _shareTaskLink(TaskModel task) {
-    final link = 'https://taskapi.monebakeryuz.uz/task/${task.date}/${task.taskId}';
+    final link =
+        'https://taskapi.monebakeryuz.uz/task/${task.date}/${task.taskId}';
     shareTaskLink(title: task.task, link: link, context: context);
   }
 
   @override
   Widget build(BuildContext context) {
     final downloadProvider = context.watch<VideoDownloadProvider>();
+    final tasksProvider = context.watch<AdminTasksProvider>();
 
     // tasks allaqachon filial + status bo'yicha filterlangan
     final filtered = widget.tasks;
@@ -91,8 +108,13 @@ class _AdminTaskListWidgetState extends State<AdminTaskListWidget> {
 
     return RefreshIndicator(
       onRefresh: () async => widget.onRefresh(),
-      child: ListView.builder(
-        padding: const EdgeInsets.all(8),
+      // Telegram'dagidek: kartani bosib turib sudrab joyini o'zgartirish
+      child: ReorderableListView.builder(
+        buildDefaultDragHandles: false,
+        proxyDecorator: liftedTaskProxy,
+        onReorderStart: reorderHaptic,
+        onReorderItem: (o, n) => tasksProvider.reorderVisible(filtered, o, n),
+        padding: const EdgeInsets.fromLTRB(12, 10, 12, 24),
         itemCount: filtered.length,
         itemBuilder: (_, i) {
           final task = filtered[i];
@@ -112,7 +134,9 @@ class _AdminTaskListWidgetState extends State<AdminTaskListWidget> {
           }
 
           return AdminTaskListItem(
+            key: ValueKey(task.taskId),
             index: i + 1,
+            reorderIndex: i,
             task: task,
             role: widget.role,
             videoPath: videoPath,
@@ -120,17 +144,17 @@ class _AdminTaskListWidgetState extends State<AdminTaskListWidget> {
             downloadProgress: videoState.progress,
             selectedDate: widget.selectedDate,
             onRefresh: widget.onRefresh,
-            onShowVideoPlayer: (path) {
+            onShowVideoPlayer: (videoIndex) {
               // ── MUHIM: faqat videoli tasklar va to'g'ri index ──────────
-              final hasVideo =
-                  task.videoUrl != null && task.videoUrl!.isNotEmpty;
-              if (!hasVideo) return; // videosiz task — hech narsa qilmaymiz
+              if (_taskVideos(task).isEmpty) return; // videosiz task
 
               final allVideoPaths = _getVideoPaths(downloadProvider);
               final videoTasks = _getVideoTasks();
-              final startIndex = _getVideoIndex(task);
+              final firstIndex = _getVideoIndex(task);
 
-              if (startIndex < 0 || allVideoPaths.isEmpty) return;
+              if (firstIndex < 0 || allVideoPaths.isEmpty) return;
+              // Bosilgan thumbnail — taskning nechanchi videosi
+              final startIndex = firstIndex + videoIndex;
 
               widget.onShowVideoPlayer(
                 allVideoPaths,
@@ -139,6 +163,7 @@ class _AdminTaskListWidgetState extends State<AdminTaskListWidget> {
               );
             },
             onShareVideo: () => _shareTaskLink(task),
+            onTogglePin: () => tasksProvider.togglePin(task),
           );
         },
       ),

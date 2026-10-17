@@ -9,6 +9,8 @@ class TemplateTaskModel {
   final String category;
   final String createdAt;
   final String? notificationTime;
+  final bool multiVideo;
+  final int videoCount;
 
   TemplateTaskModel({
     required this.templateId,
@@ -20,6 +22,8 @@ class TemplateTaskModel {
     required this.createdAt,
     this.notificationTime,
     required this.category,
+    this.multiVideo = false,
+    this.videoCount = 1,
   });
 
   factory TemplateTaskModel.fromJson(Map<String, dynamic> json) {
@@ -33,6 +37,8 @@ class TemplateTaskModel {
       createdAt: json['createdAt'] ?? '',
       category: json['category'],
       notificationTime: json['notificationTime'],
+      multiVideo: json['multiVideo'] ?? false,
+      videoCount: json['videoCount'] ?? 1,
     );
   }
 

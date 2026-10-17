@@ -6,10 +6,11 @@ import 'package:mone_task_app/admin/provider/admin_tasks_provider.dart';
 import 'package:mone_task_app/admin/provider/video_download_provider.dart';
 import 'package:mone_task_app/admin/ui/audio_task_row.dart';
 import 'package:mone_task_app/checker/model/checker_check_task_model.dart';
+import 'package:mone_task_app/shared/widgets/task_video_strip.dart';
 import 'package:mone_task_app/utils/get_color.dart';
 import 'package:provider/provider.dart';
 
-class AdminTaskListItem extends StatefulWidget {
+class AdminTaskListItem extends StatelessWidget {
   final int index;
   final TaskModel task;
   final String? videoPath;
@@ -18,8 +19,14 @@ class AdminTaskListItem extends StatefulWidget {
   final DateTime selectedDate;
   final String role;
   final VoidCallback onRefresh;
-  final Function(String) onShowVideoPlayer;
+
+  /// [videoIndex] — taskning nechanchi videosi bosilgani
+  final void Function(int videoIndex) onShowVideoPlayer;
   final VoidCallback onShareVideo;
+  final VoidCallback onTogglePin;
+
+  /// ReorderableListView ichidagi o'rni — sarlavhani bosib turib sudrash uchun
+  final int? reorderIndex;
 
   const AdminTaskListItem({
     super.key,
@@ -33,314 +40,354 @@ class AdminTaskListItem extends StatefulWidget {
     required this.onShowVideoPlayer,
     required this.role,
     required this.onShareVideo,
+    required this.onTogglePin,
+    this.reorderIndex,
   });
 
-  @override
-  State<AdminTaskListItem> createState() => _AdminTaskListItemState();
-}
+  bool get _hasVideo => task.hasAnyVideo;
 
-class _AdminTaskListItemState extends State<AdminTaskListItem>
-    with SingleTickerProviderStateMixin {
-  late AnimationController _pulseController;
+  List<String> get _videos => task.allVideos;
 
-  TaskModel get task => widget.task;
-
-  @override
-  void initState() {
-    super.initState();
-    _pulseController = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 800),
-    )..repeat(reverse: true);
+  /// Kartaning chap chizig'i — joriy holat rangi
+  Color get _accentColor {
+    switch (task.status) {
+      case 3:
+        return Colors.green;
+      case 2:
+        return Colors.orange;
+      case 1:
+        return Colors.red;
+    }
+    if (task.videosComplete) return const Color(0xFF2563EB);
+    return _hasVideo ? Colors.orange.shade200 : const Color(0xFFD1D5DB);
   }
-
-  @override
-  void dispose() {
-    _pulseController.dispose();
-    super.dispose();
-  }
-
-  bool _isTablet(BuildContext context) =>
-      MediaQuery.of(context).size.shortestSide >= 600;
-
-  bool _isLandscape(BuildContext context) =>
-      MediaQuery.of(context).orientation == Orientation.landscape;
 
   @override
   Widget build(BuildContext context) {
-    if (_isTablet(context) && _isLandscape(context)) {
-      return _buildTabletLandscapeCard(context);
-    }
-    return _buildDefaultCard(context);
-  }
+    final isTablet = MediaQuery.of(context).size.shortestSide >= 600;
 
-  // ── Cards ─────────────────────────────────────────────────────────────────
-
-  Widget _buildDefaultCard(BuildContext context) {
-    return Card(
-      margin: const EdgeInsets.only(bottom: 12),
-      elevation: 2,
-      color: Colors.white70,
-      child: InkWell(
-        onTap: _handleTap,
-        child: Padding(
-          padding: const EdgeInsets.all(12),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Expanded(child: _buildTaskInfo(context, showBadge: true)),
-              _buildShareButton(context),
-            ],
+    return Container(
+      margin: const EdgeInsets.only(bottom: 10),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: const Color(0xFFEDEEF1)),
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0x0A000000),
+            blurRadius: 12,
+            offset: Offset(0, 4),
           ),
-        ),
+        ],
       ),
-    );
-  }
-
-  Widget _buildTabletLandscapeCard(BuildContext context) {
-    return Card(
-      margin: const EdgeInsets.only(bottom: 12),
-      elevation: 2,
-      color: Colors.white70,
-      child: InkWell(
-        onTap: _handleTap,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.center,
-            children: [
-              Expanded(
-                flex: 65,
-                child: _buildTaskInfo(context, showBadge: false),
-              ),
-              const SizedBox(width: 16),
-              if (task.videoUrl != null && task.videoUrl!.isNotEmpty) ...[
-                _buildVideoStatusBadge(),
-                const SizedBox(width: 4),
-              ] else ...[
-                const Icon(
-                  Icons.videocam_off,
-                  size: 20,
-                  color: Colors.blueGrey,
+      clipBehavior: Clip.antiAlias,
+      // Chap rangli chiziq Positioned bilan — TaskVideoStrip ichidagi
+      // LayoutBuilder IntrinsicHeight bilan ishlamaydi
+      child: Stack(
+        children: [
+          Positioned(
+            left: 0,
+            top: 0,
+            bottom: 0,
+            width: 4,
+            child: ColoredBox(color: _accentColor),
+          ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 12, 12, 12),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Sarlavha qismini bosib turib sudrash — pastdagi ovoz yozish
+                // va videoni uzoq bosish bilan to'qnashmaydi
+                _dragArea(
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      _buildHeader(context, isTablet),
+                      const SizedBox(height: 8),
+                      _buildMeta(),
+                    ],
+                  ),
                 ),
-                const SizedBox(width: 4),
+                const SizedBox(height: 12),
+                TaskVideoStrip(
+                  videoUrls: _videos,
+                  slotCount: task.videoCount,
+                  onOpenVideo: onShowVideoPlayer,
+                ),
+                const SizedBox(height: 10),
+                AudioTaskRow.fromCheckerTask(
+                  task: task,
+                  selectedDate: selectedDate,
+                ),
               ],
-              _buildShareButton(context),
-            ],
+            ),
           ),
-        ),
+        ],
       ),
     );
   }
 
-  // ── Task info ─────────────────────────────────────────────────────────────
+  Widget _dragArea(Widget child) {
+    final i = reorderIndex;
+    if (i == null) return child;
+    return ReorderableDelayedDragStartListener(index: i, child: child);
+  }
 
-  Widget _buildTaskInfo(BuildContext context, {required bool showBadge}) {
-    final isPhone = !_isTablet(context);
-    return Column(
+  // ── Header: raqam + nom + status ──────────────────────────────────────────
+
+  Widget _buildHeader(BuildContext context, bool isTablet) {
+    return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-          "${widget.index}. ${task.task}",
-          style: TextStyle(
-            fontSize: isPhone ? 16 : 20,
-            fontWeight: FontWeight.bold,
+        Container(
+          width: 26,
+          height: 26,
+          margin: const EdgeInsets.only(top: 1),
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            color: const Color(0xFFF3F4F6),
+            borderRadius: BorderRadius.circular(8),
           ),
-        ),
-        // Kim yubordi + vaqt
-        if (task.submittedBy != null)
-          Text(
-            "${task.submittedBy} | "
-            "${task.submittedAt?.toLocal().hour.toString().padLeft(2, '0')}:"
-            "${task.submittedAt?.minute.toString().padLeft(2, '0')}",
-          ),
-        const SizedBox(height: 4),
-        // Tur + video badge + status tugmalari
-        Row(
-          children: [
-            Expanded(
-              child: Text(
-                getTypeName(task.type),
-                style: const TextStyle(fontSize: 12, color: Colors.black),
-              ),
+          child: Text(
+            '$index',
+            style: const TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w700,
+              color: Color(0xFF4B5563),
             ),
-            if (showBadge) ...[
-              if (task.videoUrl != null && task.videoUrl!.isNotEmpty) ...[
-                _buildVideoStatusBadge(),
-                const SizedBox(width: 8),
-              ] else ...[
-                const Icon(
-                  Icons.videocam_off,
-                  size: 20,
-                  color: Colors.blueGrey,
-                ),
-                const SizedBox(width: 8),
-              ],
-            ],
-            _buildStatusIndicator(),
-          ],
+          ),
         ),
-        // ── AudioTaskRow: yozish + yuborish + eshitish ─────────────────────
-        const SizedBox(height: 8),
-        AudioTaskRow.fromCheckerTask(task: task, selectedDate: widget.selectedDate),
+        const SizedBox(width: 10),
+        Expanded(
+          child: Text(
+            task.task,
+            style: TextStyle(
+              fontSize: isTablet ? 18 : 15.5,
+              fontWeight: FontWeight.w700,
+              height: 1.3,
+              color: const Color(0xFF111827),
+            ),
+          ),
+        ),
+        const SizedBox(width: 8),
+        _StatusButtons(
+          task: task,
+          selectedDate: selectedDate,
+          isTablet: isTablet,
+        ),
       ],
     );
   }
 
-  // ── Status tugmalari (faqat 3 ta — mic olib tashlandi) ────────────────────
+  // ── Meta: tur, kim yubordi, videolar soni, yuklanish holati ───────────────
 
-  Widget _buildStatusIndicator() {
-    final bool hasVideo = task.videoUrl != null && task.videoUrl!.isNotEmpty;
-    final isPhone = !_isTablet(context);
-    final double gap = isPhone ? 12 : 30;
+  Widget _buildMeta() {
+    final submitted = task.submittedBy != null
+        ? "${task.submittedBy} · "
+              "${task.submittedAt?.toLocal().hour.toString().padLeft(2, '0')}:"
+              "${task.submittedAt?.toLocal().minute.toString().padLeft(2, '0')}"
+        : null;
+    final slots = task.videoCount > _videos.length
+        ? task.videoCount
+        : _videos.length;
 
+    return Row(
+      children: [
+        Expanded(
+          child: Wrap(
+            spacing: 6,
+            runSpacing: 6,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            children: [
+              _chip(
+                Icons.repeat_rounded,
+                getTypeName(task.type).replaceAll(':', '').trim(),
+              ),
+              if (slots > 1)
+                _chip(
+                  Icons.videocam_outlined,
+                  task.videosComplete || !_hasVideo
+                      ? "${_videos.length}/$slots"
+                      : "${_videos.length}/$slots · не все видео",
+                  color: task.videosComplete
+                      ? Colors.green
+                      : _hasVideo
+                      ? Colors.orange
+                      : const Color(0xFF2563EB),
+                ),
+              if (submitted != null) _chip(Icons.person_outline, submitted),
+              if (_hasVideo) _buildDownloadBadge(),
+            ],
+          ),
+        ),
+        SizedBox(
+          width: 32,
+          height: 32,
+          child: IconButton(
+            padding: EdgeInsets.zero,
+            iconSize: 18,
+            tooltip: task.pinned ? 'Открепить' : 'Закрепить',
+            color: task.pinned
+                ? const Color(0xFF2563EB)
+                : const Color(0xFF9CA3AF),
+            onPressed: onTogglePin,
+            icon: Icon(
+              task.pinned ? Icons.push_pin_rounded : Icons.push_pin_outlined,
+            ),
+          ),
+        ),
+        if (_hasVideo)
+          SizedBox(
+            width: 32,
+            height: 32,
+            child: IconButton(
+              padding: EdgeInsets.zero,
+              iconSize: 18,
+              color: const Color(0xFF6B7280),
+              onPressed: onShareVideo,
+              icon: Icon(
+                Platform.isWindows
+                    ? CupertinoIcons.doc_on_doc
+                    : CupertinoIcons.share,
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+
+  Widget _chip(IconData icon, String text, {Color? color}) {
+    final c = color ?? const Color(0xFF6B7280);
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: color == null
+            ? const Color(0xFFF3F4F6)
+            : c.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 13, color: c),
+          const SizedBox(width: 4),
+          Text(
+            text,
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w500,
+              color: c,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildDownloadBadge() {
+    switch (videoStatus) {
+      case VideoStatus.cached:
+        return const SizedBox.shrink();
+      case VideoStatus.downloading:
+        return _chip(
+          Icons.downloading_rounded,
+          '${(downloadProgress * 100).toInt()}%',
+          color: const Color(0xFF2563EB),
+        );
+      case VideoStatus.error:
+        return _chip(Icons.error_outline, 'Ошибка', color: Colors.red);
+      case VideoStatus.notStarted:
+        return _chip(
+          Icons.cloud_download_outlined,
+          'Загрузка',
+          color: const Color(0xFF2563EB),
+        );
+    }
+  }
+}
+
+// ── Status tugmalari: yashil / sariq / qizil ───────────────────────────────
+
+class _StatusButtons extends StatelessWidget {
+  final TaskModel task;
+  final DateTime selectedDate;
+  final bool isTablet;
+
+  const _StatusButtons({
+    required this.task,
+    required this.selectedDate,
+    required this.isTablet,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final hasVideo = task.hasAnyVideo;
+    // Barcha videolar yuklanmaguncha tasdiqlab (sariq) bo'lmaydi
+    final complete = task.videosComplete;
+    final gap = isTablet ? 14.0 : 8.0;
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        _statusCircleButton(3, task.status, Colors.green, enabled: false),
+        _circle(context, 3, Colors.green, enabled: false),
         SizedBox(width: gap),
-        _statusCircleButton(2, task.status, Colors.orange, enabled: hasVideo),
+        _circle(context, 2, Colors.orange, enabled: complete),
         SizedBox(width: gap),
-        _statusCircleButton(1, task.status, Colors.red, enabled: hasVideo),
+        _circle(context, 1, Colors.red, enabled: hasVideo),
       ],
     );
   }
 
-  Widget _statusCircleButton(
+  Widget _circle(
+    BuildContext context,
     int level,
-    int? currentStatus,
-    Color activeColor, {
-    bool enabled = true,
+    Color color, {
+    required bool enabled,
   }) {
-    final bool isActive = currentStatus == level;
-    final bool hasVideo = task.videoUrl != null && task.videoUrl!.isNotEmpty;
-    final bool isWaiting = hasVideo && currentStatus == null;
-    final isPhone = !_isTablet(context);
-    final double size = isPhone ? 30 : 40;
-    final double iconSize = isPhone ? 16 : 20;
+    final current = task.status;
+    final isActive = current == level;
+    final isWaiting = task.videosComplete && current == null;
+    final size = isTablet ? 38.0 : 28.0;
 
     return GestureDetector(
       onTap: enabled
           ? () async {
-              if (currentStatus != level) {
-                final tasksProvider = context.read<AdminTasksProvider>();
-                await tasksProvider.updateTaskStatus(
+              if (current != level) {
+                await context.read<AdminTasksProvider>().updateTaskStatus(
                   task.taskId,
                   level,
-                  widget.selectedDate,
+                  selectedDate,
                 );
               }
             }
           : null,
       child: AnimatedContainer(
-        duration: const Duration(milliseconds: 100),
+        duration: const Duration(milliseconds: 120),
         width: size,
         height: size,
         decoration: BoxDecoration(
           shape: BoxShape.circle,
-          color: isActive
-              ? activeColor
-              : activeColor.withValues(alpha: 0.1),
+          color: isActive ? color : color.withValues(alpha: 0.08),
           border: Border.all(
             color: isActive
-                ? activeColor
-                : activeColor.withValues(alpha: enabled ? 0.5 : 0.3),
+                ? color
+                : color.withValues(alpha: enabled ? 0.45 : 0.25),
             width: 2,
           ),
           boxShadow: isActive
-              ? [BoxShadow(color: activeColor.withValues(alpha: 0.4), blurRadius: 4)]
-              : [],
+              ? [BoxShadow(color: color.withValues(alpha: 0.35), blurRadius: 6)]
+              : const [],
         ),
         child: isActive
-            ? Icon(Icons.check, size: iconSize, color: Colors.white)
+            ? Icon(Icons.check, size: size * 0.55, color: Colors.white)
             : isWaiting
-                ? Icon(Icons.check, size: iconSize, color: activeColor.withValues(alpha: 0.5))
-                : null,
+            ? Icon(
+                Icons.check,
+                size: size * 0.55,
+                color: color.withValues(alpha: 0.5),
+              )
+            : null,
       ),
     );
-  }
-
-  // ── Share button ──────────────────────────────────────────────────────────
-
-  Widget _buildShareButton(BuildContext context) {
-    if (task.videoUrl == null || task.videoUrl!.isEmpty) {
-      return const SizedBox.shrink();
-    }
-    return IconButton(
-      onPressed: widget.onShareVideo,
-      icon: Icon(
-        Platform.isWindows ? CupertinoIcons.doc_on_doc : CupertinoIcons.share,
-      ),
-    );
-  }
-
-  // ── Video download badge ──────────────────────────────────────────────────
-
-  Widget _buildVideoStatusBadge() {
-    switch (widget.videoStatus) {
-      case VideoStatus.cached:
-        return const SizedBox.shrink();
-
-      case VideoStatus.downloading:
-        final percent = (widget.downloadProgress * 100).toInt();
-        return Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(
-              '$percent%',
-              style: const TextStyle(
-                fontSize: 11,
-                color: Colors.black,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-            const SizedBox(width: 6),
-            SizedBox(
-              width: 14,
-              height: 14,
-              child: CircularProgressIndicator(
-                value: widget.downloadProgress > 0
-                    ? widget.downloadProgress
-                    : null,
-                strokeWidth: 2,
-                valueColor: const AlwaysStoppedAnimation<Color>(Colors.black),
-                backgroundColor: Colors.black12,
-              ),
-            ),
-          ],
-        );
-
-      case VideoStatus.error:
-        return Container(
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-          decoration: BoxDecoration(
-            color: Colors.red,
-            borderRadius: BorderRadius.circular(12),
-          ),
-          child: const Icon(Icons.error_outline, size: 16, color: Colors.white),
-        );
-
-      case VideoStatus.notStarted:
-        return Container(
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-          decoration: BoxDecoration(
-            color: Colors.blue,
-            borderRadius: BorderRadius.circular(12),
-          ),
-          child: const Icon(
-            Icons.cloud_download,
-            size: 16,
-            color: Colors.white,
-          ),
-        );
-    }
-  }
-
-  // ── Tap handler ───────────────────────────────────────────────────────────
-
-  Future<void> _handleTap() async {
-    if (task.videoUrl != null && task.videoUrl!.isNotEmpty) {
-      widget.onShowVideoPlayer(task.videoUrl!);
-    }
   }
 }

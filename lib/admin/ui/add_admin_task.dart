@@ -6,6 +6,7 @@ import 'package:mone_task_app/admin/service/task_worker_service.dart';
 import 'package:mone_task_app/admin/ui/widgets/category_selector.dart';
 import 'package:mone_task_app/admin/ui/widgets/filial_selector.dart';
 import 'package:mone_task_app/admin/ui/widgets/task_type_selector.dart';
+import 'package:mone_task_app/shared/widgets/video_count_selector.dart';
 
 class AddAdminTask extends StatefulWidget {
   const AddAdminTask({super.key});
@@ -26,6 +27,7 @@ class _AddAdminTaskState extends State<AddAdminTask> {
   List<int> _selectedDays = [];
   int? _selectedCategoryId;
   DateTime? _selectedTime;
+  int _videoCount = 1;
 
   @override
   void initState() {
@@ -39,7 +41,7 @@ class _AddAdminTaskState extends State<AddAdminTask> {
     super.dispose();
   }
 
-  void _submitTask() {
+  Future<void> _submitTask() async {
     if (_controller.text.isEmpty) {
       _showError("Пожалуйста, введите задание.");
       return;
@@ -61,7 +63,9 @@ class _AddAdminTaskState extends State<AddAdminTask> {
       return;
     }
 
-    final categoryName = _categoryKey.currentState?.getCategoryName(_selectedCategoryId!);
+    final categoryName = _categoryKey.currentState?.getCategoryName(
+      _selectedCategoryId!,
+    );
     if (categoryName == null) {
       _showError("Категория не найдена.");
       return;
@@ -71,15 +75,28 @@ class _AddAdminTaskState extends State<AddAdminTask> {
       taskType: _type,
       filialsId: _selectedFilials,
       task: _controller.text,
-      days: _type == 1 ? null : _type == 2 ? _selectedWeekDays : _selectedDays,
+      days: _type == 1
+          ? null
+          : _type == 2
+          ? _selectedWeekDays
+          : _selectedDays,
       category: categoryName,
+      multiVideo: _videoCount > 1,
+      videoCount: _videoCount,
     );
-    _taskService.addTask(model);
+    final ok = await _taskService.addTask(model);
+    if (!mounted) return;
+    if (!ok) {
+      _showError("Не удалось добавить задачу");
+      return;
+    }
     Navigator.pop(context, true);
   }
 
   void _showError(String message) {
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(message)));
   }
 
   @override
@@ -149,7 +166,8 @@ class _AddAdminTaskState extends State<AddAdminTask> {
                     _selectedDays.clear();
                   }),
                   selectedWeekDays: _selectedWeekDays,
-                  onWeekDaysChanged: (days) => setState(() => _selectedWeekDays = days),
+                  onWeekDaysChanged: (days) =>
+                      setState(() => _selectedWeekDays = days),
                   selectedDays: _selectedDays,
                   onDaysChanged: (days) => setState(() => _selectedDays = days),
                 ),
@@ -158,6 +176,12 @@ class _AddAdminTaskState extends State<AddAdminTask> {
                   filials: filials,
                   selectedIds: _selectedFilials,
                   onChanged: (ids) => setState(() => _selectedFilials = ids),
+                ),
+                const SizedBox(height: 12),
+
+                VideoCountSelector(
+                  value: _videoCount,
+                  onChanged: (v) => setState(() => _videoCount = v),
                 ),
                 const SizedBox(height: 20),
 
@@ -182,7 +206,10 @@ class _AddAdminTaskState extends State<AddAdminTask> {
                     onPressed: _submitTask,
                     child: const Text(
                       "Добавить задачу",
-                      style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                      ),
                     ),
                   ),
                 ),

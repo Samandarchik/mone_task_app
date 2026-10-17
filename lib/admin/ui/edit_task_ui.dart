@@ -5,6 +5,7 @@ import 'package:mone_task_app/admin/service/task_worker_service.dart';
 import 'package:mone_task_app/admin/ui/widgets/category_selector.dart';
 import 'package:mone_task_app/admin/ui/widgets/task_type_selector.dart';
 import 'package:mone_task_app/checker/model/checker_check_task_model.dart';
+import 'package:mone_task_app/shared/widgets/video_count_selector.dart';
 
 class EditTaskUi extends StatefulWidget {
   final TaskModel task;
@@ -28,6 +29,7 @@ class _EditTaskUiState extends State<EditTaskUi> {
   int? _selectedMinute;
   bool _showTimePicker = false;
   bool _isSubmitting = false;
+  late int _videoCount = widget.task.videoCount;
 
   @override
   void initState() {
@@ -95,7 +97,9 @@ class _EditTaskUiState extends State<EditTaskUi> {
       return;
     }
 
-    final categoryName = _categoryKey.currentState?.getCategoryName(_selectedCategoryId!);
+    final categoryName = _categoryKey.currentState?.getCategoryName(
+      _selectedCategoryId!,
+    );
     if (categoryName == null) {
       _showError("Категория не найдена");
       return;
@@ -111,16 +115,27 @@ class _EditTaskUiState extends State<EditTaskUi> {
       days: _selectedType == 1
           ? null
           : _selectedType == 2
-              ? _selectedWeekDays
-              : _selectedDays,
+          ? _selectedWeekDays
+          : _selectedDays,
       hour: _selectedHour,
       minute: _selectedMinute,
       category: categoryName,
+      // Eski "cheklanmagan" ko'p videoli task 1 qoldirilsa — shunday qoladi
+      multiVideo:
+          _videoCount > 1 ||
+          (widget.task.multiVideo && _videoCount == widget.task.videoCount),
+      videoCount: _videoCount,
     );
 
     try {
-      await _taskService.updateTaskStatus(model);
-      if (mounted) Navigator.pop(context, true);
+      final ok = await _taskService.updateTaskStatus(model);
+      if (!mounted) return;
+      if (!ok) {
+        setState(() => _isSubmitting = false);
+        _showError("Не удалось сохранить");
+        return;
+      }
+      Navigator.pop(context, true);
     } catch (e) {
       if (mounted) {
         setState(() => _isSubmitting = false);
@@ -129,8 +144,45 @@ class _EditTaskUiState extends State<EditTaskUi> {
     }
   }
 
+  Future<void> _deleteTask() async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Удалить задачу?'),
+        content: Text(widget.task.task),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Нет'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: FilledButton.styleFrom(backgroundColor: Colors.red),
+            child: const Text('Удалить'),
+          ),
+        ],
+      ),
+    );
+    if (confirm != true) return;
+
+    setState(() => _isSubmitting = true);
+    bool ok = false;
+    try {
+      ok = await _taskService.deleteTask(widget.task.taskId);
+    } catch (_) {}
+    if (!mounted) return;
+    if (ok) {
+      Navigator.pop(context, true);
+    } else {
+      setState(() => _isSubmitting = false);
+      _showError("Не удалось удалить");
+    }
+  }
+
   void _showError(String message) {
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(message)));
   }
 
   @override
@@ -139,7 +191,11 @@ class _EditTaskUiState extends State<EditTaskUi> {
       appBar: AppBar(
         title: const Text("Редактировать задачу"),
         actions: [
-          IconButton(onPressed: () {}, icon: const Icon(Icons.delete_outline)),
+          IconButton(
+            onPressed: _isSubmitting ? null : _deleteTask,
+            icon: const Icon(Icons.delete_outline, color: Colors.red),
+            tooltip: 'Удалить',
+          ),
         ],
       ),
       body: SingleChildScrollView(
@@ -172,10 +228,17 @@ class _EditTaskUiState extends State<EditTaskUi> {
                 _selectedDays.clear();
               }),
               selectedWeekDays: _selectedWeekDays,
-              onWeekDaysChanged: (days) => setState(() => _selectedWeekDays = days),
+              onWeekDaysChanged: (days) =>
+                  setState(() => _selectedWeekDays = days),
               selectedDays: _selectedDays,
               onDaysChanged: (days) => setState(() => _selectedDays = days),
             ),
+
+            VideoCountSelector(
+              value: _videoCount,
+              onChanged: (v) => setState(() => _videoCount = v),
+            ),
+            const SizedBox(height: 12),
 
             _buildTimeSelector(),
             const SizedBox(height: 30),
@@ -188,7 +251,10 @@ class _EditTaskUiState extends State<EditTaskUi> {
                     ? const CupertinoActivityIndicator(color: Colors.white)
                     : const Text(
                         "Сохранить изменения",
-                        style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                        ),
                       ),
               ),
             ),
@@ -221,10 +287,14 @@ class _EditTaskUiState extends State<EditTaskUi> {
           child: Container(
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
-              color: _selectedHour != null ? Colors.blue.shade50 : Colors.grey.shade100,
+              color: _selectedHour != null
+                  ? Colors.blue.shade50
+                  : Colors.grey.shade100,
               borderRadius: BorderRadius.circular(12),
               border: Border.all(
-                color: _selectedHour != null ? Colors.blue.shade200 : Colors.grey.shade300,
+                color: _selectedHour != null
+                    ? Colors.blue.shade200
+                    : Colors.grey.shade300,
               ),
             ),
             child: Row(
@@ -274,7 +344,9 @@ class _EditTaskUiState extends State<EditTaskUi> {
               mode: CupertinoDatePickerMode.time,
               use24hFormat: true,
               initialDateTime: DateTime(
-                2026, 1, 1,
+                2026,
+                1,
+                1,
                 _selectedHour ?? DateTime.now().hour,
                 _selectedMinute ?? DateTime.now().minute,
               ),

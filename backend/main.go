@@ -11,6 +11,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -217,6 +218,89 @@ func fullAudioURLs(urls []string) []string {
 	return result
 }
 
+// parseVideoURLs - DB dagi video_url ni o'qiydi.
+// Eski format: bitta URL, yangi format (multiVideo): JSON array.
+// Barcha videolar (to'liq URL) va oxirgi videoni qaytaradi.
+func parseVideoURLs(raw *string) ([]string, *string) {
+	urls := fullAudioURLs(parseCheckerAudioURLs(raw))
+	if len(urls) == 0 {
+		return []string{}, nil
+	}
+	last := urls[len(urls)-1]
+	return urls, &last
+}
+
+// videoConfig - template bo'yicha video sozlamasi
+type videoConfig struct {
+	Count int  // super admin belgilagan videolar soni (kamida 1)
+	Multi bool // bir nechta video saqlanadimi
+}
+
+// getTemplateVideoConfigs - har bir template uchun videolar soni.
+// Eski multi_video=1 template'lar cheklanmagan ko'p video sifatida qoladi.
+func getTemplateVideoConfigs() map[int]videoConfig {
+	result := map[int]videoConfig{}
+	mainDB, err := getMainDB()
+	if err != nil {
+		return result
+	}
+	defer mainDB.Close()
+	rows, err := mainDB.Query("SELECT id, COALESCE(video_count, 1), COALESCE(multi_video, 0) FROM task_templates")
+	if err != nil {
+		return result
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var id, count int
+		var multi bool
+		rows.Scan(&id, &count, &multi)
+		if count < 1 {
+			count = 1
+		}
+		result[id] = videoConfig{Count: count, Multi: multi || count > 1}
+	}
+	return result
+}
+
+// saveTaskVideo - taskga video yozadi. Template ko'p videoli bo'lsa,
+// slot >= 0 va mavjud bo'lsa o'sha video almashtiriladi, aks holda ro'yxatga
+// qo'shiladi (video_count dan oshsa eng eskisi tushib qoladi).
+// Bitta videoli taskda eski video almashtiriladi.
+// Status NULL ga o'tadi - admin/checker ko'rib chiqishi uchun.
+func saveTaskVideo(db *sql.DB, taskID, videoURL, submittedAt, username string, slot int) error {
+	var templateID sql.NullInt64
+	var existing *string
+	db.QueryRow("SELECT template_id, video_url FROM tasks WHERE id = ?", taskID).Scan(&templateID, &existing)
+
+	value := videoURL
+	if cfg := getTemplateVideoConfigs()[int(templateID.Int64)]; templateID.Valid && cfg.Multi {
+		urls := parseCheckerAudioURLs(existing)
+		if slot >= 0 && slot < len(urls) {
+			urls[slot] = videoURL
+		} else {
+			urls = append(urls, videoURL)
+		}
+		if cfg.Count > 1 && len(urls) > cfg.Count {
+			urls = urls[len(urls)-cfg.Count:]
+		}
+		b, _ := json.Marshal(urls)
+		value = string(b)
+	}
+
+	_, err := db.Exec("UPDATE tasks SET status = NULL, video_url = ?, submitted_at = ?, submitted_by = ? WHERE id = ?",
+		value, submittedAt, username, taskID)
+	return err
+}
+
+// taskVideoConfig - task JSON uchun multiVideo va videoCount qiymatlari
+func taskVideoConfig(configs map[int]videoConfig, templateID sql.NullInt64) (bool, int) {
+	cfg, ok := configs[int(templateID.Int64)]
+	if !templateID.Valid || !ok {
+		return false, 1
+	}
+	return cfg.Multi, cfg.Count
+}
+
 // UTC+5 - Toshkent vaqt zonasi
 var tashkentZone = time.FixedZone("UTC+5", 5*60*60)
 
@@ -255,6 +339,9 @@ type User struct {
 	IsLogin        bool     `json:"isLogin"`
 	PhoneNumber    *string  `json:"phoneNumber,omitempty"`
 	ProfileJSON    *string  `json:"profileJson,omitempty"`
+	// CanManageTasks — super_admin bergan ruxsat: foydalanuvchi o'z
+	// filiallari uchun vazifa qo'shishi, tahrirlashi va o'chirishi mumkin.
+	CanManageTasks bool `json:"canManageTasks"`
 }
 
 type Filial struct {
@@ -271,12 +358,17 @@ type Category struct {
 // admin/checker o'zgartirsa yangilanadi
 type Task struct {
 	ID               int      `json:"taskId"`
+	TemplateID       int      `json:"templateId"`
+	Pinned           bool     `json:"pinned"` // joriy foydalanuvchi qadab qo'ygan
 	FilialID         int      `json:"filialId"`
 	WorkerIDs        []int    `json:"workerIds,omitempty"`
 	Task             string   `json:"task"`
 	Type             int      `json:"type"`
-	Status           *int     `json:"status"` // null yoki 1,2,3,4
-	VideoURL         *string  `json:"videoUrl"`
+	Status           *int     `json:"status"`    // null yoki 1,2,3,4
+	VideoURL         *string  `json:"videoUrl"`  // oxirgi yuborilgan video
+	VideoURLs        []string `json:"videoUrls"` // barcha videolar (multiVideo bo'lsa bir nechta)
+	MultiVideo       bool     `json:"multiVideo"`
+	VideoCount       int      `json:"videoCount"` // super admin belgilagan videolar soni
 	CheckerAudioURLs []string `json:"checkerAudioUrls"`
 	SubmittedAt      *string  `json:"submittedAt,omitempty"`
 	SubmittedBy      *string  `json:"submittedBy,omitempty"`
@@ -296,6 +388,8 @@ type TaskTemplate struct {
 	Category         string `json:"category"`
 	NotificationTime string `json:"notificationTime,omitempty"`
 	OrderIndex       int    `json:"orderIndex"`
+	MultiVideo       bool   `json:"multiVideo"`
+	VideoCount       int    `json:"videoCount"`
 	CreatedAt        string `json:"createdAt"`
 }
 
@@ -339,6 +433,8 @@ func main() {
 	r.HandleFunc("/api/tasks/{id}/voice-comment/{date}/{audioIndex}", authMiddleware(deleteCheckerAudio)).Methods("DELETE")
 	r.HandleFunc("/api/tasks/reorder/{taskId}/{newPosition}", authMiddleware(reorderTask)).Methods("PUT")
 	r.HandleFunc("/api/tasks/reorder", authMiddleware(reorderAllTasks)).Methods("PUT")
+	r.HandleFunc("/api/task-prefs/pin/{templateId}", authMiddleware(setTaskPin)).Methods("PUT")
+	r.HandleFunc("/api/task-prefs/order", authMiddleware(setTaskOrder)).Methods("PUT")
 
 	// Templates
 	r.HandleFunc("/api/templates/{id}", authMiddleware(getTemplate)).Methods("GET")
@@ -439,6 +535,7 @@ p{color:#666;margin:0 0 24px}
 	r.HandleFunc("/health", healthCheck).Methods("GET")
 
 	// Static files - video va audio
+	r.PathPrefix("/thumbs/videos/").HandlerFunc(serveVideoThumb)
 	r.PathPrefix("/videos/").Handler(http.StripPrefix("/videos/", http.FileServer(http.Dir("./videos"))))
 	r.PathPrefix("/audios/").Handler(http.StripPrefix("/audios/", http.FileServer(http.Dir("./audios"))))
 
@@ -513,9 +610,20 @@ func createMainDB() {
 	}
 
 	db.Exec("ALTER TABLE task_templates ADD COLUMN order_index INTEGER DEFAULT 0")
+	db.Exec("ALTER TABLE task_templates ADD COLUMN multi_video INTEGER DEFAULT 0")
+	db.Exec("ALTER TABLE task_templates ADD COLUMN video_count INTEGER DEFAULT 1")
+	// Har bir foydalanuvchining shaxsiy pin va tartibi (template bo'yicha — har kuni saqlanadi)
+	db.Exec(`CREATE TABLE IF NOT EXISTS user_task_prefs (
+		user_id INTEGER NOT NULL,
+		template_id INTEGER NOT NULL,
+		pinned INTEGER DEFAULT 0,
+		position INTEGER,
+		PRIMARY KEY (user_id, template_id)
+	)`)
 	db.Exec("ALTER TABLE users ADD COLUMN phone_number TEXT")
 	db.Exec("ALTER TABLE users ADD COLUMN profile_json TEXT")
 	db.Exec("ALTER TABLE users ADD COLUMN password TEXT DEFAULT ''")
+	db.Exec("ALTER TABLE users ADD COLUMN can_manage_tasks INTEGER DEFAULT 0")
 
 	var needsUpdate int
 	db.QueryRow("SELECT COUNT(*) FROM task_templates WHERE order_index = 0").Scan(&needsUpdate)
@@ -846,8 +954,8 @@ func login(w http.ResponseWriter, r *http.Request) {
 	var categoriesStr, filialIDsStr sql.NullString
 	var notificationID, phoneNum, profileJSON sql.NullString
 	var isLogin int
-	err := db.QueryRow("SELECT id, username, login, password_hash, password, role, filial_ids, categories, notification_id, is_login, phone_number, profile_json FROM users WHERE password = ?",
-		req.Password).Scan(&user.ID, &user.Username, &user.Login, &passwordHash, &user.Password, &user.Role, &filialIDsStr, &categoriesStr, &notificationID, &isLogin, &phoneNum, &profileJSON)
+	err := db.QueryRow("SELECT id, username, login, password_hash, password, role, filial_ids, categories, notification_id, is_login, phone_number, profile_json, COALESCE(can_manage_tasks, 0) FROM users WHERE password = ?",
+		req.Password).Scan(&user.ID, &user.Username, &user.Login, &passwordHash, &user.Password, &user.Role, &filialIDsStr, &categoriesStr, &notificationID, &isLogin, &phoneNum, &profileJSON, &user.CanManageTasks)
 
 	if err != nil {
 		log.Printf("Login error: %v\n", err)
@@ -1024,7 +1132,7 @@ func getTasks(w http.ResponseWriter, r *http.Request) {
 			// Filialga ruxsat berilgan, lekin kategoriya tanlanmagan —
 			// shu holatda foydalanuvchi filialdagi barcha vazifalarni ko'radi.
 			query = fmt.Sprintf(`
-				SELECT id, filial_id, worker_ids, task, type, status, video_url, checker_audio_url, submitted_at, submitted_by, days, category, notification_time, order_index
+				SELECT id, template_id, filial_id, worker_ids, task, type, status, video_url, checker_audio_url, submitted_at, submitted_by, days, category, notification_time, order_index
 				FROM tasks
 				WHERE filial_id IN (%s)
 				ORDER BY order_index ASC
@@ -1037,14 +1145,14 @@ func getTasks(w http.ResponseWriter, r *http.Request) {
 			}
 
 			query = fmt.Sprintf(`
-				SELECT id, filial_id, worker_ids, task, type, status, video_url, checker_audio_url, submitted_at, submitted_by, days, category, notification_time, order_index
+				SELECT id, template_id, filial_id, worker_ids, task, type, status, video_url, checker_audio_url, submitted_at, submitted_by, days, category, notification_time, order_index
 				FROM tasks
 				WHERE filial_id IN (%s) AND (category = '' OR category IN (%s))
 				ORDER BY order_index ASC
 			`, strings.Join(filialPlaceholders, ","), strings.Join(categoryPlaceholders, ","))
 		}
 	} else {
-		query = "SELECT id, filial_id, worker_ids, task, type, status, video_url, checker_audio_url, submitted_at, submitted_by, days, category, notification_time, order_index FROM tasks ORDER BY order_index ASC"
+		query = "SELECT id, template_id, filial_id, worker_ids, task, type, status, video_url, checker_audio_url, submitted_at, submitted_by, days, category, notification_time, order_index FROM tasks ORDER BY order_index ASC"
 	}
 
 	rows, err := db.Query(query, args...)
@@ -1058,15 +1166,18 @@ func getTasks(w http.ResponseWriter, r *http.Request) {
 	}
 	defer rows.Close()
 
+	videoConfigs := getTemplateVideoConfigs()
+
 	tasks := []Task{}
 	for rows.Next() {
 		var t Task
 		var daysStr, notifTime, workerIDsStr sql.NullString
 		var status sql.NullInt64
 		var category sql.NullString
-		var checkerAudioRaw *string
+		var checkerAudioRaw, videoRaw *string
+		var templateID sql.NullInt64
 		t.Date = date.Format("2006-01-02")
-		rows.Scan(&t.ID, &t.FilialID, &workerIDsStr, &t.Task, &t.Type, &status, &t.VideoURL, &checkerAudioRaw, &t.SubmittedAt, &t.SubmittedBy, &daysStr, &category, &notifTime, &t.OrderIndex)
+		rows.Scan(&t.ID, &templateID, &t.FilialID, &workerIDsStr, &t.Task, &t.Type, &status, &videoRaw, &checkerAudioRaw, &t.SubmittedAt, &t.SubmittedBy, &daysStr, &category, &notifTime, &t.OrderIndex)
 
 		if status.Valid {
 			v := int(status.Int64)
@@ -1081,7 +1192,9 @@ func getTasks(w http.ResponseWriter, r *http.Request) {
 			t.Category = ""
 		}
 		t.CheckerAudioURLs = fullAudioURLs(parseCheckerAudioURLs(checkerAudioRaw))
-		t.VideoURL = fullURL(t.VideoURL)
+		t.VideoURLs, t.VideoURL = parseVideoURLs(videoRaw)
+		t.MultiVideo, t.VideoCount = taskVideoConfig(videoConfigs, templateID)
+		t.TemplateID = int(templateID.Int64)
 
 		if daysStr.Valid && daysStr.String != "" {
 			t.Days = parseDays(daysStr.String)
@@ -1096,18 +1209,83 @@ func getTasks(w http.ResponseWriter, r *http.Request) {
 		tasks = append(tasks, t)
 	}
 
+	applyUserTaskPrefs(userID, tasks)
+
 	respondJSON(w, http.StatusOK, map[string]interface{}{
 		"success": true,
 		"data":    tasks,
 	})
 }
 
+// taskManagerFilials — vazifalarni boshqarish huquqini tekshiradi.
+// super_admin → (nil, true): cheklovsiz. Ruxsat berilgan boshqa foydalanuvchi →
+// (o'z filiallari, true): faqat shu filiallar doirasida. Aks holda (nil, false).
+func taskManagerFilials(r *http.Request) (map[int]bool, bool) {
+	if r.Header.Get("Role") == RoleSuperAdmin {
+		return nil, true
+	}
+	db, err := getMainDB()
+	if err != nil {
+		return nil, false
+	}
+	defer db.Close()
+
+	var canManage bool
+	var filialIDsStr sql.NullString
+	if err := db.QueryRow("SELECT COALESCE(can_manage_tasks, 0), filial_ids FROM users WHERE id = ?",
+		r.Header.Get("UserID")).Scan(&canManage, &filialIDsStr); err != nil || !canManage {
+		return nil, false
+	}
+	allowed := map[int]bool{}
+	if filialIDsStr.Valid {
+		for _, id := range parseFilialIDs(filialIDsStr.String) {
+			allowed[id] = true
+		}
+	}
+	return allowed, true
+}
+
+// filialsAllowed — barcha filiallar ruxsat ro'yxatida bo'lsa true.
+// allowed == nil (super_admin) bo'lsa har doim true. Bo'sh ro'yxat ("barcha
+// filiallar" degani) cheklangan foydalanuvchi uchun ruxsat etilmaydi.
+func filialsAllowed(allowed map[int]bool, ids []int) bool {
+	if allowed == nil {
+		return true
+	}
+	if len(ids) == 0 {
+		return false
+	}
+	for _, id := range ids {
+		if !allowed[id] {
+			return false
+		}
+	}
+	return true
+}
+
+// templateAllowed — template'ning hozirgi filiallari foydalanuvchiga tegishlimi.
+func templateAllowed(allowed map[int]bool, templateID string) bool {
+	if allowed == nil {
+		return true
+	}
+	db, err := getMainDB()
+	if err != nil {
+		return false
+	}
+	defer db.Close()
+	var filialIDsStr string
+	if err := db.QueryRow("SELECT filial_ids FROM task_templates WHERE id = ?", templateID).Scan(&filialIDsStr); err != nil {
+		return false
+	}
+	return filialsAllowed(allowed, parseFilialIDs(filialIDsStr))
+}
+
 func getAllTasks(w http.ResponseWriter, r *http.Request) {
-	role := r.Header.Get("Role")
-	if role != RoleSuperAdmin {
+	allowed, ok := taskManagerFilials(r)
+	if !ok {
 		respondJSON(w, http.StatusForbidden, map[string]interface{}{
 			"success": false,
-			"error":   "Faqat super admin ruxsati",
+			"error":   "Ruxsat yo'q",
 		})
 		return
 	}
@@ -1122,7 +1300,7 @@ func getAllTasks(w http.ResponseWriter, r *http.Request) {
 	}
 	defer mainDB.Close()
 
-	rows, err := mainDB.Query("SELECT id, task, type, filial_ids, days, category, notification_time, order_index, created_at FROM task_templates ORDER BY order_index ASC, id ASC")
+	rows, err := mainDB.Query("SELECT id, task, type, filial_ids, days, category, notification_time, order_index, COALESCE(multi_video, 0), COALESCE(video_count, 1), created_at FROM task_templates ORDER BY order_index ASC, id ASC")
 	if err != nil {
 		respondJSON(w, http.StatusInternalServerError, map[string]interface{}{
 			"success": false,
@@ -1137,7 +1315,7 @@ func getAllTasks(w http.ResponseWriter, r *http.Request) {
 		var t TaskTemplate
 		var filialIDsStr, daysStr, createdAt string
 		var notifTime sql.NullString
-		rows.Scan(&t.ID, &t.Task, &t.Type, &filialIDsStr, &daysStr, &t.Category, &notifTime, &t.OrderIndex, &createdAt)
+		rows.Scan(&t.ID, &t.Task, &t.Type, &filialIDsStr, &daysStr, &t.Category, &notifTime, &t.OrderIndex, &t.MultiVideo, &t.VideoCount, &createdAt)
 
 		t.FilialIDs = parseFilialIDs(filialIDsStr)
 
@@ -1150,6 +1328,23 @@ func getAllTasks(w http.ResponseWriter, r *http.Request) {
 
 		t.CreatedAt = createdAt
 		templates = append(templates, t)
+	}
+
+	// Cheklangan foydalanuvchi faqat to'liq o'z filiallaridagi template'larni ko'radi.
+	// order_index tuzatish faqat to'liq ro'yxat (super_admin) bilan ishlaydi.
+	if allowed != nil {
+		own := []TaskTemplate{}
+		for _, t := range templates {
+			if filialsAllowed(allowed, t.FilialIDs) {
+				own = append(own, t)
+			}
+		}
+		respondJSON(w, http.StatusOK, map[string]interface{}{
+			"success": true,
+			"data":    own,
+			"total":   len(own),
+		})
+		return
 	}
 
 	needsFix := false
@@ -1179,8 +1374,8 @@ func getAllTasks(w http.ResponseWriter, r *http.Request) {
 }
 
 func createTask(w http.ResponseWriter, r *http.Request) {
-	role := r.Header.Get("Role")
-	if role != RoleSuperAdmin {
+	allowed, ok := taskManagerFilials(r)
+	if !ok {
 		respondJSON(w, http.StatusForbidden, map[string]interface{}{
 			"success": false,
 			"error":   "Ruxsat yo'q",
@@ -1195,12 +1390,22 @@ func createTask(w http.ResponseWriter, r *http.Request) {
 		Days             []int  `json:"days"`
 		Category         string `json:"category"`
 		NotificationTime string `json:"time"`
+		MultiVideo       bool   `json:"multiVideo"`
+		VideoCount       int    `json:"videoCount"`
 	}
 
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		respondJSON(w, http.StatusBadRequest, map[string]interface{}{
 			"success": false,
 			"error":   "Noto'g'ri ma'lumot",
+		})
+		return
+	}
+
+	if !filialsAllowed(allowed, req.FilialIDs) {
+		respondJSON(w, http.StatusForbidden, map[string]interface{}{
+			"success": false,
+			"error":   "Bu filiallarga ruxsat yo'q",
 		})
 		return
 	}
@@ -1245,8 +1450,11 @@ func createTask(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	result, err := mainDB.Exec("INSERT INTO task_templates (task, type, filial_ids, days, category, notification_time, order_index) VALUES (?, ?, ?, ?, ?, ?, ?)",
-		req.Task, req.Type, filialIDsStr, daysStr, req.Category, req.NotificationTime, 1)
+	if req.VideoCount < 1 {
+		req.VideoCount = 1
+	}
+	result, err := mainDB.Exec("INSERT INTO task_templates (task, type, filial_ids, days, category, notification_time, order_index, multi_video, video_count) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+		req.Task, req.Type, filialIDsStr, daysStr, req.Category, req.NotificationTime, 1, req.MultiVideo || req.VideoCount > 1, req.VideoCount)
 
 	if err != nil {
 		respondJSON(w, http.StatusInternalServerError, map[string]interface{}{
@@ -1300,8 +1508,8 @@ func getTemplate(w http.ResponseWriter, r *http.Request) {
 	var filialIDsStr, daysStr, createdAt string
 	var notifTime sql.NullString
 
-	err := mainDB.QueryRow("SELECT id, task, type, filial_ids, days, category, notification_time, order_index, created_at FROM task_templates WHERE id = ?", id).
-		Scan(&template.ID, &template.Task, &template.Type, &filialIDsStr, &daysStr, &template.Category, &notifTime, &template.OrderIndex, &createdAt)
+	err := mainDB.QueryRow("SELECT id, task, type, filial_ids, days, category, notification_time, order_index, COALESCE(multi_video, 0), COALESCE(video_count, 1), created_at FROM task_templates WHERE id = ?", id).
+		Scan(&template.ID, &template.Task, &template.Type, &filialIDsStr, &daysStr, &template.Category, &notifTime, &template.OrderIndex, &template.MultiVideo, &template.VideoCount, &createdAt)
 
 	if err != nil {
 		respondJSON(w, http.StatusNotFound, map[string]interface{}{
@@ -1344,11 +1552,12 @@ func getTask(w http.ResponseWriter, r *http.Request) {
 	var task Task
 	var daysStr, notifTime, workerIDsStr sql.NullString
 	var status sql.NullInt64
-	var checkerAudioRaw *string
+	var checkerAudioRaw, videoRaw *string
+	var templateID sql.NullInt64
 	task.Date = date.Format("2006-01-02")
 
-	err := db.QueryRow("SELECT id, filial_id, worker_ids, task, type, status, video_url, checker_audio_url, submitted_at, submitted_by, days, category, notification_time, order_index FROM tasks WHERE id = ?", id).
-		Scan(&task.ID, &task.FilialID, &workerIDsStr, &task.Task, &task.Type, &status, &task.VideoURL, &checkerAudioRaw, &task.SubmittedAt, &task.SubmittedBy, &daysStr, &task.Category, &notifTime, &task.OrderIndex)
+	err := db.QueryRow("SELECT id, template_id, filial_id, worker_ids, task, type, status, video_url, checker_audio_url, submitted_at, submitted_by, days, category, notification_time, order_index FROM tasks WHERE id = ?", id).
+		Scan(&task.ID, &templateID, &task.FilialID, &workerIDsStr, &task.Task, &task.Type, &status, &videoRaw, &checkerAudioRaw, &task.SubmittedAt, &task.SubmittedBy, &daysStr, &task.Category, &notifTime, &task.OrderIndex)
 
 	if err != nil {
 		respondJSON(w, http.StatusNotFound, map[string]interface{}{
@@ -1365,6 +1574,9 @@ func getTask(w http.ResponseWriter, r *http.Request) {
 		task.Status = nil
 	}
 	task.CheckerAudioURLs = fullAudioURLs(parseCheckerAudioURLs(checkerAudioRaw))
+	task.VideoURLs, task.VideoURL = parseVideoURLs(videoRaw)
+	task.MultiVideo, task.VideoCount = taskVideoConfig(getTemplateVideoConfigs(), templateID)
+	task.TemplateID = int(templateID.Int64)
 
 	if daysStr.Valid && daysStr.String != "" {
 		task.Days = parseDays(daysStr.String)
@@ -1383,17 +1595,16 @@ func getTask(w http.ResponseWriter, r *http.Request) {
 }
 
 func updateTask(w http.ResponseWriter, r *http.Request) {
-	role := r.Header.Get("Role")
-	if role != RoleSuperAdmin {
+	allowed, ok := taskManagerFilials(r)
+	vars := mux.Vars(r)
+	id := vars["id"]
+	if !ok || !templateAllowed(allowed, id) {
 		respondJSON(w, http.StatusForbidden, map[string]interface{}{
 			"success": false,
 			"error":   "Ruxsat yo'q",
 		})
 		return
 	}
-
-	vars := mux.Vars(r)
-	id := vars["id"]
 
 	var req struct {
 		Task             string  `json:"task"`
@@ -1404,12 +1615,22 @@ func updateTask(w http.ResponseWriter, r *http.Request) {
 		Days             []int   `json:"days,omitempty"`
 		Category         string  `json:"category"`
 		NotificationTime *string `json:"time,omitempty"`
+		MultiVideo       *bool   `json:"multiVideo,omitempty"`
+		VideoCount       *int    `json:"videoCount,omitempty"`
 	}
 
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		respondJSON(w, http.StatusBadRequest, map[string]interface{}{
 			"success": false,
 			"error":   "Noto'g'ri ma'lumot",
+		})
+		return
+	}
+
+	if len(req.FilialIDs) > 0 && !filialsAllowed(allowed, req.FilialIDs) {
+		respondJSON(w, http.StatusForbidden, map[string]interface{}{
+			"success": false,
+			"error":   "Bu filiallarga ruxsat yo'q",
 		})
 		return
 	}
@@ -1437,6 +1658,20 @@ func updateTask(w http.ResponseWriter, r *http.Request) {
 		mainArgs = append(mainArgs, *req.NotificationTime)
 	}
 
+	if req.MultiVideo != nil {
+		mainUpdateFields = append(mainUpdateFields, "multi_video = ?")
+		mainArgs = append(mainArgs, *req.MultiVideo)
+	}
+
+	if req.VideoCount != nil {
+		count := *req.VideoCount
+		if count < 1 {
+			count = 1
+		}
+		mainUpdateFields = append(mainUpdateFields, "video_count = ?")
+		mainArgs = append(mainArgs, count)
+	}
+
 	mainArgs = append(mainArgs, id)
 	mainQuery := fmt.Sprintf("UPDATE task_templates SET %s WHERE id = ?", strings.Join(mainUpdateFields, ", "))
 
@@ -1456,17 +1691,16 @@ func updateTask(w http.ResponseWriter, r *http.Request) {
 }
 
 func deleteTask(w http.ResponseWriter, r *http.Request) {
-	role := r.Header.Get("Role")
-	if role != RoleSuperAdmin {
+	allowed, ok := taskManagerFilials(r)
+	vars := mux.Vars(r)
+	id := vars["id"]
+	if !ok || !templateAllowed(allowed, id) {
 		respondJSON(w, http.StatusForbidden, map[string]interface{}{
 			"success": false,
 			"error":   "Ruxsat yo'q",
 		})
 		return
 	}
-
-	vars := mux.Vars(r)
-	id := vars["id"]
 
 	mainDB, _ := getMainDB()
 	defer mainDB.Close()
@@ -1692,6 +1926,22 @@ func submitTask(w http.ResponseWriter, r *http.Request) {
 	submittedAt := nowTashkent().Format(time.RFC3339)
 	today := nowTashkent().Format("2006-01-02")
 
+	// slot - ko'p videoli taskda qaysi videoni almashtirish (0 dan). Bo'lmasa -1 = qo'shish
+	slot := -1
+	if v, err := strconv.Atoi(r.FormValue("slot")); err == nil {
+		slot = v
+	}
+
+	// Super admin belgilagan sondan ortiq video qo'shib bo'lmaydi
+	// (mavjud videoni slot orqali almashtirish mumkin)
+	if videoLimitReached(taskID, slot) {
+		respondJSON(w, http.StatusBadRequest, map[string]interface{}{
+			"success": false,
+			"error":   "Barcha videolar allaqachon yuklangan",
+		})
+		return
+	}
+
 	// ── VIDEO (ko'p segment) ───────────────────────────────────────────────
 	segmentCountStr := r.FormValue("segment_count")
 	if segmentCountStr != "" {
@@ -1725,7 +1975,7 @@ func submitTask(w http.ResponseWriter, r *http.Request) {
 			"submittedAt": submittedAt,
 		})
 
-		go mergeSegmentsBackground(taskID, username, submittedAt, savedPaths, dirPath)
+		go mergeSegmentsBackground(taskID, username, submittedAt, savedPaths, dirPath, slot)
 		return
 	}
 
@@ -1752,8 +2002,7 @@ func submitTask(w http.ResponseWriter, r *http.Request) {
 		defer db.Close()
 
 		// Video yuborilganda status NULL ga o'tadi - admin/checker ko'rib chiqishi kerak
-		db.Exec("UPDATE tasks SET status = NULL, video_url = ?, submitted_at = ?, submitted_by = ? WHERE id = ?",
-			videoURL, submittedAt, username, taskID)
+		saveTaskVideo(db, taskID, videoURL, submittedAt, username, slot)
 		log.Printf("✅ Video saqlandi: %s", videoURL)
 
 		respondJSON(w, http.StatusOK, map[string]interface{}{
@@ -1847,13 +2096,13 @@ func saveSegmentsOnly(taskID string, segmentCount int, r *http.Request, dirPath 
 	return segmentPaths, nil
 }
 
-func mergeSegmentsBackground(taskID, username, submittedAt string, segmentPaths []string, dirPath string) {
+func mergeSegmentsBackground(taskID, username, submittedAt string, segmentPaths []string, dirPath string, slot int) {
 	log.Printf("🔄 Task %s: Background merge boshlandi...", taskID)
 
 	_, err := exec.LookPath("ffmpeg")
 	if err != nil {
 		log.Printf("⚠️ FFmpeg topilmadi - birinchi segment ishlatiladi")
-		updateTaskVideo(taskID, submittedAt, username, filepath.Base(segmentPaths[0]))
+		updateTaskVideo(taskID, submittedAt, username, filepath.Base(segmentPaths[0]), slot)
 		return
 	}
 
@@ -1862,7 +2111,7 @@ func mergeSegmentsBackground(taskID, username, submittedAt string, segmentPaths 
 	listFile, err := os.Create(listFilePath)
 	if err != nil {
 		log.Printf("❌ Concat list xatosi: %v", err)
-		updateTaskVideo(taskID, submittedAt, username, filepath.Base(segmentPaths[0]))
+		updateTaskVideo(taskID, submittedAt, username, filepath.Base(segmentPaths[0]), slot)
 		return
 	}
 
@@ -1878,7 +2127,7 @@ func mergeSegmentsBackground(taskID, username, submittedAt string, segmentPaths 
 	err = mergeVideos(listFilePath, outputPath)
 	if err != nil {
 		log.Printf("❌ FFmpeg xatosi: %v", err)
-		updateTaskVideo(taskID, submittedAt, username, filepath.Base(segmentPaths[0]))
+		updateTaskVideo(taskID, submittedAt, username, filepath.Base(segmentPaths[0]), slot)
 		os.Remove(listFilePath)
 		return
 	}
@@ -1889,12 +2138,12 @@ func mergeSegmentsBackground(taskID, username, submittedAt string, segmentPaths 
 	}
 
 	log.Printf("✅ Task %s: Video birlashtirildi: %s", taskID, outputFilename)
-	updateTaskVideo(taskID, submittedAt, username, outputFilename)
+	updateTaskVideo(taskID, submittedAt, username, outputFilename, slot)
 }
 
 // updateTaskVideo - background merge tugagandan keyin DB ni yangilaydi
 // status NULL ga o'tadi - admin/checker ko'rib chiqishi uchun
-func updateTaskVideo(taskID, submittedAt, username, filename string) {
+func updateTaskVideo(taskID, submittedAt, username, filename string, slot int) {
 	today := nowTashkent().Format("2006-01-02")
 	videoURL := fmt.Sprintf("/videos/%s/%s", today, filename)
 
@@ -1906,8 +2155,7 @@ func updateTaskVideo(taskID, submittedAt, username, filename string) {
 	defer db.Close()
 
 	// Video merge tugaganda ham status NULL ga o'tadi
-	_, err = db.Exec("UPDATE tasks SET status = NULL, video_url = ?, submitted_at = ?, submitted_by = ? WHERE id = ?",
-		videoURL, submittedAt, username, taskID)
+	err = saveTaskVideo(db, taskID, videoURL, submittedAt, username, slot)
 
 	if err != nil {
 		log.Printf("❌ DB yangilashda xato: %v", err)
@@ -2125,6 +2373,17 @@ func checkTask(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer db.Close()
+
+	// Ko'p videoli task barcha videolar yuklanmaguncha tasdiqlanmaydi
+	if req.Status == StatusPending || req.Status == StatusApproved {
+		if have, need := taskVideoProgress(db, taskID); need > 1 && have < need {
+			respondJSON(w, http.StatusBadRequest, map[string]interface{}{
+				"success": false,
+				"error":   fmt.Sprintf("Barcha videolar yuklanmagan: %d/%d", have, need),
+			})
+			return
+		}
+	}
 
 	_, err = db.Exec("UPDATE tasks SET status = ? WHERE id = ?", req.Status, taskID)
 	if err != nil {
@@ -2991,7 +3250,7 @@ func generateReportData(filialID int, startDate, endDate time.Time) []map[string
 				t.SubmittedBy = &submittedBy.String
 			}
 			if videoURL.Valid {
-				t.VideoURL = &videoURL.String
+				_, t.VideoURL = parseVideoURLs(&videoURL.String)
 			}
 
 			if t.Status == nil {
@@ -3429,7 +3688,7 @@ func getUsers(w http.ResponseWriter, r *http.Request) {
 	db, _ := getMainDB()
 	defer db.Close()
 
-	query := "SELECT id, username, login, password, role, filial_ids, categories, notification_id, is_login, phone_number, profile_json FROM users WHERE 1=1"
+	query := "SELECT id, username, login, password, role, filial_ids, categories, notification_id, is_login, phone_number, profile_json, COALESCE(can_manage_tasks, 0) FROM users WHERE 1=1"
 	args := []interface{}{}
 
 	if role != "" {
@@ -3457,7 +3716,7 @@ func getUsers(w http.ResponseWriter, r *http.Request) {
 		var categoriesStr, filialIDsStr sql.NullString
 		var notifID, phoneNum, profileJSON sql.NullString
 		var isLogin int
-		rows.Scan(&u.ID, &u.Username, &u.Login, &u.Password, &u.Role, &filialIDsStr, &categoriesStr, &notifID, &isLogin, &phoneNum, &profileJSON)
+		rows.Scan(&u.ID, &u.Username, &u.Login, &u.Password, &u.Role, &filialIDsStr, &categoriesStr, &notifID, &isLogin, &phoneNum, &profileJSON, &u.CanManageTasks)
 
 		if categoriesStr.Valid && categoriesStr.String != "" {
 			json.Unmarshal([]byte(categoriesStr.String), &u.Categories)
@@ -3594,6 +3853,8 @@ func updateUser(w http.ResponseWriter, r *http.Request) {
 		Categories  []string `json:"categories"`
 		PhoneNumber string   `json:"phoneNumber"`
 		ProfileJSON string   `json:"profileJson"`
+		// nil — o'zgartirilmaydi (eski klientlar ruxsatni o'chirib yubormasligi uchun).
+		CanManageTasks *bool `json:"canManageTasks"`
 	}
 
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -3630,6 +3891,12 @@ func updateUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if req.CanManageTasks != nil {
+		db.Exec("UPDATE users SET can_manage_tasks = ? WHERE id = ?", *req.CanManageTasks, id)
+	}
+	var canManageTasks bool
+	db.QueryRow("SELECT COALESCE(can_manage_tasks, 0) FROM users WHERE id = ?", id).Scan(&canManageTasks)
+
 	// Rezumeni yangilash: faqat qiymat kelganda yozamiz, aks holda mavjud
 	// profile_json/phone_number o'chib ketmasligi uchun tegmaymiz.
 	if req.PhoneNumber != "" {
@@ -3653,10 +3920,11 @@ func updateUser(w http.ResponseWriter, r *http.Request) {
 	// ilovasi shu hodisani eshitib filiallarni qaytadan yuklab oladi.
 	userIDInt, _ := strconv.Atoi(id)
 	hub.broadcast("user_updated", map[string]interface{}{
-		"action":    "permissions_changed",
-		"userId":    userIDInt,
-		"role":      req.Role,
-		"filialIds": req.FilialIDs,
+		"action":         "permissions_changed",
+		"userId":         userIDInt,
+		"role":           req.Role,
+		"filialIds":      req.FilialIDs,
+		"canManageTasks": canManageTasks,
 	})
 
 	respondJSON(w, http.StatusOK, map[string]interface{}{
@@ -3679,6 +3947,29 @@ func deleteUser(w http.ResponseWriter, r *http.Request) {
 
 	db, _ := getMainDB()
 	defer db.Close()
+
+	// Super adminni o'chirishda himoya: o'zini va oxirgi super adminni
+	// o'chirib bo'lmaydi.
+	var targetRole string
+	db.QueryRow("SELECT role FROM users WHERE id = ?", id).Scan(&targetRole)
+	if targetRole == RoleSuperAdmin {
+		if id == r.Header.Get("UserID") {
+			respondJSON(w, http.StatusBadRequest, map[string]interface{}{
+				"success": false,
+				"error":   "O'zingizni o'chira olmaysiz",
+			})
+			return
+		}
+		var adminCount int
+		db.QueryRow("SELECT COUNT(*) FROM users WHERE role = ?", RoleSuperAdmin).Scan(&adminCount)
+		if adminCount <= 1 {
+			respondJSON(w, http.StatusBadRequest, map[string]interface{}{
+				"success": false,
+				"error":   "Kamida bitta super admin qolishi kerak",
+			})
+			return
+		}
+	}
 
 	_, err := db.Exec("DELETE FROM users WHERE id = ?", id)
 	if err != nil {
@@ -4163,4 +4454,173 @@ func respondJSON(w http.ResponseWriter, status int, data interface{}) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
 	json.NewEncoder(w).Encode(data)
+}
+
+// serveVideoThumb - /thumbs/videos/{date}/{file}.mp4 → videoning birinchi
+// kadridan kichik JPG. Birinchi so'rovda ffmpeg bilan yaratiladi va video
+// yonida saqlanadi (eski videolar bilan birga tozalanadi).
+func serveVideoThumb(w http.ResponseWriter, r *http.Request) {
+	rel := filepath.Clean(strings.TrimPrefix(r.URL.Path, "/thumbs/videos/"))
+	if rel == "." || strings.HasPrefix(rel, "..") || filepath.IsAbs(rel) {
+		http.NotFound(w, r)
+		return
+	}
+	videoPath := filepath.Join("./videos", rel)
+	thumbPath := videoPath + ".jpg"
+
+	if _, err := os.Stat(thumbPath); err != nil {
+		if _, err := os.Stat(videoPath); err != nil {
+			http.NotFound(w, r)
+			return
+		}
+		ffmpegPath, err := findFFmpeg()
+		if err != nil {
+			http.NotFound(w, r)
+			return
+		}
+		out, err := exec.Command(ffmpegPath,
+			"-ss", "0.3",
+			"-i", videoPath,
+			"-frames:v", "1",
+			"-vf", "scale=240:-2",
+			"-q:v", "5",
+			"-y",
+			thumbPath,
+		).CombinedOutput()
+		if err != nil {
+			log.Printf("Thumb ffmpeg xatosi: %s", string(out))
+			http.NotFound(w, r)
+			return
+		}
+	}
+
+	w.Header().Set("Cache-Control", "public, max-age=86400")
+	http.ServeFile(w, r, thumbPath)
+}
+
+// taskVideoProgress - task uchun yuklangan va kerakli videolar soni
+func taskVideoProgress(db *sql.DB, taskID string) (have, need int) {
+	var templateID sql.NullInt64
+	var existing *string
+	db.QueryRow("SELECT template_id, video_url FROM tasks WHERE id = ?", taskID).Scan(&templateID, &existing)
+	_, need = taskVideoConfig(getTemplateVideoConfigs(), templateID)
+	return len(parseCheckerAudioURLs(existing)), need
+}
+
+// videoLimitReached - yangi video qo'shish (slot almashtirish emas) limitdan oshadimi
+func videoLimitReached(taskID string, slot int) bool {
+	db, err := getTaskDB(time.Now())
+	if err != nil {
+		return false
+	}
+	defer db.Close()
+	have, need := taskVideoProgress(db, taskID)
+	if need <= 1 {
+		return false // bitta videoli task — qayta yozish eski videoni almashtiradi
+	}
+	if slot >= 0 && slot < have {
+		return false
+	}
+	return have >= need
+}
+
+// applyUserTaskPrefs - foydalanuvchining pin va shaxsiy tartibini qo'llaydi:
+// avval qadalganlar, keyin shaxsiy tartib, qolganlari umumiy tartibda.
+func applyUserTaskPrefs(userID int, tasks []Task) {
+	if userID == 0 || len(tasks) == 0 {
+		return
+	}
+	mainDB, err := getMainDB()
+	if err != nil {
+		return
+	}
+	defer mainDB.Close()
+
+	rows, err := mainDB.Query("SELECT template_id, pinned, position FROM user_task_prefs WHERE user_id = ?", userID)
+	if err != nil {
+		return
+	}
+	pinned := map[int]bool{}
+	position := map[int]int{}
+	for rows.Next() {
+		var tid int
+		var pin bool
+		var pos sql.NullInt64
+		rows.Scan(&tid, &pin, &pos)
+		pinned[tid] = pin
+		if pos.Valid {
+			position[tid] = int(pos.Int64)
+		}
+	}
+	rows.Close()
+
+	for i := range tasks {
+		tasks[i].Pinned = pinned[tasks[i].TemplateID]
+	}
+	key := func(t Task) int {
+		if p, ok := position[t.TemplateID]; ok {
+			return p
+		}
+		return 1000000 + t.OrderIndex
+	}
+	sort.SliceStable(tasks, func(a, b int) bool {
+		if tasks[a].Pinned != tasks[b].Pinned {
+			return tasks[a].Pinned
+		}
+		return key(tasks[a]) < key(tasks[b])
+	})
+}
+
+// setTaskPin - joriy foydalanuvchi uchun vazifani qadash / qadashni olish
+func setTaskPin(w http.ResponseWriter, r *http.Request) {
+	userID, _ := strconv.Atoi(r.Header.Get("UserID"))
+	templateID, err := strconv.Atoi(mux.Vars(r)["templateId"])
+	if err != nil || userID == 0 {
+		respondJSON(w, http.StatusBadRequest, map[string]interface{}{"success": false, "error": "Noto'g'ri ma'lumot"})
+		return
+	}
+	var req struct {
+		Pinned bool `json:"pinned"`
+	}
+	json.NewDecoder(r.Body).Decode(&req)
+
+	mainDB, _ := getMainDB()
+	defer mainDB.Close()
+	_, err = mainDB.Exec(`INSERT INTO user_task_prefs (user_id, template_id, pinned) VALUES (?, ?, ?)
+		ON CONFLICT(user_id, template_id) DO UPDATE SET pinned = excluded.pinned`, userID, templateID, req.Pinned)
+	if err != nil {
+		respondJSON(w, http.StatusInternalServerError, map[string]interface{}{"success": false, "error": "Server xatosi"})
+		return
+	}
+	respondJSON(w, http.StatusOK, map[string]interface{}{"success": true, "pinned": req.Pinned})
+}
+
+// setTaskOrder - joriy foydalanuvchining shaxsiy tartibi (template ID lar ketma-ketligi)
+func setTaskOrder(w http.ResponseWriter, r *http.Request) {
+	userID, _ := strconv.Atoi(r.Header.Get("UserID"))
+	var req struct {
+		Order []int `json:"order"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || userID == 0 {
+		respondJSON(w, http.StatusBadRequest, map[string]interface{}{"success": false, "error": "Noto'g'ri ma'lumot"})
+		return
+	}
+
+	mainDB, _ := getMainDB()
+	defer mainDB.Close()
+	tx, err := mainDB.Begin()
+	if err != nil {
+		respondJSON(w, http.StatusInternalServerError, map[string]interface{}{"success": false, "error": "Database xatosi"})
+		return
+	}
+	defer tx.Rollback()
+	for i, tid := range req.Order {
+		if _, err := tx.Exec(`INSERT INTO user_task_prefs (user_id, template_id, position) VALUES (?, ?, ?)
+			ON CONFLICT(user_id, template_id) DO UPDATE SET position = excluded.position`, userID, tid, i+1); err != nil {
+			respondJSON(w, http.StatusInternalServerError, map[string]interface{}{"success": false, "error": "Server xatosi"})
+			return
+		}
+	}
+	tx.Commit()
+	respondJSON(w, http.StatusOK, map[string]interface{}{"success": true})
 }

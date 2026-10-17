@@ -1,3 +1,4 @@
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:mone_task_app/admin/model/filial_model.dart';
 import 'package:mone_task_app/admin/ui/add_worker.dart';
@@ -58,31 +59,56 @@ class _UsersPageState extends State<UsersPage> {
 
   int _roleOrder(String role) {
     switch (role) {
-      case 'super_admin': return 0;
-      case 'checker': return 1;
-      case 'worker': return 2;
-      default: return 3;
+      case 'super_admin':
+        return 0;
+      case 'checker':
+        return 1;
+      case 'worker':
+        return 2;
+      default:
+        return 3;
     }
   }
 
   String _roleLabel(String role) {
     switch (role) {
-      case 'super_admin': return 'Супер админ';
-      case 'checker': return 'Корректор';
-      case 'worker': return 'Ревизор';
-      default: return role;
+      case 'super_admin':
+        return 'Супер админ';
+      case 'checker':
+        return 'Корректор';
+      case 'worker':
+        return 'Ревизор';
+      default:
+        return role;
     }
   }
 
+  bool _isMe(UserModel u) =>
+      sl<TokenStorage>().getUserData()?.userId == u.userId;
+
   Future<void> _deleteUser(int id) async {
+    if (sl<TokenStorage>().getUserData()?.userId == id) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Нельзя удалить самого себя'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
     final confirm = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('Удалить'),
-        content: const Text('Вы уверены, что хотите удалить этого пользователя?'),
+        content: const Text(
+          'Вы уверены, что хотите удалить этого пользователя?',
+        ),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Нет')),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Нет'),
+          ),
           FilledButton(
             onPressed: () => Navigator.pop(ctx, true),
             style: FilledButton.styleFrom(backgroundColor: Colors.red),
@@ -93,11 +119,22 @@ class _UsersPageState extends State<UsersPage> {
     );
     if (confirm != true) return;
     final success = await _userService.deleteUser(id);
+    if (!success && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Не удалось удалить'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
     if (success) {
       _load();
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Пользователь удалён'), backgroundColor: Colors.green),
+          const SnackBar(
+            content: Text('Пользователь удалён'),
+            backgroundColor: Colors.green,
+          ),
         );
       }
     }
@@ -183,9 +220,7 @@ class _UsersPageState extends State<UsersPage> {
       ),
     );
     if (ok != true) return;
-    messenger.showSnackBar(
-      const SnackBar(content: Text('Отправляется...')),
-    );
+    messenger.showSnackBar(const SnackBar(content: Text('Отправляется...')));
     try {
       final res = await _userService.sendAllCredentials();
       if (!mounted) return;
@@ -236,7 +271,12 @@ class _UsersPageState extends State<UsersPage> {
           decoration: BoxDecoration(
             color: Colors.white,
             borderRadius: BorderRadius.circular(16),
-            boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.04), blurRadius: 4)],
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.04),
+                blurRadius: 4,
+              ),
+            ],
           ),
           child: Column(
             children: [
@@ -246,7 +286,11 @@ class _UsersPageState extends State<UsersPage> {
                   children: [
                     Text(
                       '${_users.length} пользователей',
-                      style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: Colors.grey[700]),
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                        color: Colors.grey[700],
+                      ),
                     ),
                     const Spacer(),
                     _viewToggleButton(),
@@ -255,7 +299,9 @@ class _UsersPageState extends State<UsersPage> {
                       onPressed: () async {
                         final result = await Navigator.push(
                           context,
-                          MaterialPageRoute(builder: (_) => const AddWorkerPage()),
+                          MaterialPageRoute(
+                            builder: (_) => const AddWorkerPage(),
+                          ),
                         );
                         if (result == true) _load();
                       },
@@ -263,7 +309,10 @@ class _UsersPageState extends State<UsersPage> {
                       label: const Text('Новый'),
                     ),
                     const SizedBox(width: 8),
-                    IconButton(icon: const Icon(Icons.refresh_rounded), onPressed: _load),
+                    IconButton(
+                      icon: const Icon(Icons.refresh_rounded),
+                      onPressed: _load,
+                    ),
                   ],
                 ),
               ),
@@ -271,7 +320,10 @@ class _UsersPageState extends State<UsersPage> {
               if (!_profileView) ...[
                 Container(
                   color: const Color(0xFFF9FAFB),
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 12,
+                  ),
                   child: Row(
                     children: [
                       _th('#', 36),
@@ -288,11 +340,11 @@ class _UsersPageState extends State<UsersPage> {
                 child: _loading
                     ? const Center(child: CircularProgressIndicator())
                     : _users.isEmpty
-                        ? const Center(child: Text('Пользователи не найдены'))
-                        : RefreshIndicator(
-                            onRefresh: _load,
-                            child: _profileView ? _profileGrid() : _listView(),
-                          ),
+                    ? const Center(child: Text('Пользователи не найдены'))
+                    : RefreshIndicator(
+                        onRefresh: _load,
+                        child: _profileView ? _profileGrid() : _listView(),
+                      ),
               ),
             ],
           ),
@@ -331,7 +383,12 @@ class _UsersPageState extends State<UsersPage> {
     );
   }
 
-  Widget _toggleSeg({required IconData icon, required String label, required bool selected, required VoidCallback onTap}) {
+  Widget _toggleSeg({
+    required IconData icon,
+    required String label,
+    required bool selected,
+    required VoidCallback onTap,
+  }) {
     return GestureDetector(
       onTap: onTap,
       child: AnimatedContainer(
@@ -341,20 +398,34 @@ class _UsersPageState extends State<UsersPage> {
           color: selected ? Colors.white : Colors.transparent,
           borderRadius: BorderRadius.circular(8),
           boxShadow: selected
-              ? [BoxShadow(color: Colors.black.withValues(alpha: 0.06), blurRadius: 4, offset: const Offset(0, 1))]
+              ? [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.06),
+                    blurRadius: 4,
+                    offset: const Offset(0, 1),
+                  ),
+                ]
               : null,
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(icon, size: 16, color: selected ? const Color(0xFF2563EB) : const Color(0xFF6B7280)),
+            Icon(
+              icon,
+              size: 16,
+              color: selected
+                  ? const Color(0xFF2563EB)
+                  : const Color(0xFF6B7280),
+            ),
             const SizedBox(width: 6),
             Text(
               label,
               style: TextStyle(
                 fontSize: 12,
                 fontWeight: FontWeight.w600,
-                color: selected ? const Color(0xFF111827) : const Color(0xFF6B7280),
+                color: selected
+                    ? const Color(0xFF111827)
+                    : const Color(0xFF6B7280),
               ),
             ),
           ],
@@ -376,14 +447,30 @@ class _UsersPageState extends State<UsersPage> {
   Widget _th(String text, double width) {
     return SizedBox(
       width: width,
-      child: Text(text, style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: Colors.grey[600], letterSpacing: 0.5)),
+      child: Text(
+        text,
+        style: TextStyle(
+          fontSize: 11,
+          fontWeight: FontWeight.w700,
+          color: Colors.grey[600],
+          letterSpacing: 0.5,
+        ),
+      ),
     );
   }
 
   Widget _thFlex(String text, int flex) {
     return Expanded(
       flex: flex,
-      child: Text(text, style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: Colors.grey[600], letterSpacing: 0.5)),
+      child: Text(
+        text,
+        style: TextStyle(
+          fontSize: 11,
+          fontWeight: FontWeight.w700,
+          color: Colors.grey[600],
+          letterSpacing: 0.5,
+        ),
+      ),
     );
   }
 
@@ -400,26 +487,48 @@ class _UsersPageState extends State<UsersPage> {
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
         child: Row(
           children: [
-            SizedBox(width: 36, child: Text('$index', style: TextStyle(fontSize: 13, color: Colors.grey[500]))),
+            SizedBox(
+              width: 36,
+              child: Text(
+                '$index',
+                style: TextStyle(fontSize: 13, color: Colors.grey[500]),
+              ),
+            ),
             SizedBox(
               width: 60,
               child: GestureDetector(
-                onTap: imgUrl.isNotEmpty ? () => _showAvatarPreview(imgUrl, u.fullName) : null,
+                onTap: imgUrl.isNotEmpty
+                    ? () => _showAvatarPreview(imgUrl, u.fullName)
+                    : null,
                 child: Container(
-                  width: 48, height: 48,
+                  width: 48,
+                  height: 48,
                   decoration: BoxDecoration(
                     shape: BoxShape.circle,
                     color: const Color(0xFFE0E7FF),
-                    border: Border.all(color: const Color(0xFFE5E7EB), width: 1),
+                    border: Border.all(
+                      color: const Color(0xFFE5E7EB),
+                      width: 1,
+                    ),
                     image: imgUrl.isNotEmpty
-                        ? DecorationImage(image: NetworkImage(imgUrl), fit: BoxFit.cover, onError: (_, __) {})
+                        ? DecorationImage(
+                            image: NetworkImage(imgUrl),
+                            fit: BoxFit.cover,
+                            onError: (_, __) {},
+                          )
                         : null,
                   ),
                   alignment: Alignment.center,
                   child: imgUrl.isEmpty
                       ? Text(
-                          u.fullName.trim().isNotEmpty ? u.fullName.trim()[0].toUpperCase() : '?',
-                          style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w700, color: Color(0xFF3730A3)),
+                          u.fullName.trim().isNotEmpty
+                              ? u.fullName.trim()[0].toUpperCase()
+                              : '?',
+                          style: const TextStyle(
+                            fontSize: 20,
+                            fontWeight: FontWeight.w700,
+                            color: Color(0xFF3730A3),
+                          ),
                         )
                       : null,
                 ),
@@ -435,7 +544,11 @@ class _UsersPageState extends State<UsersPage> {
                     onTap: () => _showEditDialog(u),
                     child: Text(
                       u.fullName.isNotEmpty ? u.fullName : '—',
-                      style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 15, color: Color(0xFF111827)),
+                      style: const TextStyle(
+                        fontWeight: FontWeight.w700,
+                        fontSize: 15,
+                        color: Color(0xFF111827),
+                      ),
                       overflow: TextOverflow.ellipsis,
                     ),
                   ),
@@ -446,12 +559,22 @@ class _UsersPageState extends State<UsersPage> {
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          const Icon(Icons.phone_rounded, size: 14, color: Color(0xFF2563EB)),
+                          const Icon(
+                            Icons.phone_rounded,
+                            size: 14,
+                            color: Color(0xFF2563EB),
+                          ),
                           const SizedBox(width: 4),
                           Flexible(
                             child: Text(
                               phone,
-                              style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: Color(0xFF2563EB), decoration: TextDecoration.underline, decorationColor: Color(0xFF2563EB)),
+                              style: const TextStyle(
+                                fontSize: 14,
+                                fontWeight: FontWeight.w600,
+                                color: Color(0xFF2563EB),
+                                decoration: TextDecoration.underline,
+                                decorationColor: Color(0xFF2563EB),
+                              ),
                               overflow: TextOverflow.ellipsis,
                             ),
                           ),
@@ -464,10 +587,22 @@ class _UsersPageState extends State<UsersPage> {
                     Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        const Icon(Icons.key_rounded, size: 14, color: Color(0xFF9CA3AF)),
+                        const Icon(
+                          Icons.key_rounded,
+                          size: 14,
+                          color: Color(0xFF9CA3AF),
+                        ),
                         const SizedBox(width: 4),
                         Flexible(
-                          child: Text(u.password, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500, color: Color(0xFF6B7280)), overflow: TextOverflow.ellipsis),
+                          child: Text(
+                            u.password,
+                            style: const TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w500,
+                              color: Color(0xFF6B7280),
+                            ),
+                            overflow: TextOverflow.ellipsis,
+                          ),
                         ),
                       ],
                     ),
@@ -475,240 +610,204 @@ class _UsersPageState extends State<UsersPage> {
                 ],
               ),
             ),
-            SizedBox(width: 140, child: Align(alignment: Alignment.centerLeft, child: _roleSelector(u))),
-            Expanded(flex: 2, child: _filialSelector(u)),
+            SizedBox(
+              width: 140,
+              child: Align(
+                alignment: Alignment.centerLeft,
+                child: _roleBadge(u.role),
+              ),
+            ),
+            Expanded(flex: 2, child: _filialSwitchGrid(u)),
             // Bitta foydalanuvchiga login ma'lumotlarini Telegram orqali yuborish.
             if (u.role != 'super_admin' &&
                 sl<TokenStorage>().getUserData()?.role == 'super_admin')
               IconButton(
                 tooltip: 'Отправить в Telegram',
-                icon: const Icon(Icons.send_rounded, size: 20, color: Color(0xFF2563EB)),
+                icon: const Icon(
+                  Icons.send_rounded,
+                  size: 20,
+                  color: Color(0xFF2563EB),
+                ),
                 onPressed: () => _sendCredentials(u),
               ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  // ── Role selector ──────────────────────────────────────────────────────
-
-  Widget _roleSelector(UserModel u) {
-    if (u.role == 'super_admin') return _roleBadge(u.role);
-    return PopupMenuButton<String>(
-      tooltip: 'Роль',
-      position: PopupMenuPosition.under,
-      color: Colors.white,
-      surfaceTintColor: Colors.white,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
-        side: const BorderSide(color: Color(0xFFE5E7EB)),
-      ),
-      onSelected: (next) => _changeRole(u, next),
-      itemBuilder: (_) => [
-        _roleMenuItem('checker', u.role == 'checker'),
-        _roleMenuItem('worker', u.role == 'worker'),
-      ],
-      child: Container(
-        padding: const EdgeInsets.fromLTRB(10, 6, 6, 6),
-        decoration: BoxDecoration(
-          color: const Color(0xFFEEF2FF),
-          borderRadius: BorderRadius.circular(24),
-          border: Border.all(color: const Color(0xFFC7D2FE), width: 1),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Container(width: 6, height: 6, decoration: const BoxDecoration(color: Color(0xFF4F46E5), shape: BoxShape.circle)),
-            const SizedBox(width: 8),
-            Flexible(
-              child: Text(_roleLabel(u.role), style: const TextStyle(color: Color(0xFF3730A3), fontSize: 12, fontWeight: FontWeight.w600), overflow: TextOverflow.ellipsis),
-            ),
-            const SizedBox(width: 6),
-            Container(
-              width: 22, height: 22,
-              decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(11)),
-              alignment: Alignment.center,
-              child: const Icon(Icons.expand_more_rounded, size: 16, color: Color(0xFF4F46E5)),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  PopupMenuItem<String> _roleMenuItem(String value, bool selected) {
-    return PopupMenuItem<String>(
-      value: value,
-      padding: EdgeInsets.zero,
-      child: Container(
-        width: double.infinity,
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-        color: selected ? const Color(0xFFEFF6FF) : Colors.white,
-        child: Row(
-          children: [
-            Expanded(
-              child: Text(
-                _roleLabel(value),
-                style: TextStyle(fontSize: 13, fontWeight: selected ? FontWeight.w600 : FontWeight.w500, color: selected ? const Color(0xFF1E40AF) : const Color(0xFF111827)),
-              ),
-            ),
-            if (selected) const Icon(Icons.check_rounded, size: 16, color: Color(0xFF2563EB)),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Future<void> _changeRole(UserModel u, String next) async {
-    if (next == u.role) return;
-    final success = await _userService.updateUser(userId: u.userId, username: u.username, role: next, filialIds: u.filialIds);
-    if (!mounted) return;
-    if (success) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Обновлено'), backgroundColor: Colors.green));
-      _load();
-    }
-  }
-
-  // ── Filial selector ────────────────────────────────────────────────────
-
-  Widget _filialSelector(UserModel u) {
-    // super_admin va checker (Корректор) barcha filiallarni ko'radi —
-    // filial tanlash kerak emas.
-    if (u.role == 'super_admin' || u.role == 'checker') {
-      return Text('—', style: TextStyle(fontSize: 12, color: Colors.grey[600]));
-    }
-    final ids = u.filialIds ?? [];
-    final btnKey = GlobalKey();
-    final isEmpty = ids.isEmpty;
-    final names = ids.map((id) {
-      final f = _filials.where((f) => f.filialId == id);
-      return f.isNotEmpty ? f.first.name : '#$id';
-    }).toList();
-    return GestureDetector(
-      onTap: () => _openFilialMenu(u, btnKey),
-      child: Container(
-        key: btnKey,
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(10),
-          border: Border.all(color: const Color(0xFFE5E7EB)),
-        ),
-        child: Row(
-          children: [
-            if (!isEmpty) ...[
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
-                decoration: BoxDecoration(color: const Color(0xFF059669), borderRadius: BorderRadius.circular(20)),
-                child: Text('${ids.length}', style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w700)),
-              ),
-              const SizedBox(width: 8),
-            ],
-            Expanded(
-              child: Text(
-                isEmpty ? 'Выбрать филиалы' : names.join(' · '),
-                style: TextStyle(fontSize: 12, color: isEmpty ? Colors.grey[500] : const Color(0xFF374151), fontWeight: isEmpty ? FontWeight.w500 : FontWeight.w600),
-                overflow: TextOverflow.ellipsis,
-                maxLines: 1,
-              ),
-            ),
-            const SizedBox(width: 4),
-            Container(
-              padding: const EdgeInsets.all(2),
-              decoration: BoxDecoration(color: const Color(0xFFF3F4F6), borderRadius: BorderRadius.circular(6)),
-              child: const Icon(Icons.unfold_more_rounded, size: 14, color: Color(0xFF6B7280)),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Future<void> _openFilialMenu(UserModel u, GlobalKey anchorKey) async {
-    final selected = Set<int>.from(u.filialIds ?? []);
-    final initial = Set<int>.from(selected);
-
-    final box = anchorKey.currentContext?.findRenderObject() as RenderBox?;
-    final overlay = Overlay.of(context).context.findRenderObject() as RenderBox?;
-    if (box == null || overlay == null) return;
-    final topLeft = box.localToGlobal(Offset(0, box.size.height + 4), ancestor: overlay);
-    final bottomRight = box.localToGlobal(box.size.bottomRight(Offset.zero), ancestor: overlay);
-    final position = RelativeRect.fromLTRB(topLeft.dx, topLeft.dy, overlay.size.width - bottomRight.dx, 0);
-
-    await showMenu<void>(
-      context: context,
-      position: position,
-      color: Colors.white,
-      surfaceTintColor: Colors.white,
-      constraints: const BoxConstraints(minWidth: 280, maxWidth: 360, maxHeight: 420),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12), side: const BorderSide(color: Color(0xFFE5E7EB))),
-      items: [
-        PopupMenuItem<void>(
-          enabled: false,
-          padding: EdgeInsets.zero,
-          child: StatefulBuilder(
-            builder: (ctx, setS) {
-              if (_filials.isEmpty) {
-                return Padding(padding: const EdgeInsets.all(16), child: Text('Филиалов нет', style: TextStyle(color: Colors.grey[600])));
-              }
-              return ConstrainedBox(
-                constraints: const BoxConstraints(maxHeight: 380),
-                child: SingleChildScrollView(
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: _filials.map((f) {
-                      final sel = selected.contains(f.filialId);
-                      return InkWell(
-                        onTap: () => setS(() { sel ? selected.remove(f.filialId) : selected.add(f.filialId); }),
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                          color: sel ? const Color(0xFFECFDF5) : Colors.white,
-                          child: Row(
-                            children: [
-                              AnimatedContainer(
-                                duration: const Duration(milliseconds: 120),
-                                width: 20, height: 20,
-                                decoration: BoxDecoration(
-                                  color: sel ? const Color(0xFF059669) : Colors.white,
-                                  border: Border.all(color: sel ? const Color(0xFF059669) : const Color(0xFFD1D5DB), width: 1.6),
-                                  borderRadius: BorderRadius.circular(6),
-                                ),
-                                alignment: Alignment.center,
-                                child: sel ? const Icon(Icons.check_rounded, size: 14, color: Colors.white) : null,
-                              ),
-                              const SizedBox(width: 12),
-                              Expanded(
-                                child: Text(f.name, style: TextStyle(fontSize: 13, fontWeight: sel ? FontWeight.w600 : FontWeight.w500, color: sel ? const Color(0xFF065F46) : const Color(0xFF111827))),
-                              ),
-                            ],
-                          ),
-                        ),
-                      );
-                    }).toList(),
-                  ),
+            if (sl<TokenStorage>().getUserData()?.role == 'super_admin')
+              IconButton(
+                tooltip: 'Удалить',
+                icon: Icon(
+                  Icons.delete_outline_rounded,
+                  size: 20,
+                  color: _isMe(u) ? const Color(0xFFD1D5DB) : Colors.red,
                 ),
-              );
-            },
+                onPressed: _isMe(u) ? null : () => _deleteUser(u.userId),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // ── Filial ruxsatlari (switch) ─────────────────────────────────────────
+
+  /// Har filial uchun «nom + switch» — 2 ustunli setka. Switch bosilishi
+  /// bilan ruxsat darhol beriladi / yopiladi (serverga saqlanadi).
+  Widget _filialSwitchGrid(UserModel u) {
+    // super_admin va checker (Корректор) barcha filiallarni ko'radi —
+    // filial ruxsati kerak emas.
+    if (u.role == 'super_admin' || u.role == 'checker') {
+      return Text('—', style: TextStyle(fontSize: 13, color: Colors.grey[400]));
+    }
+    if (_filials.isEmpty) {
+      return Text(
+        'Филиалов нет',
+        style: TextStyle(fontSize: 12, color: Colors.grey[500]),
+      );
+    }
+    final canMutate = sl<TokenStorage>().getUserData()?.role == 'super_admin';
+    final ids = u.filialIds ?? const <int>[];
+
+    // «Задачи» — o'z filiallari uchun vazifa qo'shish/tahrirlash/o'chirish ruxsati.
+    final manageTasksSwitch = Row(
+      children: [
+        const Icon(Icons.edit_note_rounded, size: 18, color: Color(0xFF4F46E5)),
+        const SizedBox(width: 6),
+        const Expanded(
+          child: Text(
+            'Задачи (добавлять / изменять / удалять)',
+            style: TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w700,
+              color: Color(0xFF4F46E5),
+            ),
+            overflow: TextOverflow.ellipsis,
+          ),
+        ),
+        Transform.scale(
+          scale: 0.8,
+          child: CupertinoSwitch(
+            value: u.canManageTasks,
+            activeTrackColor: const Color(0xFF4F46E5),
+            onChanged: canMutate ? (v) => _toggleManageTasks(u, v) : null,
           ),
         ),
       ],
     );
 
-    if (selected.length == initial.length && selected.containsAll(initial)) return;
-    final success = await _userService.updateUser(userId: u.userId, username: u.username, role: u.role, filialIds: selected.toList());
-    if (!mounted) return;
-    if (success) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Обновлено'), backgroundColor: Colors.green));
-      _load();
+    Widget cell(int i) {
+      if (i >= _filials.length) return const SizedBox.shrink();
+      final f = _filials[i];
+      final on = ids.contains(f.filialId);
+      return Row(
+        children: [
+          Expanded(
+            child: Text(
+              f.name,
+              style: const TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+                color: Color(0xFF374151),
+              ),
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+          Transform.scale(
+            scale: 0.8,
+            child: CupertinoSwitch(
+              value: on,
+              activeTrackColor: const Color(0xFF059669),
+              onChanged: canMutate
+                  ? (v) => _toggleFilial(u, f.filialId, v)
+                  : null,
+            ),
+          ),
+        ],
+      );
     }
+
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        manageTasksSwitch,
+        const Divider(height: 8),
+        for (var i = 0; i < _filials.length; i += 2)
+          Row(
+            children: [
+              Expanded(child: cell(i)),
+              const SizedBox(width: 16),
+              Expanded(child: cell(i + 1)),
+            ],
+          ),
+      ],
+    );
+  }
+
+  /// Optimistik: switch darhol o'zgaradi, server xato qaytarsa orqaga qaytadi.
+  Future<void> _toggleFilial(UserModel u, int filialId, bool on) async {
+    final next = List<int>.from(u.filialIds ?? const <int>[]);
+    on ? next.add(filialId) : next.remove(filialId);
+    _replaceUser(u.copyWith(filialIds: next));
+
+    final success = await _userService.updateUser(
+      userId: u.userId,
+      username: u.username,
+      role: u.role,
+      filialIds: next,
+      // Kategoriyalar o'chib ketmasligi uchun mavjudini qayta yuboramiz.
+      categories: u.categories,
+    );
+    if (!mounted) return;
+    if (!success) {
+      _replaceUser(u);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Не удалось сохранить'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
+
+  /// Optimistik: «Задачи» ruxsati darhol o'zgaradi, xato bo'lsa orqaga qaytadi.
+  Future<void> _toggleManageTasks(UserModel u, bool on) async {
+    _replaceUser(u.copyWith(canManageTasks: on));
+
+    final success = await _userService.updateUser(
+      userId: u.userId,
+      username: u.username,
+      role: u.role,
+      filialIds: u.filialIds,
+      categories: u.categories,
+      canManageTasks: on,
+    );
+    if (!mounted) return;
+    if (!success) {
+      _replaceUser(u);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Не удалось сохранить'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
+
+  void _replaceUser(UserModel u) {
+    setState(() {
+      final i = _users.indexWhere((x) => x.userId == u.userId);
+      if (i != -1) _users[i] = u;
+    });
   }
 
   // ── Profile grid view ──────────────────────────────────────────────────
 
   Widget _profileGrid() {
     if (_users.isEmpty) {
-      return Center(child: Text('Пользователей нет', style: TextStyle(color: Colors.grey[600])));
+      return Center(
+        child: Text(
+          'Пользователей нет',
+          style: TextStyle(color: Colors.grey[600]),
+        ),
+      );
     }
     return LayoutBuilder(
       builder: (ctx, c) {
@@ -745,7 +844,13 @@ class _UsersPageState extends State<UsersPage> {
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(14),
-        boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.06), blurRadius: 6, offset: const Offset(0, 2))],
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.06),
+            blurRadius: 6,
+            offset: const Offset(0, 2),
+          ),
+        ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -771,17 +876,40 @@ class _UsersPageState extends State<UsersPage> {
         onTap: () => _showAvatarPreview(imgRaw, u.fullName),
         child: ClipRRect(
           borderRadius: BorderRadius.circular(10),
-          child: Image.network(imgRaw, width: w, height: h, fit: BoxFit.cover,
-            errorBuilder: (_, __, ___) => Container(width: w, height: h, decoration: BoxDecoration(color: Colors.grey[100], borderRadius: BorderRadius.circular(10)), child: Icon(Icons.person, size: 40, color: Colors.grey[400])),
+          child: Image.network(
+            imgRaw,
+            width: w,
+            height: h,
+            fit: BoxFit.cover,
+            errorBuilder: (_, __, ___) => Container(
+              width: w,
+              height: h,
+              decoration: BoxDecoration(
+                color: Colors.grey[100],
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Icon(Icons.person, size: 40, color: Colors.grey[400]),
+            ),
           ),
         ),
       );
     }
     return Container(
-      width: w, height: h,
-      decoration: BoxDecoration(color: const Color(0xFFE0E7FF), borderRadius: BorderRadius.circular(10)),
+      width: w,
+      height: h,
+      decoration: BoxDecoration(
+        color: const Color(0xFFE0E7FF),
+        borderRadius: BorderRadius.circular(10),
+      ),
       alignment: Alignment.center,
-      child: Text(u.fullName.isNotEmpty ? u.fullName[0].toUpperCase() : '?', style: TextStyle(fontSize: w * 0.3, fontWeight: FontWeight.w700, color: const Color(0xFF3730A3))),
+      child: Text(
+        u.fullName.isNotEmpty ? u.fullName[0].toUpperCase() : '?',
+        style: TextStyle(
+          fontSize: w * 0.3,
+          fontWeight: FontWeight.w700,
+          color: const Color(0xFF3730A3),
+        ),
+      ),
     );
   }
 
@@ -794,10 +922,15 @@ class _UsersPageState extends State<UsersPage> {
       if (u.password.isNotEmpty) _passwordLine(u.password),
       if (tg != null && tg.isNotEmpty) _telegramLine(tg),
       if (u.filialIds != null && u.filialIds!.isNotEmpty)
-        _profileInfoLine(Icons.location_on_outlined, u.filialIds!.map((id) {
-          final f = _filials.where((f) => f.filialId == id);
-          return f.isNotEmpty ? f.first.name : '#$id';
-        }).join(', ')),
+        _profileInfoLine(
+          Icons.location_on_outlined,
+          u.filialIds!
+              .map((id) {
+                final f = _filials.where((f) => f.filialId == id);
+                return f.isNotEmpty ? f.first.name : '#$id';
+              })
+              .join(', '),
+        ),
     ];
   }
 
@@ -807,15 +940,21 @@ class _UsersPageState extends State<UsersPage> {
     final tg = u.telegram;
     return [
       _userCardHeader(u),
-      if (pos != null && pos.isNotEmpty) _profileInfoLine(Icons.work_outlined, pos),
+      if (pos != null && pos.isNotEmpty)
+        _profileInfoLine(Icons.work_outlined, pos),
       _phoneLine(phone),
       if (u.password.isNotEmpty) _passwordLine(u.password),
       if (tg != null && tg.isNotEmpty) _telegramLine(tg),
       if (u.filialIds != null && u.filialIds!.isNotEmpty)
-        _profileInfoLine(Icons.location_on_outlined, u.filialIds!.map((id) {
-          final f = _filials.where((f) => f.filialId == id);
-          return f.isNotEmpty ? f.first.name : '#$id';
-        }).join(', ')),
+        _profileInfoLine(
+          Icons.location_on_outlined,
+          u.filialIds!
+              .map((id) {
+                final f = _filials.where((f) => f.filialId == id);
+                return f.isNotEmpty ? f.first.name : '#$id';
+              })
+              .join(', '),
+        ),
     ];
   }
 
@@ -825,14 +964,28 @@ class _UsersPageState extends State<UsersPage> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(children: [
-            Flexible(child: Text(u.fullName.isNotEmpty ? u.fullName : '—', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: Color(0xFF1F2937)))),
-            const SizedBox(width: 8),
-            _roleBadge(u.role),
-          ]),
+          Row(
+            children: [
+              Flexible(
+                child: Text(
+                  u.fullName.isNotEmpty ? u.fullName : '—',
+                  style: const TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w700,
+                    color: Color(0xFF1F2937),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              _roleBadge(u.role),
+            ],
+          ),
           if (u.position != null && u.position!.isNotEmpty) ...[
             const SizedBox(height: 2),
-            Text(u.position!, style: TextStyle(fontSize: 13, color: Colors.grey[600])),
+            Text(
+              u.position!,
+              style: TextStyle(fontSize: 13, color: Colors.grey[600]),
+            ),
           ],
         ],
       ),
@@ -843,11 +996,26 @@ class _UsersPageState extends State<UsersPage> {
     if (text.isEmpty) return const SizedBox.shrink();
     return Padding(
       padding: const EdgeInsets.only(bottom: 4),
-      child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Padding(padding: const EdgeInsets.only(top: 2), child: Icon(icon, size: 14, color: Colors.grey[400])),
-        const SizedBox(width: 8),
-        Expanded(child: Text(text, style: TextStyle(fontSize: 13, color: Colors.grey[700]), maxLines: maxLines, overflow: maxLines != null ? TextOverflow.ellipsis : TextOverflow.clip)),
-      ]),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: const EdgeInsets.only(top: 2),
+            child: Icon(icon, size: 14, color: Colors.grey[400]),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              text,
+              style: TextStyle(fontSize: 13, color: Colors.grey[700]),
+              maxLines: maxLines,
+              overflow: maxLines != null
+                  ? TextOverflow.ellipsis
+                  : TextOverflow.clip,
+            ),
+          ),
+        ],
+      ),
     );
   }
 
@@ -857,11 +1025,20 @@ class _UsersPageState extends State<UsersPage> {
       padding: const EdgeInsets.only(bottom: 4),
       child: GestureDetector(
         onTap: () => _callPhone(telefon),
-        child: Row(children: [
-          Icon(Icons.phone_outlined, size: 14, color: Colors.grey[400]),
-          const SizedBox(width: 8),
-          Text(telefon, style: const TextStyle(fontSize: 13, color: Color(0xFF3699ff), fontWeight: FontWeight.w600)),
-        ]),
+        child: Row(
+          children: [
+            Icon(Icons.phone_outlined, size: 14, color: Colors.grey[400]),
+            const SizedBox(width: 8),
+            Text(
+              telefon,
+              style: const TextStyle(
+                fontSize: 13,
+                color: Color(0xFF3699ff),
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -869,11 +1046,23 @@ class _UsersPageState extends State<UsersPage> {
   Widget _passwordLine(String password) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 4),
-      child: Row(children: [
-        const Icon(Icons.key_rounded, size: 14, color: Color(0xFF9CA3AF)),
-        const SizedBox(width: 8),
-        Flexible(child: Text(password, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500, color: Color(0xFF6B7280)), overflow: TextOverflow.ellipsis)),
-      ]),
+      child: Row(
+        children: [
+          const Icon(Icons.key_rounded, size: 14, color: Color(0xFF9CA3AF)),
+          const SizedBox(width: 8),
+          Flexible(
+            child: Text(
+              password,
+              style: const TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w500,
+                color: Color(0xFF6B7280),
+              ),
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+        ],
+      ),
     );
   }
 
@@ -882,11 +1071,22 @@ class _UsersPageState extends State<UsersPage> {
       padding: const EdgeInsets.only(bottom: 4),
       child: GestureDetector(
         onTap: () => _openTelegram(username),
-        child: Row(children: [
-          Icon(Icons.send_outlined, size: 14, color: Colors.grey[400]),
-          const SizedBox(width: 8),
-          Flexible(child: Text('@$username', style: const TextStyle(fontSize: 13, color: Color(0xFF3699ff), fontWeight: FontWeight.w600))),
-        ]),
+        child: Row(
+          children: [
+            Icon(Icons.send_outlined, size: 14, color: Colors.grey[400]),
+            const SizedBox(width: 8),
+            Flexible(
+              child: Text(
+                '@$username',
+                style: const TextStyle(
+                  fontSize: 13,
+                  color: Color(0xFF3699ff),
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -913,8 +1113,7 @@ class _UsersPageState extends State<UsersPage> {
     }
 
     final messenger = ScaffoldMessenger.of(context);
-    final result =
-        await ApiService().login(LoginModel(password: u.password));
+    final result = await ApiService().login(LoginModel(password: u.password));
     if (!mounted) return;
 
     if (result['success'] == true && result['token'] != null) {
@@ -923,15 +1122,20 @@ class _UsersPageState extends State<UsersPage> {
       await ts.putUserData(Map<String, dynamic>.from(result['user'] as Map));
       if (!mounted) return;
       context.pushAndRemove(
-        landingForUser(UserModel.fromJson(
-          Map<String, dynamic>.from(result['user'] as Map),
-        )),
+        landingForUser(
+          UserModel.fromJson(Map<String, dynamic>.from(result['user'] as Map)),
+        ),
       );
     } else {
-      messenger.showSnackBar(SnackBar(
-        content: Text(
-            result['message']?.toString() ?? result['error']?.toString() ?? 'Не удалось войти'),
-      ));
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text(
+            result['message']?.toString() ??
+                result['error']?.toString() ??
+                'Не удалось войти',
+          ),
+        ),
+      );
     }
   }
 
@@ -941,8 +1145,19 @@ class _UsersPageState extends State<UsersPage> {
     final isSuper = role == 'super_admin';
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-      decoration: BoxDecoration(color: isSuper ? const Color(0xFFFEF3C7) : const Color(0xFFE0E7FF), borderRadius: BorderRadius.circular(20)),
-      child: Text(_roleLabel(role), style: TextStyle(color: isSuper ? const Color(0xFF92400E) : const Color(0xFF3730A3), fontSize: 11, fontWeight: FontWeight.w600), textAlign: TextAlign.center),
+      decoration: BoxDecoration(
+        color: isSuper ? const Color(0xFFFEF3C7) : const Color(0xFFE0E7FF),
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: Text(
+        _roleLabel(role),
+        style: TextStyle(
+          color: isSuper ? const Color(0xFF92400E) : const Color(0xFF3730A3),
+          fontSize: 11,
+          fontWeight: FontWeight.w600,
+        ),
+        textAlign: TextAlign.center,
+      ),
     );
   }
 
@@ -953,11 +1168,16 @@ class _UsersPageState extends State<UsersPage> {
     final webUri = Uri.parse('https://t.me/$username');
     try {
       if (await canLaunchUrl(appUri)) {
-        final ok = await launchUrl(appUri, mode: LaunchMode.externalApplication);
+        final ok = await launchUrl(
+          appUri,
+          mode: LaunchMode.externalApplication,
+        );
         if (ok) return;
       }
     } catch (_) {}
-    try { await launchUrl(webUri, mode: LaunchMode.externalApplication); } catch (_) {}
+    try {
+      await launchUrl(webUri, mode: LaunchMode.externalApplication);
+    } catch (_) {}
   }
 
   void _showAvatarPreview(String url, String name) {
@@ -967,28 +1187,82 @@ class _UsersPageState extends State<UsersPage> {
       builder: (ctx) => Dialog(
         backgroundColor: Colors.transparent,
         insetPadding: const EdgeInsets.all(24),
-        child: Stack(children: [
-          Center(child: InteractiveViewer(
-            maxScale: 5,
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(16),
-              child: Image.network(url, fit: BoxFit.contain,
-                loadingBuilder: (_, child, progress) => progress == null ? child : const Center(child: CircularProgressIndicator(color: Colors.white)),
-                errorBuilder: (_, __, ___) => Container(width: 320, height: 320, color: Colors.grey[800], alignment: Alignment.center, child: const Icon(Icons.broken_image_rounded, color: Colors.white54, size: 64)),
+        child: Stack(
+          children: [
+            Center(
+              child: InteractiveViewer(
+                maxScale: 5,
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(16),
+                  child: Image.network(
+                    url,
+                    fit: BoxFit.contain,
+                    loadingBuilder: (_, child, progress) => progress == null
+                        ? child
+                        : const Center(
+                            child: CircularProgressIndicator(
+                              color: Colors.white,
+                            ),
+                          ),
+                    errorBuilder: (_, __, ___) => Container(
+                      width: 320,
+                      height: 320,
+                      color: Colors.grey[800],
+                      alignment: Alignment.center,
+                      child: const Icon(
+                        Icons.broken_image_rounded,
+                        color: Colors.white54,
+                        size: 64,
+                      ),
+                    ),
+                  ),
+                ),
               ),
             ),
-          )),
-          Positioned(top: 12, right: 12, child: Material(
-            color: Colors.black54, shape: const CircleBorder(),
-            child: InkWell(customBorder: const CircleBorder(), onTap: () => Navigator.pop(ctx), child: const Padding(padding: EdgeInsets.all(8), child: Icon(Icons.close_rounded, color: Colors.white, size: 24))),
-          )),
-          if (name.isNotEmpty)
-            Positioned(left: 16, bottom: 16, child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-              decoration: BoxDecoration(color: Colors.black54, borderRadius: BorderRadius.circular(20)),
-              child: Text(name, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600)),
-            )),
-        ]),
+            Positioned(
+              top: 12,
+              right: 12,
+              child: Material(
+                color: Colors.black54,
+                shape: const CircleBorder(),
+                child: InkWell(
+                  customBorder: const CircleBorder(),
+                  onTap: () => Navigator.pop(ctx),
+                  child: const Padding(
+                    padding: EdgeInsets.all(8),
+                    child: Icon(
+                      Icons.close_rounded,
+                      color: Colors.white,
+                      size: 24,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+            if (name.isNotEmpty)
+              Positioned(
+                left: 16,
+                bottom: 16,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 6,
+                  ),
+                  decoration: BoxDecoration(
+                    color: Colors.black54,
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: Text(
+                    name,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+              ),
+          ],
+        ),
       ),
     );
   }

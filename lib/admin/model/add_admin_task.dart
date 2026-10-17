@@ -4,6 +4,8 @@ class AddAdminTaskModel {
   List<int> filialsId;
   List<int>? days;
   String? category;
+  bool multiVideo;
+  int videoCount;
 
   AddAdminTaskModel({
     required this.task,
@@ -11,6 +13,8 @@ class AddAdminTaskModel {
     required this.filialsId,
     this.days,
     this.category,
+    this.multiVideo = false,
+    this.videoCount = 1,
   });
   //to json
   Map<String, dynamic> toJson() => {
@@ -19,5 +23,7 @@ class AddAdminTaskModel {
     "filialIds": filialsId,
     "days": days,
     "category": category,
+    "multiVideo": multiVideo,
+    "videoCount": videoCount,
   };
 }

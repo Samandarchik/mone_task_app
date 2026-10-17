@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/scheduler.dart';
 import 'package:mone_task_app/checker/model/checker_check_task_model.dart';
 import 'package:mone_task_app/core/constants/urls.dart';
 import 'package:path_provider/path_provider.dart';
@@ -41,8 +42,7 @@ class VideoDownloadProvider extends ChangeNotifier {
     return _states[url] ?? const VideoDownloadState();
   }
 
-  bool isCached(String url) =>
-      _states[url]?.status == VideoStatus.cached;
+  bool isCached(String url) => _states[url]?.status == VideoStatus.cached;
 
   String? getLocalPath(String url) => _states[url]?.localPath;
 
@@ -68,13 +68,18 @@ class VideoDownloadProvider extends ChangeNotifier {
     if (_isSequenceRunning) return;
 
     final urls = tasks
-        .where((t) =>
-            t.filialId == filialId &&
-            t.videoUrl != null &&
-            t.videoUrl!.isNotEmpty)
-        .map((t) => getFullUrl(t.videoUrl!))
+        .where((t) => t.filialId == filialId)
+        .expand(
+          (t) => t.videoUrls.isNotEmpty
+              ? t.videoUrls
+              : [if (t.videoUrl != null && t.videoUrl!.isNotEmpty) t.videoUrl!],
+        )
+        .map(getFullUrl)
         .toSet() // unique
-        .where((url) => !isCached(url) && getState(url).status != VideoStatus.downloading)
+        .where(
+          (url) =>
+              !isCached(url) && getState(url).status != VideoStatus.downloading,
+        )
         .toList();
 
     if (urls.isEmpty) return;
@@ -99,10 +104,10 @@ class VideoDownloadProvider extends ChangeNotifier {
       return;
     }
 
-    _updateState(videoUrl, const VideoDownloadState(
-      status: VideoStatus.downloading,
-      progress: 0.0,
-    ));
+    _updateState(
+      videoUrl,
+      const VideoDownloadState(status: VideoStatus.downloading, progress: 0.0),
+    );
 
     try {
       final localPath = await _getLocalFilePath(videoUrl);
@@ -112,11 +117,14 @@ class VideoDownloadProvider extends ChangeNotifier {
       if (await file.exists() && await file.length() > 0) {
         final isComplete = await _verifyFileComplete(videoUrl, file);
         if (isComplete) {
-          _updateState(videoUrl, VideoDownloadState(
-            status: VideoStatus.cached,
-            progress: 1.0,
-            localPath: localPath,
-          ));
+          _updateState(
+            videoUrl,
+            VideoDownloadState(
+              status: VideoStatus.cached,
+              progress: 1.0,
+              localPath: localPath,
+            ),
+          );
           return;
         }
         await file.delete();
@@ -130,10 +138,13 @@ class VideoDownloadProvider extends ChangeNotifier {
         tempPath,
         onReceiveProgress: (received, total) {
           if (total > 0) {
-            _updateState(videoUrl, VideoDownloadState(
-              status: VideoStatus.downloading,
-              progress: received / total,
-            ));
+            _updateState(
+              videoUrl,
+              VideoDownloadState(
+                status: VideoStatus.downloading,
+                progress: received / total,
+              ),
+            );
           }
         },
       );
@@ -141,16 +152,20 @@ class VideoDownloadProvider extends ChangeNotifier {
       final tempFile = File(tempPath);
       if (await tempFile.exists() && await tempFile.length() > 0) {
         await tempFile.rename(localPath);
-        _updateState(videoUrl, VideoDownloadState(
-          status: VideoStatus.cached,
-          progress: 1.0,
-          localPath: localPath,
-        ));
+        _updateState(
+          videoUrl,
+          VideoDownloadState(
+            status: VideoStatus.cached,
+            progress: 1.0,
+            localPath: localPath,
+          ),
+        );
       } else {
         if (await tempFile.exists()) await tempFile.delete();
-        _updateState(videoUrl, const VideoDownloadState(
-          status: VideoStatus.error,
-        ));
+        _updateState(
+          videoUrl,
+          const VideoDownloadState(status: VideoStatus.error),
+        );
       }
     } catch (e) {
       try {
@@ -159,9 +174,10 @@ class VideoDownloadProvider extends ChangeNotifier {
         if (await tempFile.exists()) await tempFile.delete();
       } catch (_) {}
 
-      _updateState(videoUrl, const VideoDownloadState(
-        status: VideoStatus.error,
-      ));
+      _updateState(
+        videoUrl,
+        const VideoDownloadState(status: VideoStatus.error),
+      );
     }
   }
 
@@ -169,8 +185,9 @@ class VideoDownloadProvider extends ChangeNotifier {
     try {
       final dio = Dio();
       final head = await dio.head(videoUrl);
-      final serverSize =
-          int.tryParse(head.headers.value('content-length') ?? '');
+      final serverSize = int.tryParse(
+        head.headers.value('content-length') ?? '',
+      );
       final localSize = await file.length();
       return serverSize == null || localSize >= serverSize;
     } catch (_) {
@@ -184,30 +201,49 @@ class VideoDownloadProvider extends ChangeNotifier {
     if (!await videosDir.exists()) {
       await videosDir.create(recursive: true);
     }
-    final fileName =
-        videoUrl.split('/').last.replaceAll(RegExp(r'[^\w\s\-\.]'), '_');
+    final fileName = videoUrl
+        .split('/')
+        .last
+        .replaceAll(RegExp(r'[^\w\s\-\.]'), '_');
     return '${videosDir.path}/$fileName';
   }
 
   void _updateState(String url, VideoDownloadState state) {
     _states[url] = state;
-    notifyListeners();
+    _safeNotify();
+  }
+
+  /// Build/layout paytida notifyListeners chaqirilsa Flutter assertion beradi —
+  /// bunday holatda frame tugagach xabar beramiz.
+  bool _notifyScheduled = false;
+  void _safeNotify() {
+    final phase = SchedulerBinding.instance.schedulerPhase;
+    if (phase == SchedulerPhase.persistentCallbacks) {
+      if (_notifyScheduled) return;
+      _notifyScheduled = true;
+      SchedulerBinding.instance.addPostFrameCallback((_) {
+        _notifyScheduled = false;
+        notifyListeners();
+      });
+    } else {
+      notifyListeners();
+    }
   }
 
   /// Get all video paths for a filial (resolved: local if cached, URL otherwise)
-  List<String> getAllVideoPaths(
-    List<TaskModel> tasks,
-    int filialId,
-  ) {
+  List<String> getAllVideoPaths(List<TaskModel> tasks, int filialId) {
     return tasks
-        .where((t) =>
-            t.filialId == filialId &&
-            t.videoUrl != null &&
-            t.videoUrl!.isNotEmpty)
+        .where(
+          (t) =>
+              t.filialId == filialId &&
+              t.videoUrl != null &&
+              t.videoUrl!.isNotEmpty,
+        )
         .map((t) {
-      final fullUrl = getFullUrl(t.videoUrl!);
-      return resolvedPath(fullUrl);
-    }).toList();
+          final fullUrl = getFullUrl(t.videoUrl!);
+          return resolvedPath(fullUrl);
+        })
+        .toList();
   }
 
   /// Clear all cached states (not files)

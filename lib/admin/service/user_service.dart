@@ -28,9 +28,13 @@ class UserService {
     List<String>? categories,
     String? phoneNumber,
     String? profileJson,
+    bool? canManageTasks,
   }) async {
     try {
       final Map<String, dynamic> data = {'username': username, 'role': role};
+      if (canManageTasks != null) {
+        data['canManageTasks'] = canManageTasks;
+      }
       if (password != null && password.isNotEmpty) {
         data['password'] = password;
       }

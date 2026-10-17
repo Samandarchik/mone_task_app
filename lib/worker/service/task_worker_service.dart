@@ -39,7 +39,8 @@ class TaskWorkerService {
     }
   }
 
-  Future<bool> completeTask(RequestTaskModel request) async {
+  /// [slot] — ko'p videoli taskda nechanchi video (0 dan). null = qo'shish
+  Future<bool> completeTask(RequestTaskModel request, {int? slot}) async {
     try {
       final compressedVideo = File(request.file!.path);
 
@@ -48,6 +49,7 @@ class TaskWorkerService {
           compressedVideo.path,
           filename: request.file!.name,
         ),
+        if (slot != null) "slot": slot,
       });
 
       final response = await _dio.post(
@@ -96,11 +98,15 @@ class TaskWorkerService {
   Future<bool> completeTaskWithSegments({
     required int taskId,
     required List<XFile> segments,
+    int? slot,
   }) async {
     try {
       if (segments.isEmpty) throw Exception('Сегменты отсутствуют');
 
-      Map<String, dynamic> formDataMap = {'segment_count': segments.length};
+      Map<String, dynamic> formDataMap = {
+        'segment_count': segments.length,
+        if (slot != null) 'slot': slot,
+      };
 
       for (int i = 0; i < segments.length; i++) {
         final videoFile = File(segments[i].path);

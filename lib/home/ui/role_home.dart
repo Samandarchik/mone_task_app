@@ -81,7 +81,15 @@ UserModel? applyUserUpdateEvent(Map<String, dynamic> data) {
           ? data['role'] as String
           : current.role;
 
-  final updated = current.copyWith(filialIds: newIds, role: newRole);
+  final newCanManage = data['canManageTasks'] is bool
+      ? data['canManageTasks'] as bool
+      : current.canManageTasks;
+
+  final updated = current.copyWith(
+    filialIds: newIds,
+    role: newRole,
+    canManageTasks: newCanManage,
+  );
   ts.putUserData(updated.toJson());
 
   // Aktiv filial endi ruxsat ro'yxatida bo'lmasa — tozalaymiz (qayta tanlanadi).

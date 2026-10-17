@@ -102,6 +102,11 @@ class _AdminTaskUiState extends State<AdminTaskUi>
           onHalfWatched: isChecker
               ? (taskId) {
                   final provider = context.read<AdminTasksProvider>();
+                  // Barcha videolar yuklanmagan bo'lsa vazifa tasdiqlanmaydi
+                  final task = provider.tasks
+                      .where((t) => t.taskId == taskId)
+                      .firstOrNull;
+                  if (task == null || !task.videosComplete) return;
                   provider.updateTaskStatus(taskId, 3, _selectedDate);
                 }
               : null,
@@ -110,9 +115,28 @@ class _AdminTaskUiState extends State<AdminTaskUi>
     );
   }
 
+  PopupMenuItem<VoidCallback> _menuItem(
+    IconData icon,
+    String text,
+    VoidCallback action, {
+    Color? color,
+  }) {
+    return PopupMenuItem(
+      value: action,
+      child: Row(
+        children: [
+          Icon(icon, size: 20, color: color),
+          const SizedBox(width: 12),
+          Text(text, style: TextStyle(color: color)),
+        ],
+      ),
+    );
+  }
+
   String _buildDateLabel(DateTime selectedDate) {
     final now = DateTime.now();
-    final isToday = selectedDate.year == now.year &&
+    final isToday =
+        selectedDate.year == now.year &&
         selectedDate.month == now.month &&
         selectedDate.day == now.day;
     if (isToday) return "Сегодня";
@@ -131,8 +155,18 @@ class _AdminTaskUiState extends State<AdminTaskUi>
     final lastDate = DateTime.now();
 
     const monthNames = [
-      'Январь', 'Февраль', 'Март', 'Апрель', 'Май', 'Июнь',
-      'Июль', 'Август', 'Сентябрь', 'Октябрь', 'Ноябрь', 'Декабрь',
+      'Январь',
+      'Февраль',
+      'Март',
+      'Апрель',
+      'Май',
+      'Июнь',
+      'Июль',
+      'Август',
+      'Сентябрь',
+      'Октябрь',
+      'Ноябрь',
+      'Декабрь',
     ];
 
     final months = <DateTime>[];
@@ -353,10 +387,7 @@ class _AdminTaskUiState extends State<AdminTaskUi>
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Ошибка: $e'),
-            backgroundColor: Colors.red,
-          ),
+          SnackBar(content: Text('Ошибка: $e'), backgroundColor: Colors.red),
         );
       }
     }
@@ -372,11 +403,13 @@ class _AdminTaskUiState extends State<AdminTaskUi>
   void _switchFilial() {
     final ids = _user?.filialIds;
     if (ids == null || ids.length <= 1) return;
-    context.push(FilialSelectPage(
-      role: _user?.role ?? 'checker',
-      allowedIds: ids,
-      isSwitch: true,
-    ));
+    context.push(
+      FilialSelectPage(
+        role: _user?.role ?? 'checker',
+        allowedIds: ids,
+        isSwitch: true,
+      ),
+    );
   }
 
   Future<void> _handleLogout() async {
@@ -520,31 +553,71 @@ class _AdminTaskUiState extends State<AdminTaskUi>
           ),
 
           // ── Menyu elementlari (drawer o'rniga) ─────────────────────────
-          IconButton(
-            onPressed: () => context.push(
-              TemplateTaskAdminUi(
-                name: _user?.username ?? "",
-                category: categories,
+          // Telefonda joy yetmaydi — menyu "⋯" ichida
+          if (MediaQuery.of(context).size.shortestSide < 600)
+            PopupMenuButton<VoidCallback>(
+              icon: const Icon(Icons.more_vert),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(14),
               ),
+              onSelected: (action) => action(),
+              itemBuilder: (_) => [
+                _menuItem(
+                  CupertinoIcons.list_bullet,
+                  'Все задачи',
+                  () => context.push(
+                    TemplateTaskAdminUi(
+                      name: _user?.username ?? "",
+                      category: categories,
+                    ),
+                  ),
+                ),
+                _menuItem(
+                  CupertinoIcons.trash,
+                  'Очистить кэш видео',
+                  _clearVideoCache,
+                ),
+                _menuItem(
+                  CupertinoIcons.doc_plaintext,
+                  'Отчеты',
+                  () => context.push(ExcelReportPage(filials: categories)),
+                ),
+                _menuItem(
+                  Icons.logout,
+                  'Выйти',
+                  _handleLogout,
+                  color: Colors.red,
+                ),
+              ],
+            )
+          else ...[
+            IconButton(
+              onPressed: () => context.push(
+                TemplateTaskAdminUi(
+                  name: _user?.username ?? "",
+                  category: categories,
+                ),
+              ),
+              icon: const Icon(CupertinoIcons.list_bullet),
+              tooltip: 'Все задачи',
             ),
-            icon: const Icon(CupertinoIcons.list_bullet),
-            tooltip: 'Все задачи',
-          ),
-          IconButton(
-            onPressed: _clearVideoCache,
-            icon: const Icon(CupertinoIcons.trash),
-            tooltip: 'Очистить кэш видео',
-          ),
-          IconButton(
-            onPressed: () => context.push(ExcelReportPage(filials: categories)),
-            icon: const Icon(CupertinoIcons.doc_plaintext),
-            tooltip: 'Отчеты',
-          ),
-          IconButton(
-            onPressed: _handleLogout,
-            icon: const Icon(Icons.logout, color: Colors.red),
-            tooltip: 'Выйти',
-          ),
+            IconButton(
+              onPressed: _clearVideoCache,
+              icon: const Icon(CupertinoIcons.trash),
+              tooltip: 'Очистить кэш видео',
+            ),
+            IconButton(
+              onPressed: () =>
+                  context.push(ExcelReportPage(filials: categories)),
+              icon: const Icon(CupertinoIcons.doc_plaintext),
+              tooltip: 'Отчеты',
+            ),
+            IconButton(
+              onPressed: _handleLogout,
+              icon: const Icon(Icons.logout, color: Colors.red),
+              tooltip: 'Выйти',
+            ),
+          ],
         ],
         bottom: PreferredSize(
           preferredSize: const Size.fromHeight(kTextTabBarHeight),
@@ -664,7 +737,12 @@ class _StatusFilterButton extends StatelessWidget {
               width: isSelected ? 2.5 : 1.5,
             ),
             boxShadow: isSelected
-                ? [BoxShadow(color: color.withValues(alpha: 0.4), blurRadius: 6)]
+                ? [
+                    BoxShadow(
+                      color: color.withValues(alpha: 0.4),
+                      blurRadius: 6,
+                    ),
+                  ]
                 : [],
           ),
           child: isSelected
@@ -708,7 +786,12 @@ class _NoVideoFilterButton extends StatelessWidget {
               width: isSelected ? 2.5 : 1.5,
             ),
             boxShadow: isSelected
-                ? [BoxShadow(color: color.withValues(alpha: 0.4), blurRadius: 6)]
+                ? [
+                    BoxShadow(
+                      color: color.withValues(alpha: 0.4),
+                      blurRadius: 6,
+                    ),
+                  ]
                 : [],
           ),
           child: Icon(

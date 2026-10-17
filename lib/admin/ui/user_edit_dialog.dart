@@ -6,6 +6,8 @@ import 'package:mone_task_app/admin/model/category_model.dart';
 import 'package:mone_task_app/admin/model/filial_model.dart';
 import 'package:mone_task_app/admin/service/task_worker_service.dart';
 import 'package:mone_task_app/admin/service/user_service.dart';
+import 'package:mone_task_app/core/data/local/token_storage.dart';
+import 'package:mone_task_app/core/di/di.dart';
 import 'package:mone_task_app/worker/model/user_model.dart';
 
 /// Foydalanuvchini bitta tap bilan tahrirlash dialogi:
@@ -57,6 +59,9 @@ class _UserEditDialogState extends State<UserEditDialog> {
   bool _replacingRezume = false;
   String? _rezumeMessage;
   bool _saving = false;
+
+  bool get _isMe =>
+      sl<TokenStorage>().getUserData()?.userId == widget.user.userId;
 
   @override
   void initState() {
@@ -122,9 +127,9 @@ class _UserEditDialogState extends State<UserEditDialog> {
         return;
       }
 
-      final data = (resp.data is String
-          ? jsonDecode(resp.data as String)
-          : resp.data) as Map<String, dynamic>;
+      final data =
+          (resp.data is String ? jsonDecode(resp.data as String) : resp.data)
+              as Map<String, dynamic>;
       data.remove('interviews');
 
       final familiya = (data['familiya'] ?? '').toString().trim();
@@ -165,8 +170,8 @@ class _UserEditDialogState extends State<UserEditDialog> {
     final phone = _phoneController.text.trim();
     final changedPassword =
         password.isNotEmpty && password != widget.user.password
-            ? password
-            : null;
+        ? password
+        : null;
 
     final success = await _userService.updateUser(
       userId: widget.user.userId,
@@ -190,7 +195,9 @@ class _UserEditDialogState extends State<UserEditDialog> {
   }
 
   void _showError(String message) {
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(message)));
   }
 
   // ── Build ───────────────────────────────────────────────────────────────
@@ -207,20 +214,24 @@ class _UserEditDialogState extends State<UserEditDialog> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Row(children: [
-                const Icon(Icons.edit, color: Color(0xFF3699ff)),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Text(
-                    widget.user.fullName.isNotEmpty
-                        ? widget.user.fullName.toUpperCase()
-                        : widget.user.username.toUpperCase(),
-                    style: const TextStyle(
-                        fontSize: 18, fontWeight: FontWeight.w700),
-                    overflow: TextOverflow.ellipsis,
+              Row(
+                children: [
+                  const Icon(Icons.edit, color: Color(0xFF3699ff)),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      widget.user.fullName.isNotEmpty
+                          ? widget.user.fullName.toUpperCase()
+                          : widget.user.username.toUpperCase(),
+                      style: const TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.w700,
+                      ),
+                      overflow: TextOverflow.ellipsis,
+                    ),
                   ),
-                ),
-              ]),
+                ],
+              ),
               const SizedBox(height: 16),
               Flexible(
                 child: SingleChildScrollView(
@@ -249,35 +260,53 @@ class _UserEditDialogState extends State<UserEditDialog> {
                         icon: Icons.vpn_key_outlined,
                       ),
                       const SizedBox(height: 16),
-                      const Text('Роль',
+                      // O'zining rolini o'zgartira olmaydi (super admin
+                      // huquqini yo'qotib qo'ymaslik uchun).
+                      if (!_isMe) ...[
+                        const Text(
+                          'Роль',
                           style: TextStyle(
-                              fontSize: 13, color: Color(0xFF6B7280))),
-                      const SizedBox(height: 8),
-                      Wrap(
-                        spacing: 8,
-                        runSpacing: 8,
-                        children: _roles.map((r) {
-                          final selected = _selectedRole == r.value;
-                          return ChoiceChip(
-                            label: Text(r.label),
-                            selected: selected,
-                            onSelected: (_) =>
-                                setState(() => _selectedRole = r.value),
-                          );
-                        }).toList(),
-                      ),
+                            fontSize: 13,
+                            color: Color(0xFF6B7280),
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        SingleChildScrollView(
+                          scrollDirection: Axis.horizontal,
+                          child: SegmentedButton<String>(
+                            segments: _roles
+                                .map(
+                                  (r) => ButtonSegment(
+                                    value: r.value,
+                                    label: Text(r.label),
+                                  ),
+                                )
+                                .toList(),
+                            selected: {_selectedRole},
+                            onSelectionChanged: _saving
+                                ? null
+                                : (s) =>
+                                      setState(() => _selectedRole = s.first),
+                          ),
+                        ),
+                      ],
                       if (_selectedRole == 'worker') ...[
                         const SizedBox(height: 16),
-                        const Text('Филиалы',
-                            style: TextStyle(
-                                fontSize: 13, color: Color(0xFF6B7280))),
+                        const Text(
+                          'Филиалы',
+                          style: TextStyle(
+                            fontSize: 13,
+                            color: Color(0xFF6B7280),
+                          ),
+                        ),
                         const SizedBox(height: 8),
                         Wrap(
                           spacing: 8,
                           runSpacing: 8,
                           children: widget.filials.map((f) {
-                            final selected =
-                                _selectedFilialIds.contains(f.filialId);
+                            final selected = _selectedFilialIds.contains(
+                              f.filialId,
+                            );
                             return FilterChip(
                               label: Text(f.name),
                               selected: selected,
@@ -292,16 +321,21 @@ class _UserEditDialogState extends State<UserEditDialog> {
                           }).toList(),
                         ),
                         const SizedBox(height: 16),
-                        const Text('Категории',
-                            style: TextStyle(
-                                fontSize: 13, color: Color(0xFF6B7280))),
+                        const Text(
+                          'Категории',
+                          style: TextStyle(
+                            fontSize: 13,
+                            color: Color(0xFF6B7280),
+                          ),
+                        ),
                         const SizedBox(height: 8),
                         Wrap(
                           spacing: 8,
                           runSpacing: 8,
                           children: _categories.map((c) {
-                            final selected =
-                                _selectedCategories.contains(c.name);
+                            final selected = _selectedCategories.contains(
+                              c.name,
+                            );
                             return FilterChip(
                               label: Text(c.name),
                               selected: selected,
@@ -326,7 +360,8 @@ class _UserEditDialogState extends State<UserEditDialog> {
                                   width: 16,
                                   height: 16,
                                   child: CircularProgressIndicator(
-                                      strokeWidth: 2),
+                                    strokeWidth: 2,
+                                  ),
                                 )
                               : const Icon(Icons.swap_horiz, size: 18),
                           label: const Text('Заменить резюме'),
@@ -356,8 +391,9 @@ class _UserEditDialogState extends State<UserEditDialog> {
                 mainAxisAlignment: MainAxisAlignment.end,
                 children: [
                   TextButton(
-                    onPressed:
-                        _saving ? null : () => Navigator.pop(context, false),
+                    onPressed: _saving
+                        ? null
+                        : () => Navigator.pop(context, false),
                     child: const Text('Отмена'),
                   ),
                   const SizedBox(width: 8),
@@ -368,7 +404,9 @@ class _UserEditDialogState extends State<UserEditDialog> {
                             width: 16,
                             height: 16,
                             child: CircularProgressIndicator(
-                                strokeWidth: 2, color: Colors.white),
+                              strokeWidth: 2,
+                              color: Colors.white,
+                            ),
                           )
                         : const Icon(Icons.check, size: 18),
                     label: const Text('Сохранить'),

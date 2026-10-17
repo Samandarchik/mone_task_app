@@ -5,6 +5,8 @@ import 'package:mone_task_app/admin/model/filial_model.dart';
 import 'package:mone_task_app/checker/model/checker_check_task_model.dart';
 import 'package:mone_task_app/checker/service/task_worker_service.dart';
 import 'package:mone_task_app/core/network/ws_service.dart';
+import 'package:mone_task_app/shared/services/task_prefs_service.dart';
+import 'package:mone_task_app/shared/widgets/task_reorder_list.dart';
 
 enum LoadingState { idle, loading, loaded, error }
 
@@ -111,6 +113,37 @@ class AdminTasksProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  // ── Pin va shaxsiy tartib ────────────────────────────────────────────────
+  final TaskPrefsService _prefs = TaskPrefsService();
+
+  Future<void> togglePin(TaskModel task) async {
+    task.pinned = !task.pinned;
+    _tasks = pinnedFirst(_tasks);
+    notifyListeners();
+    final ok = await _prefs.setPinned(task.templateId, task.pinned);
+    // Qadash olinganda vazifa shaxsiy tartibdagi joyiga qaytadi — serverdan olamiz
+    if (!ok || !task.pinned) await fetchTasks();
+  }
+
+  /// Ko'rinib turgan ro'yxatda (filtr bilan ham) bosib turib sudrash
+  Future<void> reorderVisible(
+    List<TaskModel> visible,
+    int oldIndex,
+    int newIndex,
+  ) async {
+    final list = reorderedTasks(visible, oldIndex, newIndex);
+    _tasks = mergeOrder(_tasks, list);
+    notifyListeners();
+
+    // Shaxsiy tartib filial bo'yicha to'liq saqlanadi
+    final filialId = list.first.filialId;
+    final ok = await _prefs.saveOrder([
+      for (final t in _tasks)
+        if (t.filialId == filialId) t.templateId,
+    ]);
+    if (!ok) await fetchTasks();
+  }
+
   // ── Filter tasks by filial + status ─────────────────────────────────────
   List<TaskModel> tasksForFilial(int filialId) {
     var filtered = _tasks.where((t) => t.filialId == filialId);
@@ -182,8 +215,12 @@ class AdminTasksProvider extends ChangeNotifier {
         final taskIdRaw = data['taskId'];
         final statusRaw = data['status'];
         if (taskIdRaw != null && statusRaw != null) {
-          final taskId = taskIdRaw is int ? taskIdRaw : int.tryParse('$taskIdRaw');
-          final status = statusRaw is int ? statusRaw : int.tryParse('$statusRaw');
+          final taskId = taskIdRaw is int
+              ? taskIdRaw
+              : int.tryParse('$taskIdRaw');
+          final status = statusRaw is int
+              ? statusRaw
+              : int.tryParse('$statusRaw');
           if (taskId != null && status != null) {
             final idx = _tasks.indexWhere((t) => t.taskId == taskId);
             if (idx != -1) {

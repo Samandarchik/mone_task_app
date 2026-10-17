@@ -12,6 +12,10 @@ class UserModel {
   final String? profileJson;
   final String password;
 
+  /// super_admin bergan ruxsat: o'z filiallari uchun vazifa qo'shish,
+  /// tahrirlash va o'chirish.
+  final bool canManageTasks;
+
   UserModel({
     required this.userId,
     required this.username,
@@ -23,6 +27,7 @@ class UserModel {
     this.phoneNumber,
     this.profileJson,
     this.password = '',
+    this.canManageTasks = false,
   });
 
   factory UserModel.fromJson(Map<String, dynamic> json) {
@@ -41,6 +46,7 @@ class UserModel {
       phoneNumber: json['phoneNumber'],
       profileJson: json['profileJson'],
       password: json['password'] ?? '',
+      canManageTasks: json['canManageTasks'] == true,
     );
   }
 
@@ -56,6 +62,7 @@ class UserModel {
       if (phoneNumber != null) 'phoneNumber': phoneNumber,
       if (profileJson != null) 'profileJson': profileJson,
       'password': password,
+      'canManageTasks': canManageTasks,
     };
   }
 
@@ -101,6 +108,7 @@ class UserModel {
     String? phoneNumber,
     String? profileJson,
     String? password,
+    bool? canManageTasks,
   }) {
     return UserModel(
       userId: userId ?? this.userId,
@@ -113,6 +121,7 @@ class UserModel {
       phoneNumber: phoneNumber ?? this.phoneNumber,
       profileJson: profileJson ?? this.profileJson,
       password: password ?? this.password,
+      canManageTasks: canManageTasks ?? this.canManageTasks,
     );
   }
 }
@@ -125,7 +134,8 @@ class UsersResponse {
 
   factory UsersResponse.fromJson(Map<String, dynamic> json) {
     return UsersResponse(
-      data: (json['data'] as List?)
+      data:
+          (json['data'] as List?)
               ?.map((user) => UserModel.fromJson(user))
               .toList() ??
           [],
