@@ -403,6 +403,7 @@ type Claims struct {
 
 func main() {
 	initDB()
+	initPersonSync()
 
 	go startScheduler()
 	go startCleanup()
@@ -412,6 +413,12 @@ func main() {
 
 	// Version — deploy tekshirish uchun (token kerak emas)
 	r.HandleFunc("/api/version", getVersion).Methods("GET")
+
+	// HR sinxronizatsiyasi — X-Integration-Key bilan himoyalangan (JWT emas,
+	// chaqiruvchi HR serveri, foydalanuvchi emas).
+	r.HandleFunc("/internal/hooks/person-updated", handlePersonWebhook).Methods("POST")
+	// To'liq HR rezumesi — jonli, saqlanmaydi.
+	r.HandleFunc("/api/users/{id}/profile", authMiddleware(handleGetPersonProfile)).Methods("GET")
 
 	// Auth
 	r.HandleFunc("/api/auth/register", register).Methods("POST")
