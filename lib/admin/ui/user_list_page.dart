@@ -65,8 +65,10 @@ class _UsersPageState extends State<UsersPage> {
         return 1;
       case 'worker':
         return 2;
-      default:
+      case 'sotrudnik':
         return 3;
+      default:
+        return 4;
     }
   }
 
@@ -78,6 +80,8 @@ class _UsersPageState extends State<UsersPage> {
         return 'Корректор';
       case 'worker':
         return 'Ревизор';
+      case 'sotrudnik':
+        return 'Сотрудник';
       default:
         return role;
     }

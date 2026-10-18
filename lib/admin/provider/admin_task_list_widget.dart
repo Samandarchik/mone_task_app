@@ -113,7 +113,8 @@ class _AdminTaskListWidgetState extends State<AdminTaskListWidget> {
         buildDefaultDragHandles: false,
         proxyDecorator: liftedTaskProxy,
         onReorderStart: reorderHaptic,
-        onReorderItem: (o, n) => tasksProvider.reorderVisible(filtered, o, n),
+        onReorder: (o, n) =>
+            tasksProvider.reorderVisible(filtered, o, n > o ? n - 1 : n),
         padding: const EdgeInsets.fromLTRB(12, 10, 12, 24),
         itemCount: filtered.length,
         itemBuilder: (_, i) {

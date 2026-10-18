@@ -27,12 +27,16 @@ String videoThumbUrl(String url) {
 /// tugagach shu taskning keyingi videosi avtomatik boshlanadi.
 /// Bosib turish — [onOpenVideo] (katta player).
 /// [onRerecordVideo] berilsa, o'ynayotgan videoda "qayta yozish" tugmasi chiqadi.
+/// [onAddVideo] berilsa, majburiy videolar yuklangach "Ещё видео" tugmasi
+/// chiqadi — xodim xohlasa qo'shimcha video qo'shadi ([maxVideos] gacha).
 class TaskVideoStrip extends StatelessWidget {
   final List<String> videoUrls;
   final int slotCount;
   final void Function(int index)? onOpenVideo;
   final void Function(int index)? onRerecordVideo;
   final void Function(int index)? onTapEmpty;
+  final VoidCallback? onAddVideo;
+  final int maxVideos;
 
   const TaskVideoStrip({
     super.key,
@@ -41,6 +45,8 @@ class TaskVideoStrip extends StatelessWidget {
     this.onOpenVideo,
     this.onRerecordVideo,
     this.onTapEmpty,
+    this.onAddVideo,
+    this.maxVideos = 10,
   });
 
   static const double _gap = 8;
@@ -51,7 +57,13 @@ class TaskVideoStrip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final total = slotCount > videoUrls.length ? slotCount : videoUrls.length;
-    if (total == 0) return const SizedBox.shrink();
+    // Qo'shimcha video — faqat majburiylari to'lgach (bo'sh slot qolmaganda)
+    final canAddMore =
+        onAddVideo != null &&
+        videoUrls.isNotEmpty &&
+        videoUrls.length >= slotCount &&
+        videoUrls.length < maxVideos;
+    if (total == 0 && !canAddMore) return const SizedBox.shrink();
 
     return LayoutBuilder(
       builder: (context, constraints) {
@@ -93,6 +105,11 @@ class TaskVideoStrip extends StatelessWidget {
                         onTap: onTapEmpty == null ? null : () => onTapEmpty!(i),
                       ),
                     ),
+            if (canAddMore)
+              SizedBox.square(
+                dimension: size,
+                child: _AddVideoTile(onTap: onAddVideo!),
+              ),
           ],
         );
       },
@@ -420,6 +437,69 @@ class _EmptySlot extends StatelessWidget {
                   fontSize: 12,
                   fontWeight: FontWeight.w600,
                   color: color,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// «Ещё видео» — majburiy videolardan tashqari qo'shimcha video qo'shish.
+class _AddVideoTile extends StatelessWidget {
+  final VoidCallback onTap;
+
+  const _AddVideoTile({required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(14),
+        gradient: const LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [Color(0xFF3B82F6), Color(0xFF8B5CF6)],
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: const Color(0xFF6366F1).withValues(alpha: 0.35),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(14),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Container(
+                width: 30,
+                height: 30,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: Colors.white.withValues(alpha: 0.22),
+                ),
+                child: const Icon(
+                  Icons.add_rounded,
+                  size: 22,
+                  color: Colors.white,
+                ),
+              ),
+              const SizedBox(height: 6),
+              const Text(
+                'Ещё видео',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: 11.5,
+                  fontWeight: FontWeight.w700,
+                  color: Colors.white,
                 ),
               ),
             ],

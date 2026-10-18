@@ -30,6 +30,9 @@ class TaskModel {
   String? notificationTime;
   List<int>? days;
 
+  /// Worker bu vazifani biriktirgan sotrudniklar (faqat egasiga keladi)
+  List<int> delegatedTo;
+
   TaskModel({
     required this.taskId,
     this.templateId = 0,
@@ -49,6 +52,7 @@ class TaskModel {
     this.date,
     this.notificationTime,
     this.days,
+    this.delegatedTo = const [],
   });
 
   /// Yuborilgan barcha videolar (eski bitta videoUrl ham hisobga olinadi)
@@ -82,6 +86,9 @@ class TaskModel {
       category: json['category'] ?? '',
       notificationTime: json['notificationTime'],
       days: json['days'] != null ? List<int>.from(json['days']) : null,
+      delegatedTo: json['delegatedTo'] != null
+          ? List<int>.from(json['delegatedTo'])
+          : const [],
       submittedBy: json['submittedBy'],
       checkerAudioUrls: json['checkerAudioUrls'] != null
           ? List<String>.from(json['checkerAudioUrls'])

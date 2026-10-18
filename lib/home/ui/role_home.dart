@@ -11,7 +11,7 @@ import 'package:mone_task_app/worker/ui/task_worker_ui.dart';
 /// Rol bo'yicha asosiy ekran (filial allaqachon tanlangan deb hisoblanadi).
 Widget roleHome(String role) {
   if (role == 'super_admin' || role == 'checker') return const AdminTaskUi();
-  if (role == 'worker') return const TaskWorkerUi();
+  if (role == 'worker' || role == 'sotrudnik') return const TaskWorkerUi();
   return const LoginPage();
 }
 
@@ -22,8 +22,17 @@ Widget roleHome(String role) {
 /// - worker: 1 ta bo'lsa → o'sha filial aktiv qilinadi, to'g'ridan-to'g'ri asosiy ekran.
 Widget landingForUser(UserModel user) {
   final role = user.role;
-  if (role != 'super_admin' && role != 'checker' && role != 'worker') {
+  if (role != 'super_admin' &&
+      role != 'checker' &&
+      role != 'worker' &&
+      role != 'sotrudnik') {
     return const LoginPage();
+  }
+
+  // Сотрудник — filiali yo'q, egasi biriktirgan vazifalarni ko'radi.
+  if (role == 'sotrudnik') {
+    ActiveFilial.clear();
+    return roleHome(role);
   }
 
   // super_admin va checker (Корректор) barcha filiallarni ko'radi va
@@ -76,10 +85,9 @@ UserModel? applyUserUpdateEvent(Map<String, dynamic> data) {
         .toList();
   }
 
-  final newRole =
-      data['role'] is String && (data['role'] as String).isNotEmpty
-          ? data['role'] as String
-          : current.role;
+  final newRole = data['role'] is String && (data['role'] as String).isNotEmpty
+      ? data['role'] as String
+      : current.role;
 
   final newCanManage = data['canManageTasks'] is bool
       ? data['canManageTasks'] as bool

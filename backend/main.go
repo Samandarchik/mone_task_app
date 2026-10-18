@@ -268,24 +268,19 @@ func getTemplateVideoConfigs() map[int]videoConfig {
 // Bitta videoli taskda eski video almashtiriladi.
 // Status NULL ga o'tadi - admin/checker ko'rib chiqishi uchun.
 func saveTaskVideo(db *sql.DB, taskID, videoURL, submittedAt, username string, slot int) error {
-	var templateID sql.NullInt64
 	var existing *string
-	db.QueryRow("SELECT template_id, video_url FROM tasks WHERE id = ?", taskID).Scan(&templateID, &existing)
+	db.QueryRow("SELECT video_url FROM tasks WHERE id = ?", taskID).Scan(&existing)
 
-	value := videoURL
-	if cfg := getTemplateVideoConfigs()[int(templateID.Int64)]; templateID.Valid && cfg.Multi {
-		urls := parseCheckerAudioURLs(existing)
-		if slot >= 0 && slot < len(urls) {
-			urls[slot] = videoURL
-		} else {
-			urls = append(urls, videoURL)
-		}
-		if cfg.Count > 1 && len(urls) > cfg.Count {
-			urls = urls[len(urls)-cfg.Count:]
-		}
-		b, _ := json.Marshal(urls)
-		value = string(b)
+	// Har doim JSON ro'yxat: slot berilsa — o'sha video almashtiriladi,
+	// aks holda qo'shiladi (majburiy sondan tashqari qo'shimcha videolar ham).
+	urls := parseCheckerAudioURLs(existing)
+	if slot >= 0 && slot < len(urls) {
+		urls[slot] = videoURL
+	} else {
+		urls = append(urls, videoURL)
 	}
+	b, _ := json.Marshal(urls)
+	value := string(b)
 
 	_, err := db.Exec("UPDATE tasks SET status = NULL, video_url = ?, submitted_at = ?, submitted_by = ? WHERE id = ?",
 		value, submittedAt, username, taskID)
@@ -377,6 +372,8 @@ type Task struct {
 	Category         string   `json:"category"`
 	NotificationTime string   `json:"notificationTime,omitempty"`
 	OrderIndex       int      `json:"orderIndex"`
+	// DelegatedTo — worker bu vazifani biriktirgan sotrudniklar (faqat egasiga)
+	DelegatedTo []int `json:"delegatedTo,omitempty"`
 }
 
 type TaskTemplate struct {
@@ -474,6 +471,13 @@ func main() {
 	r.HandleFunc("/api/users/{id}/send-credentials", authMiddleware(sendCredentials)).Methods("POST")
 	r.HandleFunc("/api/users/{id}", authMiddleware(updateUser)).Methods("PUT")
 	r.HandleFunc("/api/users/{id}", authMiddleware(deleteUser)).Methods("DELETE")
+
+	// Сотрудники — worker o'z yordamchilarini qo'shadi va vazifalarini biriktiradi
+	r.HandleFunc("/api/my/employees", authMiddleware(getMyEmployees)).Methods("GET")
+	r.HandleFunc("/api/my/employees", authMiddleware(createMyEmployee)).Methods("POST")
+	r.HandleFunc("/api/my/employees/{id}", authMiddleware(updateMyEmployee)).Methods("PUT")
+	r.HandleFunc("/api/my/employees/{id}", authMiddleware(deleteMyEmployee)).Methods("DELETE")
+	r.HandleFunc("/api/my/delegations/{templateId}", authMiddleware(setTaskDelegation)).Methods("PUT")
 
 	// Debug
 	r.HandleFunc("/api/debug/info", authMiddleware(getDebugInfo)).Methods("GET")
@@ -631,6 +635,7 @@ func createMainDB() {
 	db.Exec("ALTER TABLE users ADD COLUMN profile_json TEXT")
 	db.Exec("ALTER TABLE users ADD COLUMN password TEXT DEFAULT ''")
 	db.Exec("ALTER TABLE users ADD COLUMN can_manage_tasks INTEGER DEFAULT 0")
+	migrateEmployees(db)
 
 	var needsUpdate int
 	db.QueryRow("SELECT COUNT(*) FROM task_templates WHERE order_index = 0").Scan(&needsUpdate)
@@ -1158,8 +1163,24 @@ func getTasks(w http.ResponseWriter, r *http.Request) {
 				ORDER BY order_index ASC
 			`, strings.Join(filialPlaceholders, ","), strings.Join(categoryPlaceholders, ","))
 		}
-	} else {
+	} else if role == RoleEmployee {
+		var ok bool
+		query, args, ok = employeeTasksQuery(userID)
+		if !ok {
+			respondJSON(w, http.StatusOK, map[string]interface{}{
+				"success": true,
+				"data":    []Task{},
+			})
+			return
+		}
+	} else if role == RoleSuperAdmin || role == RoleChecker {
 		query = "SELECT id, template_id, filial_id, worker_ids, task, type, status, video_url, checker_audio_url, submitted_at, submitted_by, days, category, notification_time, order_index FROM tasks ORDER BY order_index ASC"
+	} else {
+		respondJSON(w, http.StatusForbidden, map[string]interface{}{
+			"success": false,
+			"error":   "Ruxsat yo'q",
+		})
+		return
 	}
 
 	rows, err := db.Query(query, args...)
@@ -1217,6 +1238,9 @@ func getTasks(w http.ResponseWriter, r *http.Request) {
 	}
 
 	applyUserTaskPrefs(userID, tasks)
+	if role == RoleWorker {
+		fillDelegations(userID, tasks)
+	}
 
 	respondJSON(w, http.StatusOK, map[string]interface{}{
 		"success": true,
@@ -1904,7 +1928,7 @@ func reorderAllTasks(w http.ResponseWriter, r *http.Request) {
 
 func submitTask(w http.ResponseWriter, r *http.Request) {
 	role := r.Header.Get("Role")
-	if role != RoleWorker && role != RoleChecker && role != RoleSuperAdmin {
+	if role != RoleWorker && role != RoleChecker && role != RoleSuperAdmin && role != RoleEmployee {
 		respondJSON(w, http.StatusForbidden, map[string]interface{}{
 			"success": false,
 			"error":   "Ruxsat yo'q",
@@ -1915,6 +1939,19 @@ func submitTask(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	taskID := vars["id"]
 	username := r.Header.Get("Username")
+
+	// Sotrudnik faqat egasi biriktirgan vazifani, egasi nomidan bajaradi
+	if role == RoleEmployee {
+		employeeID, _ := strconv.Atoi(r.Header.Get("UserID"))
+		if !employeeCanAccessTask(employeeID, taskID, time.Now()) {
+			respondJSON(w, http.StatusForbidden, map[string]interface{}{
+				"success": false,
+				"error":   "Bu vazifa sizga biriktirilmagan",
+			})
+			return
+		}
+		username = employeeSubmitterName(employeeID, username)
+	}
 
 	log.Printf("\n========== SUBMIT TASK ==========")
 	log.Printf("📥 Task ID: %s, User: %s", taskID, username)
@@ -2438,6 +2475,10 @@ func submitCheckerAudio(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	if !employeeAudioAllowed(w, r, taskID, date) {
+		return
+	}
+
 	if err := r.ParseMultipartForm(50 << 20); err != nil {
 		respondJSON(w, http.StatusBadRequest, map[string]interface{}{
 			"success": false,
@@ -2539,6 +2580,10 @@ func deleteCheckerAudio(w http.ResponseWriter, r *http.Request) {
 			})
 			return
 		}
+	}
+
+	if !employeeAudioAllowed(w, r, taskID, date) {
+		return
 	}
 
 	db, _ := getTaskDB(date)
@@ -3681,7 +3726,7 @@ func colName(n int) string {
 
 func getUsers(w http.ResponseWriter, r *http.Request) {
 	// checker (Korrektor) foydalanuvchilar ro'yxatini ko'ra olmaydi.
-	if r.Header.Get("Role") == RoleChecker {
+	if role := r.Header.Get("Role"); role == RoleChecker || role == RoleEmployee {
 		respondJSON(w, http.StatusForbidden, map[string]interface{}{
 			"success": false,
 			"error":   "Ruxsat yo'q",
@@ -3979,6 +4024,9 @@ func deleteUser(w http.ResponseWriter, r *http.Request) {
 	}
 
 	_, err := db.Exec("DELETE FROM users WHERE id = ?", id)
+	if err == nil {
+		deleteEmployeesOf(db, id)
+	}
 	if err != nil {
 		respondJSON(w, http.StatusInternalServerError, map[string]interface{}{
 			"success": false,
@@ -4522,13 +4570,21 @@ func videoLimitReached(taskID string, slot int) bool {
 	}
 	defer db.Close()
 	have, need := taskVideoProgress(db, taskID)
-	if need <= 1 {
-		return false // bitta videoli task — qayta yozish eski videoni almashtiradi
-	}
 	if slot >= 0 && slot < have {
 		return false
 	}
-	return have >= need
+	return have >= maxTaskVideos(need)
+}
+
+// MaxExtraVideosTotal — super admin belgilagan majburiy videolardan tashqari
+// xodim qo'shimcha video qo'sha oladi, lekin jami shu sondan oshmaydi.
+const MaxExtraVideosTotal = 10
+
+func maxTaskVideos(need int) int {
+	if need > MaxExtraVideosTotal {
+		return need
+	}
+	return MaxExtraVideosTotal
 }
 
 // applyUserTaskPrefs - foydalanuvchining pin va shaxsiy tartibini qo'llaydi:

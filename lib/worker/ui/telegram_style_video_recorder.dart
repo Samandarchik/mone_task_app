@@ -1,10 +1,16 @@
 import 'dart:async';
 import 'dart:io';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:camera/camera.dart';
+import 'package:image_picker/image_picker.dart';
+import 'package:video_player/video_player.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
 import 'package:mone_task_app/worker/ui/video_pervi.dart';
+
+/// Video kamida shuncha soniya bo'lishi shart (kartada ham ko'rsatiladi)
+const int kMinVideoSeconds = 8;
 
 class TelegramStyleVideoRecorder extends StatefulWidget {
   final int taskId;
@@ -27,6 +33,19 @@ class _TelegramStyleVideoRecorderState
   bool _isFrontCamera = false;
   int _recordedSeconds = 0;
   Timer? _timer;
+
+  /// Video kamida shuncha soniya bo'lishi shart
+  static const int _minSeconds = kMinVideoSeconds;
+
+  /// Erta to'xtatishga urinilganda taymer bir lahza qizil bo'ladi
+  bool _warnTooShort = false;
+  Timer? _warnTimer;
+
+  bool get _tooShort => _isRecording && _recordedSeconds < _minSeconds;
+
+  /// Kamera ochilmasa (masalan iOS simulatorda kamera yo'q) — shu xabar
+  /// yopish tugmasi bilan ko'rsatiladi, cheksiz yuklanish o'rniga.
+  String? _cameraError;
 
   List<XFile> _videoSegments = [];
 
@@ -59,7 +78,7 @@ class _TelegramStyleVideoRecorderState
     try {
       _cameras = await availableCameras();
       if (_cameras.isEmpty) {
-        _showError("Камера не найдена");
+        if (mounted) setState(() => _cameraError = "Камера не найдена");
         return;
       }
       if (Platform.isIOS) {
@@ -70,8 +89,75 @@ class _TelegramStyleVideoRecorderState
       await _openCamera(_getInitialCameraIndex());
       if (mounted) setState(() => _isInitialized = true);
     } catch (e) {
-      _showError("Ошибка камеры: $e");
+      if (mounted) setState(() => _cameraError = "Ошибка камеры: $e");
     }
+  }
+
+  /// Faqat debug: kamerasiz qurilmada (simulator) galereyadan video tanlab
+  /// yuborish oqimini sinash. Minimal davomiylik bu yerda ham tekshiriladi.
+  Future<void> _pickFromGallery() async {
+    final file = await ImagePicker().pickVideo(source: ImageSource.gallery);
+    if (file == null || !mounted) return;
+    final controller = VideoPlayerController.file(File(file.path));
+    try {
+      await controller.initialize();
+      if (controller.value.duration < const Duration(seconds: _minSeconds)) {
+        if (mounted) {
+          setState(
+            () => _cameraError =
+                "Видео должно быть не короче $_minSeconds секунд",
+          );
+        }
+        return;
+      }
+    } finally {
+      controller.dispose();
+    }
+    if (mounted) Navigator.of(context).pop(file);
+  }
+
+  Widget _buildCameraUnavailable() {
+    return Material(
+      color: Colors.black,
+      child: SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Icon(
+                Icons.no_photography_outlined,
+                size: 56,
+                color: Colors.white70,
+              ),
+              const SizedBox(height: 16),
+              Text(
+                _cameraError!,
+                textAlign: TextAlign.center,
+                style: const TextStyle(color: Colors.white, fontSize: 16),
+              ),
+              const SizedBox(height: 28),
+              if (kDebugMode) ...[
+                FilledButton.icon(
+                  onPressed: _pickFromGallery,
+                  icon: const Icon(Icons.video_library_outlined),
+                  label: const Text("Выбрать видео (тест)"),
+                ),
+                const SizedBox(height: 12),
+              ],
+              OutlinedButton(
+                onPressed: () => Navigator.of(context).pop(),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: Colors.white,
+                  side: const BorderSide(color: Colors.white54),
+                ),
+                child: const Text("Закрыть"),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 
   Future<void> _setupIOSLenses() async {
@@ -359,6 +445,15 @@ class _TelegramStyleVideoRecorderState
 
   void _stopRecording() async {
     if (!_isRecording) return;
+    if (_tooShort) {
+      HapticFeedback.heavyImpact();
+      _warnTimer?.cancel();
+      setState(() => _warnTooShort = true);
+      _warnTimer = Timer(const Duration(milliseconds: 1500), () {
+        if (mounted) setState(() => _warnTooShort = false);
+      });
+      return;
+    }
     _timer?.cancel();
     try {
       if (_isPaused) await _controller!.resumeVideoRecording();
@@ -404,6 +499,7 @@ class _TelegramStyleVideoRecorderState
   @override
   void dispose() {
     _timer?.cancel();
+    _warnTimer?.cancel();
     _zoomLabelTimer?.cancel();
     WakelockPlus.disable();
     _controller?.dispose();
@@ -436,10 +532,21 @@ class _TelegramStyleVideoRecorderState
 
   @override
   Widget build(BuildContext context) {
+    if (_cameraError != null) return _buildCameraUnavailable();
     if (!_isInitialized || _controller == null) {
-      return const Material(
-        color: Colors.white,
-        child: Center(child: CircularProgressIndicator()),
+      return Material(
+        color: Colors.black,
+        child: Stack(
+          children: [
+            const Center(child: CircularProgressIndicator(color: Colors.white)),
+            SafeArea(
+              child: IconButton(
+                onPressed: () => Navigator.of(context).pop(),
+                icon: const Icon(Icons.close, color: Colors.white, size: 30),
+              ),
+            ),
+          ],
+        ),
       );
     }
 
@@ -579,6 +686,8 @@ class _TelegramStyleVideoRecorderState
 
                   const Spacer(),
 
+                  _isRecording ? _recordTimerPill() : _minDurationHint(),
+
                   // ✅ ZOOM BUTTON — qizil tugmadan tepada
                   if (!_isFrontCamera)
                     Padding(
@@ -665,7 +774,9 @@ class _TelegramStyleVideoRecorderState
                               width: _isRecording ? 30 : 60,
                               height: _isRecording ? 30 : 60,
                               decoration: BoxDecoration(
-                                color: Colors.red,
+                                color: _tooShort
+                                    ? Colors.red.withValues(alpha: 0.45)
+                                    : Colors.red,
                                 borderRadius: BorderRadius.circular(
                                   _isRecording ? 8 : 40,
                                 ),
@@ -705,6 +816,79 @@ class _TelegramStyleVideoRecorderState
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  String _mmss(int seconds) =>
+      '${seconds ~/ 60}:${(seconds % 60).toString().padLeft(2, '0')}';
+
+  /// Yozish boshlanmasidan oldin — minimal davomiylik eslatmasi
+  Widget _minDurationHint() {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
+        decoration: BoxDecoration(
+          color: Colors.black.withValues(alpha: 0.55),
+          borderRadius: BorderRadius.circular(20),
+        ),
+        child: const Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.timer_outlined, size: 16, color: Colors.white),
+            SizedBox(width: 6),
+            Text(
+              'Видео минимум $kMinVideoSeconds сек',
+              style: TextStyle(
+                color: Colors.white,
+                fontSize: 14,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// Yozish vaqti + minimal davomiylik ko'rsatkichi
+  Widget _recordTimerPill() {
+    final short = _tooShort;
+    final color = _warnTooShort
+        ? Colors.red
+        : (short ? Colors.black.withValues(alpha: 0.55) : Colors.green);
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
+        decoration: BoxDecoration(
+          color: color,
+          borderRadius: BorderRadius.circular(20),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              short ? Icons.timer_outlined : Icons.check_circle_rounded,
+              size: 16,
+              color: Colors.white,
+            ),
+            const SizedBox(width: 6),
+            Text(
+              short
+                  ? '${_mmss(_recordedSeconds)} · мин. ${_mmss(_minSeconds)}'
+                  : _mmss(_recordedSeconds),
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 14,
+                fontWeight: FontWeight.w600,
+                fontFeatures: [FontFeature.tabularFigures()],
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

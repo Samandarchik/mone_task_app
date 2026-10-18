@@ -24,7 +24,9 @@ import 'package:mone_task_app/worker/model/task_worker_model.dart';
 import 'package:mone_task_app/worker/model/response_task_model.dart';
 import 'package:mone_task_app/worker/model/user_model.dart';
 import 'package:mone_task_app/worker/service/log_out.dart';
+import 'package:mone_task_app/worker/service/employee_service.dart';
 import 'package:mone_task_app/worker/service/task_worker_service.dart';
+import 'package:mone_task_app/worker/ui/my_employees_page.dart';
 import 'dart:async';
 
 import 'package:mone_task_app/core/network/ws_service.dart';
@@ -49,6 +51,13 @@ class _TaskWorkerUiState extends State<TaskWorkerUi> {
   TokenStorage tokenStorage = sl<TokenStorage>();
   UserModel? user;
   StreamSubscription? _wsSub;
+
+  /// Sotrudnik id → ismi (kartada «Поручено» uchun, faqat worker)
+  Map<int, String> _employeeNames = {};
+
+  /// Worker o'z vazifalarini sotrudniklariga biriktira oladi
+  bool get _isOwner => user?.role == 'worker';
+  bool get _isEmployee => user?.role == 'sotrudnik';
 
   @override
   void initState() {
@@ -92,9 +101,15 @@ class _TaskWorkerUiState extends State<TaskWorkerUi> {
       });
     try {
       final tasks = await TaskWorkerService().fetchTasks(date: _selectedDate);
+      final employees = _isOwner
+          ? await EmployeeService().fetchEmployees().catchError(
+              (_) => <EmployeeModel>[],
+            )
+          : const <EmployeeModel>[];
       if (mounted)
         setState(() {
           _tasks = tasks;
+          _employeeNames = {for (final e in employees) e.userId: e.username};
           _isLoading = false;
           _hasError = false;
         });
@@ -109,6 +124,24 @@ class _TaskWorkerUiState extends State<TaskWorkerUi> {
   }
 
   void _refresh() => _fetchTasks(showLoading: false);
+
+  Future<void> _openEmployees() async {
+    await Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => const MyEmployeesPage()),
+    );
+    if (mounted) _refresh();
+  }
+
+  Future<void> _delegate(TaskModel task) async {
+    final saved = await showDelegateSheet(
+      context,
+      templateId: task.templateId,
+      taskTitle: task.task,
+      delegatedTo: task.delegatedTo,
+    );
+    if (saved && mounted) _refresh();
+  }
 
   Future<void> _openTaskManager() async {
     await Navigator.push(
@@ -392,14 +425,24 @@ class _TaskWorkerUiState extends State<TaskWorkerUi> {
                 leading: const Icon(CupertinoIcons.videocam_fill),
                 title: const Text("Все задачи"),
               ),
-              ListTile(
-                onTap: () {
-                  context.pop;
-                  context.push(ExcelReportPage(filialIds: user?.filialIds));
-                },
-                leading: const Icon(CupertinoIcons.doc_plaintext),
-                title: const Text("Отчеты"),
-              ),
+              if (_isOwner)
+                ListTile(
+                  onTap: () {
+                    context.pop;
+                    _openEmployees();
+                  },
+                  leading: const Icon(Icons.groups_2_rounded),
+                  title: const Text("Мои сотрудники"),
+                ),
+              if (!_isEmployee)
+                ListTile(
+                  onTap: () {
+                    context.pop;
+                    context.push(ExcelReportPage(filialIds: user?.filialIds));
+                  },
+                  leading: const Icon(CupertinoIcons.doc_plaintext),
+                  title: const Text("Отчеты"),
+                ),
               ListTile(
                 onTap: _handleLogout,
                 leading: const Icon(Icons.logout, color: Colors.red),
@@ -454,6 +497,12 @@ class _TaskWorkerUiState extends State<TaskWorkerUi> {
               icon: const Icon(Icons.edit_note_rounded),
               tooltip: 'Управление задачами',
             ),
+          if (_isOwner)
+            IconButton(
+              onPressed: _openEmployees,
+              icon: const Icon(Icons.groups_2_rounded),
+              tooltip: 'Мои сотрудники',
+            ),
           if (_canSwitchFilial)
             IconButton(
               onPressed: _switchFilial,
@@ -495,7 +544,7 @@ class _TaskWorkerUiState extends State<TaskWorkerUi> {
               buildDefaultDragHandles: false,
               proxyDecorator: liftedTaskProxy,
               onReorderStart: reorderHaptic,
-              onReorderItem: (o, n) => _reorder(visible, o, n),
+              onReorder: (o, n) => _reorder(visible, o, n > o ? n - 1 : n),
               padding: const EdgeInsets.fromLTRB(12, 10, 12, 24),
               itemCount: visible.length,
               itemBuilder: (_, i) => KeyedSubtree(
@@ -551,25 +600,6 @@ class _TaskWorkerUiState extends State<TaskWorkerUi> {
     );
   }
 
-  /// Sarlavhadagi kamera tugmasi: keyingi bo'sh joyga yozadi.
-  /// Hammasi to'lgan bo'lsa — qaysi videoni qayta yozishni tanlash kerak.
-  void _recordNext(TaskModel task) {
-    final count = _taskVideos(task).length;
-    if (task.videoCount <= 1 && !task.multiVideo) {
-      _showVideoRecorder(task);
-    } else if (task.videoCount > 1 && count >= task.videoCount) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text(
-            "Все видео отправлены. Нажмите на видео и ↻, чтобы переснять",
-          ),
-        ),
-      );
-    } else {
-      _showVideoRecorder(task, slot: count);
-    }
-  }
-
   Future<void> _confirmRerecord(TaskModel task, int index) async {
     final ok = await showCupertinoDialog<bool>(
       context: context,
@@ -598,6 +628,8 @@ class _TaskWorkerUiState extends State<TaskWorkerUi> {
         ? task.videoCount
         : videos.length;
     final multi = task.multiVideo || task.videoCount > 1;
+    // Super admin belgilagan majburiy videolar soni
+    final required = task.videoCount < 1 ? 1 : task.videoCount;
 
     return Container(
       margin: const EdgeInsets.only(bottom: 10),
@@ -656,6 +688,10 @@ class _TaskWorkerUiState extends State<TaskWorkerUi> {
                           color: Color(0xFF111827),
                         ),
                       ),
+                      if (task.delegatedTo.isNotEmpty) ...[
+                        const SizedBox(height: 6),
+                        _delegatedChip(task),
+                      ],
                       if (task.submittedBy != null || slots > 1) ...[
                         const SizedBox(height: 4),
                         Text(
@@ -665,7 +701,9 @@ class _TaskWorkerUiState extends State<TaskWorkerUi> {
                                   "${task.submittedAt?.toLocal().hour.toString().padLeft(2, '0')}:"
                                   "${task.submittedAt?.toLocal().minute.toString().padLeft(2, '0')}",
                             if (slots > 1)
-                              task.videosComplete || videos.isEmpty
+                              videos.length > required
+                                  ? "🎥 ${videos.length} · +${videos.length - required} доп."
+                                  : task.videosComplete || videos.isEmpty
                                   ? "🎥 ${videos.length}/$slots"
                                   : "🎥 ${videos.length}/$slots · загрузите все видео",
                           ].join("   "),
@@ -699,24 +737,17 @@ class _TaskWorkerUiState extends State<TaskWorkerUi> {
                         : Icons.push_pin_outlined,
                   ),
                 ),
-                Material(
-                  color: const Color(0xFFEFF4FF),
-                  shape: const CircleBorder(),
-                  child: InkWell(
-                    customBorder: const CircleBorder(),
-                    onTap: _isRecording ? null : () => _recordNext(task),
-                    child: SizedBox.square(
-                      dimension: 32,
-                      child: Icon(
-                        _isRecording
-                            ? Icons.fiber_manual_record
-                            : Icons.videocam_rounded,
-                        size: 18,
-                        color: const Color(0xFF2563EB),
-                      ),
-                    ),
+                if (_isOwner)
+                  IconButton(
+                    onPressed: () => _delegate(task),
+                    visualDensity: VisualDensity.compact,
+                    iconSize: 20,
+                    tooltip: 'Поручить сотруднику',
+                    color: task.delegatedTo.isNotEmpty
+                        ? const Color(0xFF2563EB)
+                        : const Color(0xFF9CA3AF),
+                    icon: const Icon(Icons.person_add_alt_1_rounded),
                   ),
-                ),
               ],
             ),
           ),
@@ -725,13 +756,29 @@ class _TaskWorkerUiState extends State<TaskWorkerUi> {
             videoUrls: videos,
             slotCount: task.videoCount,
             onOpenVideo: (idx) => _openVideos(task, idx),
-            onRerecordVideo: multi && !_isRecording
-                ? (idx) => _confirmRerecord(task, idx)
-                : null,
+            // Bitta videoli taskda ham ↻ — sarlavhadagi kamera olib tashlangan
+            onRerecordVideo: _isRecording
+                ? null
+                : (idx) => _confirmRerecord(task, idx),
             onTapEmpty: _isRecording
                 ? null
                 : (idx) => _showVideoRecorder(task, slot: multi ? idx : null),
+            // Majburiy videolardan tashqari qo'shimcha video (oxiriga qo'shiladi)
+            onAddVideo: _isRecording ? null : () => _showVideoRecorder(task),
           ),
+          if (videos.isEmpty) ...[
+            const SizedBox(height: 6),
+            const Row(
+              children: [
+                Icon(Icons.timer_outlined, size: 14, color: Color(0xFF6B7280)),
+                SizedBox(width: 4),
+                Text(
+                  "Видео минимум $kMinVideoSeconds секунд",
+                  style: TextStyle(fontSize: 12, color: Color(0xFF6B7280)),
+                ),
+              ],
+            ),
+          ],
           const SizedBox(height: 10),
           AudioTaskRow(
             taskId: task.taskId,
@@ -743,6 +790,30 @@ class _TaskWorkerUiState extends State<TaskWorkerUi> {
                 TaskWorkerService().deleteAudio(id, date, idx),
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _delegatedChip(TaskModel task) {
+    final names = [
+      for (final id in task.delegatedTo) _employeeNames[id] ?? '#$id',
+    ];
+    return GestureDetector(
+      onTap: () => _delegate(task),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+        decoration: BoxDecoration(
+          color: const Color(0xFFEFF4FF),
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: Text(
+          "👤 Поручено: ${names.join(', ')}",
+          style: const TextStyle(
+            fontSize: 12,
+            fontWeight: FontWeight.w600,
+            color: Color(0xFF2563EB),
+          ),
+        ),
       ),
     );
   }
