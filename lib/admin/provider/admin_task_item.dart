@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:mone_task_app/admin/provider/admin_tasks_provider.dart';
@@ -28,6 +29,12 @@ class AdminTaskListItem extends StatelessWidget {
   /// ReorderableListView ichidagi o'rni — sarlavhani bosib turib sudrash uchun
   final int? reorderIndex;
 
+  /// Keyingi videoli vazifaning birinchi videosi (avtomatik davom etish uchun)
+  final String? nextVideoUrl;
+
+  /// Kartaning istalgan joyini ikki marta bosish — «Все задачи» da tahrirlash
+  final VoidCallback? onEdit;
+
   const AdminTaskListItem({
     super.key,
     required this.task,
@@ -42,6 +49,8 @@ class AdminTaskListItem extends StatelessWidget {
     required this.onShareVideo,
     required this.onTogglePin,
     this.reorderIndex,
+    this.nextVideoUrl,
+    this.onEdit,
   });
 
   bool get _hasVideo => task.hasAnyVideo;
@@ -66,64 +75,68 @@ class AdminTaskListItem extends StatelessWidget {
   Widget build(BuildContext context) {
     final isTablet = MediaQuery.of(context).size.shortestSide >= 600;
 
-    return Container(
-      margin: const EdgeInsets.only(bottom: 10),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: const Color(0xFFEDEEF1)),
-        boxShadow: const [
-          BoxShadow(
-            color: Color(0x0A000000),
-            blurRadius: 12,
-            offset: Offset(0, 4),
-          ),
-        ],
-      ),
-      clipBehavior: Clip.antiAlias,
-      // Chap rangli chiziq Positioned bilan — TaskVideoStrip ichidagi
-      // LayoutBuilder IntrinsicHeight bilan ishlamaydi
-      child: Stack(
-        children: [
-          Positioned(
-            left: 0,
-            top: 0,
-            bottom: 0,
-            width: 4,
-            child: ColoredBox(color: _accentColor),
-          ),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 12, 12, 12),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // Sarlavha qismini bosib turib sudrash — pastdagi ovoz yozish
-                // va videoni uzoq bosish bilan to'qnashmaydi
-                _dragArea(
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      _buildHeader(context, isTablet),
-                      const SizedBox(height: 8),
-                      _buildMeta(),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 12),
-                TaskVideoStrip(
-                  videoUrls: _videos,
-                  slotCount: task.videoCount,
-                  onOpenVideo: onShowVideoPlayer,
-                ),
-                const SizedBox(height: 10),
-                AudioTaskRow.fromCheckerTask(
-                  task: task,
-                  selectedDate: selectedDate,
-                ),
-              ],
+    return _DoubleTapArea(
+      onDoubleTap: onEdit,
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 10),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(18),
+          border: Border.all(color: const Color(0xFFEDEEF1)),
+          boxShadow: const [
+            BoxShadow(
+              color: Color(0x0A000000),
+              blurRadius: 12,
+              offset: Offset(0, 4),
             ),
-          ),
-        ],
+          ],
+        ),
+        clipBehavior: Clip.antiAlias,
+        // Chap rangli chiziq Positioned bilan — TaskVideoStrip ichidagi
+        // LayoutBuilder IntrinsicHeight bilan ishlamaydi
+        child: Stack(
+          children: [
+            Positioned(
+              left: 0,
+              top: 0,
+              bottom: 0,
+              width: 4,
+              child: ColoredBox(color: _accentColor),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 12, 12, 12),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Sarlavha qismini bosib turib sudrash — pastdagi ovoz yozish
+                  // va videoni uzoq bosish bilan to'qnashmaydi
+                  _dragArea(
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        _buildHeader(context, isTablet),
+                        const SizedBox(height: 8),
+                        _buildMeta(),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  TaskVideoStrip(
+                    videoUrls: _videos,
+                    slotCount: task.videoCount,
+                    onOpenVideo: onShowVideoPlayer,
+                    nextVideoUrl: nextVideoUrl,
+                  ),
+                  const SizedBox(height: 10),
+                  AudioTaskRow.fromCheckerTask(
+                    task: task,
+                    selectedDate: selectedDate,
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -388,6 +401,66 @@ class _StatusButtons extends StatelessWidget {
               )
             : null,
       ),
+    );
+  }
+}
+
+/// Ikki marta bosishni xom pointer hodisalaridan aniqlaydi — gesture
+/// arenasida qatnashmaydi, shuning uchun ichidagi tugmalar va videolar
+/// bir bosishda kechikmasdan ishlayveradi.
+class _DoubleTapArea extends StatefulWidget {
+  final VoidCallback? onDoubleTap;
+  final Widget child;
+
+  const _DoubleTapArea({required this.onDoubleTap, required this.child});
+
+  @override
+  State<_DoubleTapArea> createState() => _DoubleTapAreaState();
+}
+
+class _DoubleTapAreaState extends State<_DoubleTapArea> {
+  static const _maxGap = Duration(milliseconds: 300);
+  static const _maxPress = Duration(milliseconds: 250);
+
+  Offset? _downAt;
+  DateTime? _downTime;
+  DateTime? _lastTapTime;
+  Offset? _lastTapAt;
+
+  @override
+  Widget build(BuildContext context) {
+    if (widget.onDoubleTap == null) return widget.child;
+    return Listener(
+      onPointerDown: (e) {
+        _downAt = e.position;
+        _downTime = DateTime.now();
+      },
+      onPointerUp: (e) {
+        final downAt = _downAt;
+        final downTime = _downTime;
+        if (downAt == null || downTime == null) return;
+        final now = DateTime.now();
+        // Faqat qisqa va joyida bosish hisoblanadi (sudrash/scroll emas)
+        if (now.difference(downTime) > _maxPress ||
+            (e.position - downAt).distance > kTouchSlop) {
+          _lastTapTime = null;
+          return;
+        }
+        final last = _lastTapTime;
+        final lastAt = _lastTapAt;
+        if (last != null &&
+            lastAt != null &&
+            now.difference(last) <= _maxGap &&
+            (e.position - lastAt).distance <= kDoubleTapSlop) {
+          _lastTapTime = null;
+          widget.onDoubleTap!();
+        } else {
+          _lastTapTime = now;
+          _lastTapAt = e.position;
+        }
+      },
+      onPointerCancel: (_) => _lastTapTime = null,
+      child: widget.child,
     );
   }
 }

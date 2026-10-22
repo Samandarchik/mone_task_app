@@ -9,7 +9,10 @@ class ReorderableFilialTabs extends StatelessWidget {
   final List<FilialModel> filials;
   final bool canReorder;
   final ValueChanged<List<FilialModel>> onReorder;
-  final ValueChanged<FilialModel>? onDoubleTap;
+
+  /// Tabni ikki marta bosish — [tabContext] tab joyini bilish uchun
+  /// (masalan, oynani tab tagida ochish)
+  final void Function(FilialModel filial, BuildContext tabContext)? onDoubleTap;
   final Widget? trailing;
 
   const ReorderableFilialTabs({
@@ -60,33 +63,37 @@ class ReorderableFilialTabs extends StatelessWidget {
               key: ValueKey(filial.filialId),
               index: index,
               enabled: canReorder,
-              child: GestureDetector(
-                onTap: () => controller.animateTo(index),
-                onDoubleTap: onDoubleTap == null
-                    ? null
-                    : () => onDoubleTap!(filial),
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
-                  alignment: Alignment.center,
-                  decoration: BoxDecoration(
-                    color: Colors.transparent,
-                    border: Border(
-                      bottom: BorderSide(
-                        width: 3,
-                        color: selected
-                            ? const Color(0xFF2563EB)
-                            : Colors.transparent,
+              child: Builder(
+                builder: (tabContext) => GestureDetector(
+                  onTap: () => controller.animateTo(index),
+                  onDoubleTap: onDoubleTap == null
+                      ? null
+                      : () => onDoubleTap!(filial, tabContext),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    alignment: Alignment.center,
+                    decoration: BoxDecoration(
+                      color: Colors.transparent,
+                      border: Border(
+                        bottom: BorderSide(
+                          width: 3,
+                          color: selected
+                              ? const Color(0xFF2563EB)
+                              : Colors.transparent,
+                        ),
                       ),
                     ),
-                  ),
-                  child: Text(
-                    filial.name,
-                    style: TextStyle(
-                      fontSize: 15,
-                      fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
-                      color: selected
-                          ? const Color(0xFF2563EB)
-                          : const Color(0xFF6B7280),
+                    child: Text(
+                      filial.name,
+                      style: TextStyle(
+                        fontSize: 15,
+                        fontWeight: selected
+                            ? FontWeight.w700
+                            : FontWeight.w500,
+                        color: selected
+                            ? const Color(0xFF2563EB)
+                            : const Color(0xFF6B7280),
+                      ),
                     ),
                   ),
                 ),

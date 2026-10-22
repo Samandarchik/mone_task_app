@@ -426,6 +426,7 @@ func main() {
 	// Tasks
 	r.HandleFunc("/api/tasks", authMiddleware(getTasks)).Methods("GET")
 	r.HandleFunc("/api/tasks/all", authMiddleware(getAllTasks)).Methods("GET")
+	r.HandleFunc("/api/tasks/overdue", authMiddleware(getOverdueTasks)).Methods("GET")
 	r.HandleFunc("/api/tasks", authMiddleware(createTask)).Methods("POST")
 	r.HandleFunc("/api/tasks/{id}", authMiddleware(getTask)).Methods("GET")
 	r.HandleFunc("/api/tasks/{id}", authMiddleware(updateTask)).Methods("PUT")
@@ -4153,51 +4154,7 @@ func startNotificationScheduler() {
 	}
 }
 
-func checkAndSendNotifications() {
-	now := time.Now()
-	currentTime := now.Format("15:04")
-
-	db, err := getTaskDB(now)
-	if err != nil {
-		return
-	}
-	defer db.Close()
-
-	mainDB, _ := getMainDB()
-	defer mainDB.Close()
-
-	rows, err := db.Query(`
-		SELECT t.id, t.task, t.worker_ids, t.category, t.notification_time, t.filial_id
-		FROM tasks t 
-		WHERE t.notification_time = ? AND (t.status IS NULL OR t.status = ?)`,
-		currentTime, StatusNotDone)
-
-	if err != nil {
-		return
-	}
-	defer rows.Close()
-
-	for rows.Next() {
-		var taskID, filialID int
-		var taskName, category, notifTime, workerIDsStr string
-		rows.Scan(&taskID, &taskName, &workerIDsStr, &category, &notifTime, &filialID)
-
-		workerIDs := parseFilialIDs(workerIDsStr)
-
-		for _, workerID := range workerIDs {
-			var notificationID sql.NullString
-			err := mainDB.QueryRow("SELECT notification_id FROM users WHERE id = ? AND is_login = 1", workerID).Scan(&notificationID)
-
-			if err == nil && notificationID.Valid && notificationID.String != "" {
-				sendPushNotification(notificationID.String, taskName, category)
-			}
-		}
-	}
-}
-
-func sendPushNotification(notificationID, taskName, category string) {
-	log.Printf("Sending notification to %s: Task '%s' (Category: %s)\n", notificationID, taskName, category)
-}
+// checkAndSendNotifications — reminders.go da
 
 func createDailyTasks() {
 	mainDB, _ := getMainDB()

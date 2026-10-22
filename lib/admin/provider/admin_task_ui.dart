@@ -4,10 +4,13 @@ import 'dart:ui';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:path_provider/path_provider.dart';
+import 'package:mone_task_app/shared/widgets/task_reminders.dart';
+import 'package:mone_task_app/shared/widgets/profile_switch_button.dart';
 import 'package:mone_task_app/admin/model/filial_model.dart';
 import 'package:mone_task_app/admin/provider/admin_task_list_widget.dart';
 import 'package:mone_task_app/admin/provider/admin_tasks_provider.dart';
 import 'package:mone_task_app/admin/provider/circle_video_player.dart';
+import 'package:mone_task_app/admin/provider/task_view_sync.dart';
 import 'package:mone_task_app/admin/service/get_excel_ui.dart';
 import 'package:mone_task_app/admin/ui/all_task_ui.dart';
 import 'package:mone_task_app/admin/ui/user_list_page.dart';
@@ -33,12 +36,17 @@ class AdminTaskUi extends StatefulWidget {
   State<AdminTaskUi> createState() => _AdminTaskUiState();
 }
 
+// Filiallar soni o'zgarsa TabController qayta yaratiladi — bir nechta ticker
 class _AdminTaskUiState extends State<AdminTaskUi>
-    with SingleTickerProviderStateMixin {
+    with TickerProviderStateMixin {
   final TokenStorage _tokenStorage = sl<TokenStorage>();
   UserModel? _user;
   TabController? _tabController;
   int _lastCategoryLength = 0;
+
+  /// Hozir ko'rinib turgan filial tablari (tab almashganda filialni bilish uchun)
+  List<FilialModel> _categories = const [];
+  final TaskSyncScope _syncScope = TaskSyncScope();
   StreamSubscription? _wsSub;
 
   // _selectedDate ni providerdan olamiz, bu yerda saqlamaymiz
@@ -76,10 +84,68 @@ class _AdminTaskUiState extends State<AdminTaskUi>
 
   void _initTabController(int length) {
     if (_tabController == null || _lastCategoryLength != length) {
-      _tabController?.dispose();
-      _tabController = TabController(length: length, vsync: this);
+      // Eski controller shu frame'da hali ishlatilayotgan bo'lishi mumkin —
+      // frame tugagach o'chiramiz
+      final old = _tabController;
+      if (old != null) {
+        old.removeListener(_onTabChanged);
+        WidgetsBinding.instance.addPostFrameCallback((_) => old.dispose());
+      }
+      _tabController = TabController(length: length, vsync: this)
+        ..addListener(_onTabChanged);
       _lastCategoryLength = length;
     }
+  }
+
+  bool get _showBell =>
+      _user?.role == 'checker' || _user?.role == 'super_admin';
+
+  void _onTabChanged() {
+    final i = _tabController?.index ?? 0;
+    if (i < _categories.length)
+      TaskViewSync.selectFilial(_categories[i].filialId);
+  }
+
+  /// «Все задачи» — bosh sahifadagi filial va joyda ochiladi; [edit] berilsa
+  /// o'sha vazifa ajratib ko'rsatiladi. Qaytganda «Все задачи» da qolgan
+  /// joyga o'tamiz — ikkala sahifa bir joyda turadi.
+  Future<void> _openAllTasks(
+    List<FilialModel> categories, {
+    TaskModel? edit,
+  }) async {
+    final index = _tabController?.index ?? 0;
+    if (index < categories.length) {
+      TaskViewSync.filialId = categories[index].filialId;
+    }
+    if (edit != null) {
+      TaskViewSync.filialId = edit.filialId;
+      TaskViewSync.templateId = edit.templateId;
+    } else {
+      _syncScope.capture();
+    }
+
+    await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => TemplateTaskAdminUi(
+          name: _user?.username ?? "",
+          category: categories,
+          highlightTemplateId: edit?.templateId,
+        ),
+      ),
+    );
+    if (!mounted) return;
+
+    final templateId = TaskViewSync.templateId;
+    final tab = categories.indexWhere(
+      (f) => f.filialId == TaskViewSync.filialId,
+    );
+    final controller = _tabController;
+    if (tab >= 0 && controller != null && tab < controller.length) {
+      controller.index = tab; // tinglovchi templateId ni tozalaydi
+    }
+    TaskViewSync.templateId = templateId;
+    TaskViewSync.requestJump();
   }
 
   void _showCircleVideoPlayer(
@@ -487,6 +553,7 @@ class _AdminTaskUiState extends State<AdminTaskUi>
         ? allFilials.where((f) => f.filialId == ActiveFilial.id).toList()
         : allFilials;
     final categories = visible.isEmpty ? allFilials : visible;
+    _categories = categories;
     _initTabController(categories.length);
 
     return Scaffold(
@@ -529,7 +596,20 @@ class _AdminTaskUiState extends State<AdminTaskUi>
             color: Colors.red,
             provider: tasksProvider,
           ),
-          _NoVideoFilterButton(provider: tasksProvider),
+          _ToggleFilterButton(
+            selected: tasksProvider.filterHasAudio,
+            onTap: tasksProvider.toggleHasAudioFilter,
+            icon: Icons.mic_rounded,
+            color: Colors.deepPurple,
+            tooltip: 'Голосовые загружены',
+          ),
+          _ToggleFilterButton(
+            selected: tasksProvider.filterNoVideo,
+            onTap: tasksProvider.toggleNoVideoFilter,
+            icon: Icons.videocam_off,
+            color: Colors.blueGrey,
+            tooltip: 'Видео не загружены',
+          ),
 
           if (tasksProvider.isFilterActive)
             IconButton(
@@ -555,6 +635,13 @@ class _AdminTaskUiState extends State<AdminTaskUi>
 
           // ── Menyu elementlari (drawer o'rniga) ─────────────────────────
           // Telefonda joy yetmaydi — menyu "⋯" ichida
+          if (MediaQuery.of(context).size.shortestSide < 600 && _showBell)
+            const OverdueBellButton(),
+          if (MediaQuery.of(context).size.shortestSide < 600)
+            const Padding(
+              padding: EdgeInsets.symmetric(horizontal: 6),
+              child: Center(child: ProfileSwitchButton()),
+            ),
           if (MediaQuery.of(context).size.shortestSide < 600)
             PopupMenuButton<VoidCallback>(
               icon: const Icon(Icons.more_vert),
@@ -566,12 +653,7 @@ class _AdminTaskUiState extends State<AdminTaskUi>
                 _menuItem(
                   CupertinoIcons.list_bullet,
                   'Все задачи',
-                  () => context.push(
-                    TemplateTaskAdminUi(
-                      name: _user?.username ?? "",
-                      category: categories,
-                    ),
-                  ),
+                  () => _openAllTasks(categories),
                 ),
                 _menuItem(
                   CupertinoIcons.trash,
@@ -593,12 +675,7 @@ class _AdminTaskUiState extends State<AdminTaskUi>
             )
           else ...[
             IconButton(
-              onPressed: () => context.push(
-                TemplateTaskAdminUi(
-                  name: _user?.username ?? "",
-                  category: categories,
-                ),
-              ),
+              onPressed: () => _openAllTasks(categories),
               icon: const Icon(CupertinoIcons.list_bullet),
               tooltip: 'Все задачи',
             ),
@@ -613,12 +690,20 @@ class _AdminTaskUiState extends State<AdminTaskUi>
               icon: const Icon(CupertinoIcons.doc_plaintext),
               tooltip: 'Отчеты',
             ),
+            // Korrektor: vaqti o'tib, bajarilmagan vazifalar — profil oldida
+            if (_showBell) const OverdueBellButton(),
+            // Super admin: boshqa profilga kirish / orqaga qaytish
+            const Padding(
+              padding: EdgeInsets.symmetric(horizontal: 6),
+              child: Center(child: ProfileSwitchButton()),
+            ),
             IconButton(
               onPressed: _handleLogout,
               icon: const Icon(Icons.logout, color: Colors.red),
               tooltip: 'Выйти',
             ),
           ],
+          const SizedBox(width: 6),
         ],
         bottom: PreferredSize(
           preferredSize: const Size.fromHeight(kTextTabBarHeight),
@@ -648,8 +733,17 @@ class _AdminTaskUiState extends State<AdminTaskUi>
               // checker (Корректор) foydalanuvchilar ro'yxatini ko'ra olmaydi.
               if (_user?.role != 'checker')
                 IconButton(
-                  onPressed: () =>
-                      context.push(UsersPage(filialModel: categories)),
+                  onPressed: () async {
+                    await Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => UsersPage(filialModel: categories),
+                      ),
+                    );
+                    // Foydalanuvchilar sahifasida filial tartibi o'zgargan
+                    // bo'lishi mumkin
+                    tasksProvider.refreshFilials();
+                  },
                   icon: const Icon(Icons.groups, color: Colors.green),
                   tooltip: 'Все пользователи',
                 ),
@@ -666,11 +760,15 @@ class _AdminTaskUiState extends State<AdminTaskUi>
     List<FilialModel> categories,
     DateTime selectedDate,
   ) {
-    if (tasksProvider.tasksState == LoadingState.loading) {
+    // Spinner va xato faqat ro'yxat bo'sh bo'lsa. Fonda yangilash (izoh,
+    // otkaz, WS) paytida ro'yxat almashtirilsa — sahifa boshiga qaytib qolardi.
+    final hasTasks = tasksProvider.tasks.isNotEmpty;
+
+    if (tasksProvider.tasksState == LoadingState.loading && !hasTasks) {
       return const Center(child: CircularProgressIndicator.adaptive());
     }
 
-    if (tasksProvider.tasksState == LoadingState.error) {
+    if (tasksProvider.tasksState == LoadingState.error && !hasTasks) {
       return Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
@@ -707,6 +805,8 @@ class _AdminTaskUiState extends State<AdminTaskUi>
           selectedDate: selectedDate,
           onRefresh: () => tasksProvider.fetchTasks(),
           onShowVideoPlayer: _showCircleVideoPlayer,
+          syncScope: _syncScope,
+          onEditTask: (task) => _openAllTasks(categories, edit: task),
         );
       }).toList(),
     );
@@ -767,50 +867,62 @@ class _StatusFilterButton extends StatelessWidget {
   }
 }
 
-// ─── No-video filter button ──────────────────────────────────────────────────
+// ─── Toggle filter button (video yo'q / ovozli xabar bor) ─────────────────────
 
-class _NoVideoFilterButton extends StatelessWidget {
-  final AdminTasksProvider provider;
+class _ToggleFilterButton extends StatelessWidget {
+  final bool selected;
+  final VoidCallback onTap;
+  final IconData icon;
+  final Color color;
+  final String tooltip;
 
-  const _NoVideoFilterButton({required this.provider});
+  const _ToggleFilterButton({
+    required this.selected,
+    required this.onTap,
+    required this.icon,
+    required this.color,
+    required this.tooltip,
+  });
 
   @override
   Widget build(BuildContext context) {
-    final bool isSelected = provider.filterNoVideo;
-    const Color color = Colors.blueGrey;
+    final bool isSelected = selected;
     final isPhone = MediaQuery.of(context).size.shortestSide < 600;
     final double size = isPhone ? 30 : 50;
     final double iconSize = isPhone ? 16 : 26;
     final double hPadding = isPhone ? 6 : 20;
 
-    return GestureDetector(
-      onTap: () => provider.toggleNoVideoFilter(),
-      child: Padding(
-        padding: EdgeInsets.symmetric(horizontal: hPadding),
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 200),
-          width: size,
-          height: size,
-          decoration: BoxDecoration(
-            shape: BoxShape.circle,
-            color: isSelected ? color : color.withValues(alpha: 0.2),
-            border: Border.all(
-              color: isSelected ? color : color.withValues(alpha: 0.4),
-              width: isSelected ? 2.5 : 1.5,
+    return Tooltip(
+      message: tooltip,
+      child: GestureDetector(
+        onTap: onTap,
+        child: Padding(
+          padding: EdgeInsets.symmetric(horizontal: hPadding),
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 200),
+            width: size,
+            height: size,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: isSelected ? color : color.withValues(alpha: 0.2),
+              border: Border.all(
+                color: isSelected ? color : color.withValues(alpha: 0.4),
+                width: isSelected ? 2.5 : 1.5,
+              ),
+              boxShadow: isSelected
+                  ? [
+                      BoxShadow(
+                        color: color.withValues(alpha: 0.4),
+                        blurRadius: 6,
+                      ),
+                    ]
+                  : [],
             ),
-            boxShadow: isSelected
-                ? [
-                    BoxShadow(
-                      color: color.withValues(alpha: 0.4),
-                      blurRadius: 6,
-                    ),
-                  ]
-                : [],
-          ),
-          child: Icon(
-            Icons.videocam_off,
-            size: iconSize,
-            color: isSelected ? Colors.white : color,
+            child: Icon(
+              icon,
+              size: iconSize,
+              color: isSelected ? Colors.white : color,
+            ),
           ),
         ),
       ),

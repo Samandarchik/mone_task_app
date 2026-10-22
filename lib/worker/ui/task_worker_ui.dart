@@ -3,6 +3,8 @@ import 'dart:ui';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:mone_task_app/shared/widgets/task_reminders.dart';
+import 'package:mone_task_app/shared/widgets/profile_switch_button.dart';
 import 'package:mone_task_app/admin/service/get_excel_ui.dart';
 import 'package:mone_task_app/admin/ui/all_task_ui.dart';
 import 'package:mone_task_app/admin/ui/video_cache_manager_page.dart';
@@ -73,6 +75,12 @@ class _TaskWorkerUiState extends State<TaskWorkerUi> {
     _wsSub = ws.onEvent.listen((event) {
       if (event['event'] == 'task_updated') {
         _fetchTasks(showLoading: false);
+      } else if (event['event'] == 'task_reminder') {
+        // Vazifa vaqti keldi — ilovaning o'zida bir marta eslatma
+        final data = event['data'];
+        if (data is Map<String, dynamic> && mounted) {
+          showTaskReminder(context, data);
+        }
       } else if (event['event'] == 'user_updated') {
         final data = event['data'];
         if (data is Map<String, dynamic>) {
@@ -523,6 +531,11 @@ class _TaskWorkerUiState extends State<TaskWorkerUi> {
               ),
             ),
           ),
+          // Super admin shu profil nomidan kirgan bo'lsa — orqaga qaytish
+          const Padding(
+            padding: EdgeInsets.only(right: 8),
+            child: Center(child: ProfileSwitchButton()),
+          ),
         ],
       ),
       body: _buildBody(),
@@ -549,7 +562,12 @@ class _TaskWorkerUiState extends State<TaskWorkerUi> {
               itemCount: visible.length,
               itemBuilder: (_, i) => KeyedSubtree(
                 key: ValueKey(visible[i].taskId),
-                child: _buildTaskCard(visible[i], i + 1, i),
+                child: _buildTaskCard(
+                  visible[i],
+                  i + 1,
+                  i,
+                  nextVideoUrl: _nextVideoUrl(visible, i),
+                ),
               ),
             ),
     );
@@ -622,7 +640,21 @@ class _TaskWorkerUiState extends State<TaskWorkerUi> {
     if (ok == true && mounted) _showVideoRecorder(task, slot: index);
   }
 
-  Widget _buildTaskCard(TaskModel task, int number, int reorderIndex) {
+  /// [index] dan keyingi birinchi videoli taskning birinchi videosi
+  String? _nextVideoUrl(List<TaskModel> tasks, int index) {
+    for (var j = index + 1; j < tasks.length; j++) {
+      final videos = _taskVideos(tasks[j]);
+      if (videos.isNotEmpty) return videos.first;
+    }
+    return null;
+  }
+
+  Widget _buildTaskCard(
+    TaskModel task,
+    int number,
+    int reorderIndex, {
+    String? nextVideoUrl,
+  }) {
     final videos = _taskVideos(task);
     final slots = task.videoCount > videos.length
         ? task.videoCount
@@ -756,6 +788,7 @@ class _TaskWorkerUiState extends State<TaskWorkerUi> {
             videoUrls: videos,
             slotCount: task.videoCount,
             onOpenVideo: (idx) => _openVideos(task, idx),
+            nextVideoUrl: nextVideoUrl,
             // Bitta videoli taskda ham ↻ — sarlavhadagi kamera olib tashlangan
             onRerecordVideo: _isRecording
                 ? null

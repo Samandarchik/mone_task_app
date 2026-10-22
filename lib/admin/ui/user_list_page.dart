@@ -1,16 +1,14 @@
-import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
+import 'package:mone_task_app/shared/widgets/profile_switch_button.dart';
 import 'package:mone_task_app/admin/model/filial_model.dart';
 import 'package:mone_task_app/admin/ui/add_worker.dart';
 import 'package:mone_task_app/admin/ui/user_edit_dialog.dart';
+import 'package:mone_task_app/admin/service/task_worker_service.dart'
+    show TemplateService;
 import 'package:mone_task_app/admin/service/user_service.dart';
 import 'package:mone_task_app/checker/service/task_worker_service.dart';
-import 'package:mone_task_app/core/context_extension.dart';
 import 'package:mone_task_app/core/data/local/token_storage.dart';
 import 'package:mone_task_app/core/di/di.dart';
-import 'package:mone_task_app/home/model/login_model.dart';
-import 'package:mone_task_app/home/service/api_service.dart';
-import 'package:mone_task_app/home/ui/role_home.dart';
 import 'package:mone_task_app/shared/widgets/switch_chip.dart';
 import 'package:mone_task_app/worker/model/user_model.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -660,11 +658,14 @@ class _UsersPageState extends State<UsersPage> {
         ),
         const SizedBox(height: 10),
         SwitchChipGrid(
+          // Bosib turib sudrash — filiallar tartibi (hamma joyda bir xil)
+          onReorder: canMutate ? _reorderFilials : null,
           children: [
             for (final f in _filials)
               SwitchChip(
                 label: f.name,
                 value: ids.contains(f.filialId),
+                count: _accessCount(f.filialId),
                 onChanged: canMutate
                     ? (v) => _toggleFilial(u, f.filialId, v)
                     : null,
@@ -672,6 +673,38 @@ class _UsersPageState extends State<UsersPage> {
           ],
         ),
       ],
+    );
+  }
+
+  /// Nechta xodimda shu filialga ruxsat yoqilgan (super_admin va checker
+  /// hamma filialni ko'radi — ular sanalmaydi).
+  int _accessCount(int filialId) => _users
+      .where(
+        (u) =>
+            u.role != 'super_admin' &&
+            u.role != 'checker' &&
+            (u.filialIds?.contains(filialId) ?? false),
+      )
+      .length;
+
+  /// Optimistik: tartib darhol o'zgaradi va serverga saqlanadi — tablar va
+  /// boshqa sahifalar ham shu tartibni oladi. Xato bo'lsa orqaga qaytadi.
+  Future<void> _reorderFilials(int from, int to) async {
+    final previous = _filials;
+    final next = List<FilialModel>.from(_filials);
+    next.insert(to, next.removeAt(from));
+    setState(() => _filials = next);
+
+    final ok = await TemplateService().reorderFilials(
+      next.map((f) => f.filialId).toList(),
+    );
+    if (!mounted || ok) return;
+    setState(() => _filials = previous);
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Не удалось сохранить порядок'),
+        backgroundColor: Colors.red,
+      ),
     );
   }
 
@@ -858,12 +891,7 @@ class _UsersPageState extends State<UsersPage> {
       if (u.filialIds != null && u.filialIds!.isNotEmpty)
         _profileInfoLine(
           Icons.location_on_outlined,
-          u.filialIds!
-              .map((id) {
-                final f = _filials.where((f) => f.filialId == id);
-                return f.isNotEmpty ? f.first.name : '#$id';
-              })
-              .join(', '),
+_filialNames(u.filialIds!),
         ),
     ];
   }
@@ -882,14 +910,20 @@ class _UsersPageState extends State<UsersPage> {
       if (u.filialIds != null && u.filialIds!.isNotEmpty)
         _profileInfoLine(
           Icons.location_on_outlined,
-          u.filialIds!
-              .map((id) {
-                final f = _filials.where((f) => f.filialId == id);
-                return f.isNotEmpty ? f.first.name : '#$id';
-              })
-              .join(', '),
+_filialNames(u.filialIds!),
         ),
     ];
+  }
+
+  /// Filial nomlari — umumiy filial tartibida (tablardagi kabi).
+  String _filialNames(List<int> ids) {
+    final names = [
+      for (final f in _filials)
+        if (ids.contains(f.filialId)) f.name,
+    ];
+    final known = _filials.map((f) => f.filialId).toSet();
+    names.addAll(ids.where((id) => !known.contains(id)).map((id) => '#$id'));
+    return names.join(', ');
   }
 
   Widget _userCardHeader(UserModel u) {
@@ -1048,40 +1082,9 @@ class _UsersPageState extends State<UsersPage> {
 
   // ── O'sha foydalanuvchi paroli bilan kirish (ikki marta bosilganda) ────
 
-  Future<void> _loginAsUser(UserModel u) async {
-    if (u.password.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('У пользователя нет пароля')),
-      );
-      return;
-    }
-
-    final messenger = ScaffoldMessenger.of(context);
-    final result = await ApiService().login(LoginModel(password: u.password));
-    if (!mounted) return;
-
-    if (result['success'] == true && result['token'] != null) {
-      final ts = sl<TokenStorage>();
-      await ts.putToken(result['token']);
-      await ts.putUserData(Map<String, dynamic>.from(result['user'] as Map));
-      if (!mounted) return;
-      context.pushAndRemove(
-        landingForUser(
-          UserModel.fromJson(Map<String, dynamic>.from(result['user'] as Map)),
-        ),
-      );
-    } else {
-      messenger.showSnackBar(
-        SnackBar(
-          content: Text(
-            result['message']?.toString() ??
-                result['error']?.toString() ??
-                'Не удалось войти',
-          ),
-        ),
-      );
-    }
-  }
+  /// Super admin shu foydalanuvchi nomidan kiradi (orqaga qaytish —
+  /// AppBar'dagi «Супер админ» tugmasi).
+  Future<void> _loginAsUser(UserModel u) => loginAsUser(context, u);
 
   // ── Shared widgets ─────────────────────────────────────────────────────
 

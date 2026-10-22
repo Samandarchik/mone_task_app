@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:mone_task_app/admin/model/all_task_model.dart';
 import 'package:mone_task_app/admin/model/category_model.dart';
 import 'package:mone_task_app/admin/model/filial_model.dart';
+import 'package:mone_task_app/admin/provider/task_view_sync.dart';
 import 'package:mone_task_app/admin/service/task_worker_service.dart';
 import 'package:mone_task_app/admin/ui/add_admin_task.dart';
 import 'package:mone_task_app/admin/ui/widgets/template_task_card.dart';
@@ -14,10 +15,15 @@ import 'package:mone_task_app/utils/get_color.dart';
 class TemplateTaskAdminUi extends StatefulWidget {
   final List<FilialModel>? category;
   final String name;
+
+  /// Bosh sahifada bosib turilgan vazifa — ajratib ko'rsatiladi
+  final int? highlightTemplateId;
+
   const TemplateTaskAdminUi({
     super.key,
     required this.name,
     required this.category,
+    this.highlightTemplateId,
   });
 
   @override
@@ -38,6 +44,12 @@ class _TemplateTaskAdminUiState extends State<TemplateTaskAdminUi> {
   final Map<int, TemplateTaskModel> _edited = {};
   int selectedFilter = -1; // -1: hammasi, 1-3: type bo'yicha
 
+  /// Bosh sahifa bilan bir joyda turish (filial + tepadagi vazifa)
+  final TaskSyncScope _syncScope = TaskSyncScope();
+  List<FilialModel> _categories = const [];
+  TabController? _tabs;
+  int? _highlightId;
+
   /// Filiallarni boshqarish va tartibni o'zgartirish — faqat super_admin.
   /// «Задачи» ruxsati berilgan foydalanuvchi faqat vazifa qo'shadi,
   /// tahrirlaydi va o'chiradi (o'z filiallari doirasida).
@@ -50,10 +62,36 @@ class _TemplateTaskAdminUiState extends State<TemplateTaskAdminUi> {
     templatesFuture = TemplateService().fetchTemplates();
     categoriesFuture = TemplateService().fetchFilials();
     taskCategoriesFuture = TemplateService().fetchCategoriesList();
+    _highlightId = widget.highlightTemplateId;
+    if (_highlightId != null) {
+      Future.delayed(const Duration(seconds: 4), () {
+        if (mounted) setState(() => _highlightId = null);
+      });
+    }
+  }
+
+  /// DefaultTabController o'zgarsa tinglovchini qayta ulaymiz
+  void _watchTabs(TabController controller) {
+    if (identical(_tabs, controller)) return;
+    _tabs?.removeListener(_onTabChanged);
+    _tabs = controller..addListener(_onTabChanged);
+  }
+
+  TabController _watchTabsOf(BuildContext context) {
+    final controller = DefaultTabController.of(context);
+    _watchTabs(controller);
+    return controller;
+  }
+
+  void _onTabChanged() {
+    final i = _tabs?.index ?? 0;
+    if (i < _categories.length)
+      TaskViewSync.selectFilial(_categories[i].filialId);
   }
 
   @override
   void dispose() {
+    _tabs?.removeListener(_onTabChanged);
     _filialController.dispose();
     super.dispose();
   }
@@ -100,129 +138,144 @@ class _TemplateTaskAdminUiState extends State<TemplateTaskAdminUi> {
         final categories =
             _localFilials ?? categorySnapshot.data ?? widget.category ?? [];
 
+        _categories = categories;
+        // Bosh sahifadagi filialda ochiladi
+        final initialTab = categories.indexWhere(
+          (f) => f.filialId == TaskViewSync.filialId,
+        );
+
         return DefaultTabController(
           length: categories.length + (_isSuperAdmin ? 1 : 0),
-          initialIndex: 0,
-          child: Scaffold(
-            appBar: AppBar(
-              title: Text(widget.name),
-              actions: [
-                IconButton(
-                  onPressed: () async {
-                    final result = await Navigator.push(
-                      context,
-                      MaterialPageRoute(builder: (_) => AddAdminTask()),
-                    );
+          initialIndex: initialTab < 0 ? 0 : initialTab,
+          // Chiqishda tepadagi vazifani eslab qolamiz — bosh sahifa shu joyga
+          // qaytadi
+          child: PopScope(
+            onPopInvokedWithResult: (didPop, _) {
+              if (didPop) _syncScope.capture();
+            },
+            child: Scaffold(
+              appBar: AppBar(
+                title: Text(widget.name),
+                actions: [
+                  IconButton(
+                    onPressed: () async {
+                      final result = await Navigator.push(
+                        context,
+                        MaterialPageRoute(builder: (_) => AddAdminTask()),
+                      );
 
-                    // Agar yangi task qo'shilsa, refresh qilish
-                    if (result == true) _reloadTemplates();
-                  },
-                  icon: const Icon(Icons.add),
-                ),
-              ],
-              bottom: PreferredSize(
-                preferredSize: const Size.fromHeight(kTextTabBarHeight),
-                child: Builder(
-                  builder: (context) => ReorderableFilialTabs(
-                    controller: DefaultTabController.of(context),
-                    filials: categories,
-                    canReorder: _isSuperAdmin,
-                    onReorder: (order) => _saveFilialOrder(categories, order),
-                    onDoubleTap: _isSuperAdmin ? _showEditFilialDialog : null,
-                    trailing: _isSuperAdmin
-                        ? IconButton(
-                            onPressed: _showAddFilialDialog,
-                            icon: const Icon(Icons.add_circle_outline),
-                          )
-                        : null,
+                      // Agar yangi task qo'shilsa, refresh qilish
+                      if (result == true) _reloadTemplates();
+                    },
+                    icon: const Icon(Icons.add),
+                  ),
+                ],
+                bottom: PreferredSize(
+                  preferredSize: const Size.fromHeight(kTextTabBarHeight),
+                  child: Builder(
+                    builder: (context) => ReorderableFilialTabs(
+                      controller: _watchTabsOf(context),
+                      filials: categories,
+                      canReorder: _isSuperAdmin,
+                      onReorder: (order) => _saveFilialOrder(categories, order),
+                      onDoubleTap: _isSuperAdmin ? _showEditFilialDialog : null,
+                      trailing: _isSuperAdmin
+                          ? IconButton(
+                              tooltip: 'Добавить филиал',
+                              onPressed: _showAddFilialDialog,
+                              icon: const Icon(Icons.add_circle_outline),
+                            )
+                          : null,
+                    ),
                   ),
                 ),
               ),
-            ),
-            body: FutureBuilder<List<TemplateTaskModel>>(
-              future: templatesFuture,
-              builder: (context, snapshot) {
-                final categoryCount = categories.length;
+              body: FutureBuilder<List<TemplateTaskModel>>(
+                future: templatesFuture,
+                builder: (context, snapshot) {
+                  final categoryCount = categories.length;
 
-                // Loading state
-                if (snapshot.connectionState == ConnectionState.waiting) {
-                  return TabBarView(
-                    children: [
-                      ...List.generate(
-                        categoryCount,
-                        (_) => const Center(
-                          child: CircularProgressIndicator.adaptive(),
-                        ),
-                      ),
-                      if (_isSuperAdmin) const SizedBox.shrink(),
-                    ],
-                  );
-                }
-
-                // Error state
-                if (snapshot.hasError) {
-                  return TabBarView(
-                    children: [
-                      ...List.generate(
-                        categoryCount,
-                        (_) => Center(
-                          child: Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              const Icon(
-                                Icons.error_outline,
-                                color: Colors.red,
-                                size: 48,
-                              ),
-                              const SizedBox(height: 16),
-                              Text('Ошибка: ${snapshot.error}'),
-                              const SizedBox(height: 16),
-                              ElevatedButton(
-                                onPressed: () {
-                                  setState(() {
-                                    templatesFuture = TemplateService()
-                                        .fetchTemplates();
-                                  });
-                                },
-                                child: const Text('Повторить'),
-                              ),
-                            ],
+                  // Loading state
+                  if (snapshot.connectionState == ConnectionState.waiting) {
+                    return TabBarView(
+                      children: [
+                        ...List.generate(
+                          categoryCount,
+                          (_) => const Center(
+                            child: CircularProgressIndicator.adaptive(),
                           ),
                         ),
-                      ),
-                      if (_isSuperAdmin) const SizedBox.shrink(),
-                    ],
-                  );
-                }
+                        if (_isSuperAdmin) const SizedBox.shrink(),
+                      ],
+                    );
+                  }
 
-                // Empty state
-                if (!snapshot.hasData || snapshot.data!.isEmpty) {
+                  // Error state
+                  if (snapshot.hasError) {
+                    return TabBarView(
+                      children: [
+                        ...List.generate(
+                          categoryCount,
+                          (_) => Center(
+                            child: Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                const Icon(
+                                  Icons.error_outline,
+                                  color: Colors.red,
+                                  size: 48,
+                                ),
+                                const SizedBox(height: 16),
+                                Text('Ошибка: ${snapshot.error}'),
+                                const SizedBox(height: 16),
+                                ElevatedButton(
+                                  onPressed: () {
+                                    setState(() {
+                                      templatesFuture = TemplateService()
+                                          .fetchTemplates();
+                                    });
+                                  },
+                                  child: const Text('Повторить'),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                        if (_isSuperAdmin) const SizedBox.shrink(),
+                      ],
+                    );
+                  }
+
+                  // Empty state
+                  if (!snapshot.hasData || snapshot.data!.isEmpty) {
+                    return TabBarView(
+                      children: [
+                        ...List.generate(
+                          categoryCount,
+                          (_) =>
+                              const Center(child: Text("Шаблоны не найдены")),
+                        ),
+                        if (_isSuperAdmin) const SizedBox.shrink(),
+                      ],
+                    );
+                  }
+
+                  final allTemplates = snapshot.data!;
+
                   return TabBarView(
                     children: [
                       ...List.generate(
                         categoryCount,
-                        (_) => const Center(child: Text("Шаблоны не найдены")),
+                        (index) => buildFilialTemplates(
+                          allTemplates,
+                          categories[index].filialId,
+                        ),
                       ),
                       if (_isSuperAdmin) const SizedBox.shrink(),
                     ],
                   );
-                }
-
-                final allTemplates = snapshot.data!;
-
-                return TabBarView(
-                  children: [
-                    ...List.generate(
-                      categoryCount,
-                      (index) => buildFilialTemplates(
-                        allTemplates,
-                        categories[index].filialId,
-                      ),
-                    ),
-                    if (_isSuperAdmin) const SizedBox.shrink(),
-                  ],
-                );
-              },
+                },
+              ),
             ),
           ),
         );
@@ -303,95 +356,46 @@ class _TemplateTaskAdminUiState extends State<TemplateTaskAdminUi> {
     );
   }
 
-  void _showEditFilialDialog(FilialModel filial) {
-    _filialController.text = filial.name;
+  /// Filialni tahrirlash — ikki marta bosilgan tabning tagida kichik oyna.
+  void _showEditFilialDialog(FilialModel filial, BuildContext tabContext) {
+    final box = tabContext.findRenderObject()! as RenderBox;
+    final origin = box.localToGlobal(Offset.zero);
+    const width = 280.0;
+    final screenWidth = MediaQuery.sizeOf(context).width;
+    final left = origin.dx.clamp(8.0, screenWidth - width - 8);
+
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text("Редактировать филиал"),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(
-              controller: _filialController,
-              autofocus: true,
-              decoration: const InputDecoration(
-                labelText: "Название филиала",
-                border: OutlineInputBorder(),
-              ),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text("Отмена"),
-          ),
-          TextButton(
-            onPressed: () async {
-              // O'chirish funksiyasi
-              final confirm = await showDialog<bool>(
-                context: context,
-                builder: (context) => AlertDialog(
-                  title: const Text("Вы уверены?"),
-                  content: Text("Удалить ${filial.name}?"),
-                  actions: [
-                    TextButton(
-                      onPressed: () => Navigator.pop(context, false),
-                      child: const Text("Нет"),
-                    ),
-                    TextButton(
-                      onPressed: () {
-                        TemplateService().deleteFilial(filial.filialId);
-                        Navigator.pop(context, true);
-                      },
-                      style: TextButton.styleFrom(foregroundColor: Colors.red),
-                      child: const Text("Да, удалить"),
-                    ),
-                  ],
-                ),
-              );
-
-              if (confirm == true) {
-                Navigator.pop(context);
-
+      barrierColor: Colors.black.withValues(alpha: 0.08),
+      builder: (_) => Stack(
+        children: [
+          Positioned(
+            top: origin.dy + box.size.height + 6,
+            left: left,
+            width: width,
+            child: _FilialEditPopup(
+              filial: filial,
+              onSave: (name) async {
+                await TemplateService().updateFilial(filial.filialId, name);
+                _reloadFilials();
+              },
+              onDelete: () async {
                 await TemplateService().deleteFilial(filial.filialId);
-
-                setState(() {
-                  _localFilials = null;
-                  categoriesFuture = TemplateService().fetchFilials();
-                });
-              }
-            },
-            style: TextButton.styleFrom(foregroundColor: Colors.red),
-            child: const Text("Удалить"),
-          ),
-          TextButton(
-            onPressed: () async {
-              final newName = _filialController.text.trim();
-
-              if (newName.isEmpty) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text('Введите название филиала!'),
-                    backgroundColor: Colors.orange,
-                  ),
-                );
-                return;
-              }
-
-              Navigator.pop(context);
-              await TemplateService().updateFilial(filial.filialId, newName);
-              setState(() {
-                _localFilials = null;
-                categoriesFuture = TemplateService().fetchFilials();
-              });
-            },
-            child: const Text("Сохранить"),
+                _reloadFilials();
+              },
+            ),
           ),
         ],
       ),
     );
+  }
+
+  void _reloadFilials() {
+    if (!mounted) return;
+    setState(() {
+      _localFilials = null;
+      categoriesFuture = TemplateService().fetchFilials();
+    });
   }
 
   Widget buildFilialTemplates(List<TemplateTaskModel> templates, int filialId) {
@@ -415,7 +419,13 @@ class _TemplateTaskAdminUiState extends State<TemplateTaskAdminUi> {
       return const Center(child: Text("Для этого филиала нет шаблонов"));
     }
 
-    return RefreshIndicator(
+    return _SyncedTemplateList(
+      key: ValueKey('templates-$filialId'),
+      filialId: filialId,
+      templates: filtered,
+      scope: _syncScope,
+      canReorder: _isSuperAdmin,
+      cardBuilder: _buildTemplateCard,
       onRefresh: () async {
         final newTemplates = TemplateService().fetchTemplates();
         setState(() {
@@ -424,57 +434,42 @@ class _TemplateTaskAdminUiState extends State<TemplateTaskAdminUi> {
         });
         await newTemplates;
       },
-      child: ReorderableListView.builder(
-        // Tutqich belgisi yo'q — kartani bosib turib sudraladi
-        buildDefaultDragHandles: false,
-        padding: const EdgeInsets.all(12),
-        itemCount: filtered.length,
-        itemBuilder: (context, index) {
-          final template = filtered[index];
-          return ReorderableDelayedDragStartListener(
-            key: Key('template_${template.templateId}'),
-            index: index,
-            enabled: _isSuperAdmin,
-            child: _buildTemplateCard(template, index + 1),
-          );
-        },
-        onReorder: (oldIndex, newIndex) async {
-          if (!_isSuperAdmin) return;
-          // MUHIM: oldIndex va newIndex bu list indekslari (0-dan boshlanadi)
-          // Lekin backend orderIndex kutadi (1-dan boshlanadi)
+      onReorder: (oldIndex, newIndex) async {
+        if (!_isSuperAdmin) return;
+        // MUHIM: oldIndex va newIndex bu list indekslari (0-dan boshlanadi)
+        // Lekin backend orderIndex kutadi (1-dan boshlanadi)
 
-          // Eski va yangi pozitsiyalarni olish
-          final oldOrderIndex = filtered[oldIndex].orderIndex;
-          final newOrderIndex = newIndex >= filtered.length
-              ? filtered.last.orderIndex
-              : filtered[newIndex].orderIndex;
+        // Eski va yangi pozitsiyalarni olish
+        final oldOrderIndex = filtered[oldIndex].orderIndex;
+        final newOrderIndex = newIndex >= filtered.length
+            ? filtered.last.orderIndex
+            : filtered[newIndex].orderIndex;
 
-          print('🔄 Drag: List index $oldIndex → $newIndex');
-          print('📍 Order index $oldOrderIndex → $newOrderIndex');
+        print('🔄 Drag: List index $oldIndex → $newIndex');
+        print('📍 Order index $oldOrderIndex → $newOrderIndex');
 
-          // Backend ga yuborish
-          final success = await TemplateService().updateTaskReorder(
-            oldOrderIndex,
-            newOrderIndex,
-          );
+        // Backend ga yuborish
+        final success = await TemplateService().updateTaskReorder(
+          oldOrderIndex,
+          newOrderIndex,
+        );
 
-          if (success) {
-            print('✅ Reorder muvaffaqiyatli');
-            _reloadTemplates();
-          } else {
-            print('❌ Reorder muvaffaqiyatsiz');
-            // Xatolik haqida xabar
-            if (mounted) {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text('Ошибка при изменении порядка'),
-                  backgroundColor: Colors.red,
-                ),
-              );
-            }
+        if (success) {
+          print('✅ Reorder muvaffaqiyatli');
+          _reloadTemplates();
+        } else {
+          print('❌ Reorder muvaffaqiyatsiz');
+          // Xatolik haqida xabar
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('Ошибка при изменении порядка'),
+                backgroundColor: Colors.red,
+              ),
+            );
           }
-        },
-      ),
+        }
+      },
     );
   }
 
@@ -495,6 +490,7 @@ class _TemplateTaskAdminUiState extends State<TemplateTaskAdminUi> {
               onDeleted: _reloadTemplates,
               typeColor: getTypeColor,
               number: number,
+              highlighted: template.templateId == _highlightId,
               onCategoriesChanged: () => setState(() {
                 taskCategoriesFuture = TemplateService().fetchCategoriesList();
               }),
@@ -510,5 +506,214 @@ class _TemplateTaskAdminUiState extends State<TemplateTaskAdminUi> {
       _edited.clear();
       templatesFuture = TemplateService().fetchTemplates();
     });
+  }
+}
+
+/// Bitta filialning shablonlari — bosh sahifa bilan bir joyda turadi
+/// (tepadagi vazifa [TaskViewSync] orqali almashinadi).
+class _SyncedTemplateList extends StatefulWidget {
+  final int filialId;
+  final List<TemplateTaskModel> templates;
+  final TaskSyncScope scope;
+  final bool canReorder;
+  final Widget Function(TemplateTaskModel template, int number) cardBuilder;
+  final Future<void> Function() onRefresh;
+  final Future<void> Function(int oldIndex, int newIndex) onReorder;
+
+  const _SyncedTemplateList({
+    super.key,
+    required this.filialId,
+    required this.templates,
+    required this.scope,
+    required this.canReorder,
+    required this.cardBuilder,
+    required this.onRefresh,
+    required this.onReorder,
+  });
+
+  @override
+  State<_SyncedTemplateList> createState() => _SyncedTemplateListState();
+}
+
+class _SyncedTemplateListState extends State<_SyncedTemplateList>
+    with TaskScrollSync {
+  @override
+  TaskSyncScope? get syncScope => widget.scope;
+
+  @override
+  int get syncFilialId => widget.filialId;
+
+  @override
+  List<int> get syncTemplateIds =>
+      widget.templates.map((t) => t.templateId).toList();
+
+  @override
+  Widget build(BuildContext context) {
+    final templates = widget.templates;
+    return RefreshIndicator(
+      onRefresh: widget.onRefresh,
+      child: syncScrollListener(
+        ReorderableListView.builder(
+          scrollController: syncController,
+          // Tutqich belgisi yo'q — kartani bosib turib sudraladi
+          buildDefaultDragHandles: false,
+          padding: const EdgeInsets.all(12),
+          itemCount: templates.length,
+          itemBuilder: (context, index) {
+            final template = templates[index];
+            return ReorderableDelayedDragStartListener(
+              key: Key('template_${template.templateId}'),
+              index: index,
+              enabled: widget.canReorder,
+              child: KeyedSubtree(
+                key: syncKey(template.templateId),
+                child: widget.cardBuilder(template, index + 1),
+              ),
+            );
+          },
+          onReorder: widget.onReorder,
+        ),
+      ),
+    );
+  }
+}
+
+/// Tab tagida chiqadigan kichik oyna: nomni o'zgartirish yoki o'chirish.
+class _FilialEditPopup extends StatefulWidget {
+  final FilialModel filial;
+  final Future<void> Function(String name) onSave;
+  final Future<void> Function() onDelete;
+
+  const _FilialEditPopup({
+    required this.filial,
+    required this.onSave,
+    required this.onDelete,
+  });
+
+  @override
+  State<_FilialEditPopup> createState() => _FilialEditPopupState();
+}
+
+class _FilialEditPopupState extends State<_FilialEditPopup> {
+  late final _controller = TextEditingController(text: widget.filial.name)
+    ..selection = TextSelection(
+      baseOffset: 0,
+      extentOffset: widget.filial.name.length,
+    );
+  String? _error;
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  Future<void> _save() async {
+    final name = _controller.text.trim();
+    if (name.isEmpty) {
+      setState(() => _error = 'Введите название');
+      return;
+    }
+    Navigator.pop(context);
+    if (name != widget.filial.name) await widget.onSave(name);
+  }
+
+  Future<void> _delete() async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text("Вы уверены?"),
+        content: Text("Удалить ${widget.filial.name}?"),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text("Нет"),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: TextButton.styleFrom(foregroundColor: Colors.red),
+            child: const Text("Да, удалить"),
+          ),
+        ],
+      ),
+    );
+    if (confirm != true || !mounted) return;
+    Navigator.pop(context);
+    await widget.onDelete();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.white,
+      elevation: 10,
+      shadowColor: Colors.black26,
+      borderRadius: BorderRadius.circular(14),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(12, 12, 12, 10),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            const Text(
+              'Название филиала',
+              style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700),
+            ),
+            const SizedBox(height: 8),
+            TextField(
+              controller: _controller,
+              autofocus: true,
+              onSubmitted: (_) => _save(),
+              style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
+              decoration: InputDecoration(
+                errorText: _error,
+                isDense: true,
+                filled: true,
+                fillColor: const Color(0xFFF3F4F6),
+                contentPadding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 10,
+                ),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(10),
+                  borderSide: BorderSide.none,
+                ),
+              ),
+            ),
+            const SizedBox(height: 10),
+            Row(
+              children: [
+                SizedBox(
+                  height: 34,
+                  child: TextButton.icon(
+                    onPressed: _delete,
+                    style: TextButton.styleFrom(
+                      foregroundColor: Colors.red,
+                      padding: const EdgeInsets.symmetric(horizontal: 8),
+                    ),
+                    icon: const Icon(Icons.delete_outline_rounded, size: 18),
+                    label: const Text('Удалить'),
+                  ),
+                ),
+                const Spacer(),
+                SizedBox(
+                  height: 34,
+                  child: FilledButton(
+                    onPressed: _save,
+                    style: FilledButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                    ),
+                    child: const Text('Сохранить'),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
   }
 }

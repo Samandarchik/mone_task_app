@@ -1,7 +1,9 @@
 import 'dart:io';
 
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:mone_task_app/core/constants/urls.dart';
+import 'package:path_provider/path_provider.dart';
 import 'package:video_player/video_player.dart';
 
 /// Video URL (to'liq yoki nisbiy) → to'liq URL.
@@ -17,6 +19,35 @@ String videoThumbUrl(String url) {
   return '${AppUrls.baseUrl}/thumbs$path';
 }
 
+/// Katta player ishlatadigan xotiradagi joy — `Documents/videos/<fayl nomi>`.
+Future<File> _cacheFileFor(String fullUrl) async {
+  final directory = await getApplicationDocumentsDirectory();
+  final fileName = fullUrl
+      .split('/')
+      .last
+      .replaceAll(RegExp(r'[^\w\s\-\.]'), '_');
+  return File('${directory.path}/videos/$fileName');
+}
+
+/// Hozir fonda yuklanayotgan videolar (bir videoni ikki marta yuklamaslik uchun)
+final Set<String> _downloading = {};
+
+/// Videoni xotiraga yuklab qo'yadi — keyingi safar internetdan emas,
+/// shu fayldan ochiladi. Yarim yuklangan fayl `.tmp` bo'lib qoladi.
+Future<void> _cacheInBackground(String fullUrl, File file) async {
+  if (!_downloading.add(fullUrl)) return;
+  final temp = File('${file.path}.tmp');
+  try {
+    await file.parent.create(recursive: true);
+    await Dio().download(fullUrl, temp.path);
+    if (await temp.length() > 0) await temp.rename(file.path);
+  } catch (_) {
+    if (await temp.exists()) await temp.delete();
+  } finally {
+    _downloading.remove(fullUrl);
+  }
+}
+
 /// Vazifa tagidagi kichik videolar qatori.
 ///
 /// [slotCount] — super admin belgilagan videolar soni. Yuborilgan videolar
@@ -24,7 +55,8 @@ String videoThumbUrl(String url) {
 /// Bir qatorda 4 tagacha, ko'p bo'lsa keyingi qatorga o'tadi.
 ///
 /// Bir marta bosish — video shu joyda biroz kattalashib o'ynaydi,
-/// tugagach shu taskning keyingi videosi avtomatik boshlanadi.
+/// tugagach shu taskning keyingi videosi, oxirgisidan keyin esa
+/// [nextVideoUrl] (keyingi taskning videosi) avtomatik boshlanadi.
 /// Bosib turish — [onOpenVideo] (katta player).
 /// [onRerecordVideo] berilsa, o'ynayotgan videoda "qayta yozish" tugmasi chiqadi.
 /// [onAddVideo] berilsa, majburiy videolar yuklangach "Ещё видео" tugmasi
@@ -38,6 +70,10 @@ class TaskVideoStrip extends StatelessWidget {
   final VoidCallback? onAddVideo;
   final int maxVideos;
 
+  /// Keyingi (videoli) vazifaning birinchi videosi — shu vazifaning oxirgi
+  /// videosi tugagach o'sha video avtomatik boshlanadi.
+  final String? nextVideoUrl;
+
   const TaskVideoStrip({
     super.key,
     required this.videoUrls,
@@ -47,6 +83,7 @@ class TaskVideoStrip extends StatelessWidget {
     this.onTapEmpty,
     this.onAddVideo,
     this.maxVideos = 10,
+    this.nextVideoUrl,
   });
 
   static const double _gap = 8;
@@ -94,9 +131,12 @@ class TaskVideoStrip extends StatelessWidget {
                           ? null
                           : () => onRerecordVideo!(i),
                       // Tugagach keyingi video o'zi boshlanadi
+                      // keyingi vazifaning videosiga o'tadi
                       onEnded: i + 1 < videoUrls.length
                           ? () => _VideoThumb.playing.value = videoUrls[i + 1]
-                          : null,
+                          : nextVideoUrl == null
+                          ? null
+                          : () => _VideoThumb.playing.value = nextVideoUrl,
                     )
                   : SizedBox.square(
                       dimension: size,
@@ -176,7 +216,15 @@ class _VideoThumbState extends State<_VideoThumb> {
     if (_active && current != widget.url) {
       _stop();
     } else if (!_active && current == widget.url && _inlineSupported) {
-      // Oldingi video tugadi — navbat shu videoga keldi
+      // Oldingi video tugadi — navbat shu videoga keldi. Keyingi vazifa
+      // ekrandan pastda bo'lsa, unga scroll qilamiz.
+      Scrollable.ensureVisible(
+        context,
+        alignment: 0.3,
+        duration: const Duration(milliseconds: 350),
+        curve: Curves.easeOutCubic,
+        alignmentPolicy: ScrollPositionAlignmentPolicy.keepVisibleAtEnd,
+      );
       _start();
     }
   }
@@ -184,9 +232,22 @@ class _VideoThumbState extends State<_VideoThumb> {
   Future<void> _start() async {
     _VideoThumb.playing.value = widget.url;
     setState(() => _active = true);
-    final controller = VideoPlayerController.networkUrl(
-      Uri.parse(fullVideoUrl(widget.url)),
-    );
+    // Avval yuklab olingan bo'lsa — xotiradan, aks holda internetdan
+    // o'ynaymiz va keyingi safar uchun fonda xotiraga yuklab qo'yamiz.
+    final fullUrl = fullVideoUrl(widget.url);
+    final file = await _cacheFileFor(fullUrl);
+    if (!mounted || _VideoThumb.playing.value != widget.url) return;
+    final VideoPlayerController controller;
+    if (await file.exists() && await file.length() > 0) {
+      controller = VideoPlayerController.file(file);
+    } else {
+      controller = VideoPlayerController.networkUrl(Uri.parse(fullUrl));
+      _cacheInBackground(fullUrl, file);
+    }
+    if (!mounted || !_active || _controller != null) {
+      controller.dispose();
+      return;
+    }
     _controller = controller;
     try {
       await controller.initialize();

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:mone_task_app/shared/widgets/profile_switch_button.dart';
 import 'package:mone_task_app/admin/model/filial_model.dart';
 import 'package:mone_task_app/checker/service/task_worker_service.dart';
 import 'package:mone_task_app/core/context_extension.dart';
@@ -80,12 +81,17 @@ class _FilialSelectPageState extends State<FilialSelectPage> {
         ),
         centerTitle: true,
         actions: [
+          const Padding(
+            padding: EdgeInsets.symmetric(horizontal: 6),
+            child: Center(child: ProfileSwitchButton()),
+          ),
           if (!widget.isSwitch)
             IconButton(
               tooltip: 'Выйти',
               icon: const Icon(Icons.logout, color: Colors.red),
               onPressed: _handleLogout,
             ),
+          const SizedBox(width: 6),
         ],
       ),
       body: FutureBuilder<List<FilialModel>>(
@@ -107,8 +113,7 @@ class _FilialSelectPageState extends State<FilialSelectPage> {
                   ),
                   const SizedBox(height: 16),
                   ElevatedButton(
-                    onPressed: () =>
-                        setState(() => _future = _loadFilials()),
+                    onPressed: () => setState(() => _future = _loadFilials()),
                     child: const Text('Повторить'),
                   ),
                 ],
@@ -181,8 +186,7 @@ class _FilialCard extends StatelessWidget {
                   shape: BoxShape.circle,
                 ),
                 alignment: Alignment.center,
-                child: const Icon(Icons.storefront,
-                    color: Color(0xFF6B7280)),
+                child: const Icon(Icons.storefront, color: Color(0xFF6B7280)),
               ),
               const SizedBox(width: 14),
               Expanded(

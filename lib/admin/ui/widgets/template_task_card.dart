@@ -1,5 +1,3 @@
-import 'dart:async';
-
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:mone_task_app/admin/model/all_task_model.dart';
@@ -27,6 +25,9 @@ class TemplateTaskCard extends StatefulWidget {
   /// Ro'yxatdagi tartib raqami (1 dan)
   final int number;
 
+  /// Bosh sahifadan tahrirlash uchun ochilgan vazifa — ajratib ko'rsatiladi
+  final bool highlighted;
+
   const TemplateTaskCard({
     super.key,
     required this.template,
@@ -37,6 +38,7 @@ class TemplateTaskCard extends StatefulWidget {
     required this.onCategoriesChanged,
     required this.typeColor,
     required this.number,
+    this.highlighted = false,
   });
 
   @override
@@ -47,7 +49,6 @@ class _TemplateTaskCardState extends State<TemplateTaskCard> {
   final TemplateService _service = TemplateService();
   final TextEditingController _textCtrl = TextEditingController();
   final FocusNode _textFocus = FocusNode();
-  Timer? _debounce;
 
   late String _task;
   late int _type;
@@ -62,6 +63,9 @@ class _TemplateTaskCardState extends State<TemplateTaskCard> {
   bool _showTime = false;
   bool _saving = false;
 
+  /// Saqlanmagan o'zgarish bor — «Отмена / Сохранить» ko'rinadi
+  bool _changed = false;
+
   @override
   void initState() {
     super.initState();
@@ -74,7 +78,7 @@ class _TemplateTaskCardState extends State<TemplateTaskCard> {
   @override
   void didUpdateWidget(covariant TemplateTaskCard oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.template != widget.template && !_saving) {
+    if (oldWidget.template != widget.template && !_saving && !_changed) {
       _load(widget.template);
     }
   }
@@ -97,7 +101,6 @@ class _TemplateTaskCardState extends State<TemplateTaskCard> {
 
   @override
   void dispose() {
-    _debounce?.cancel();
     _textCtrl.dispose();
     _textFocus.dispose();
     super.dispose();
@@ -105,14 +108,23 @@ class _TemplateTaskCardState extends State<TemplateTaskCard> {
 
   bool get _needsDays => _type != 1 && _days.isEmpty;
 
-  /// Ketma-ket bosishlarda (kunlar, vaqt, video) bitta so'rov yuboriladi
-  void _scheduleSave() {
-    _debounce?.cancel();
-    _debounce = Timer(const Duration(milliseconds: 600), _save);
+  /// O'zgarish darhol saqlanmaydi — «Сохранить» bosilgandagina yuboriladi
+  void _markChanged() {
+    if (!_changed) setState(() => _changed = true);
+  }
+
+  /// «Отмена» — barcha o'zgarishlarni bekor qilish
+  void _cancelChanges() {
+    setState(() {
+      _load(widget.template);
+      _changed = false;
+      _editingText = false;
+      _showDays = false;
+      _showTime = false;
+    });
   }
 
   Future<void> _save() async {
-    _debounce?.cancel();
     // Haftalik/oylik turda kun tanlanmaguncha saqlanmaydi
     if (_task.trim().isEmpty || _needsDays) return;
 
@@ -137,7 +149,14 @@ class _TemplateTaskCardState extends State<TemplateTaskCard> {
     setState(() => _saving = true);
     final ok = await _service.updateTaskStatus(model);
     if (!mounted) return;
-    setState(() => _saving = false);
+    setState(() {
+      _saving = false;
+      if (ok) {
+        _changed = false;
+        _showDays = false;
+        _showTime = false;
+      }
+    });
 
     if (!ok) {
       ScaffoldMessenger.of(
@@ -183,7 +202,7 @@ class _TemplateTaskCardState extends State<TemplateTaskCard> {
     setState(() => _editingText = false);
     if (text.isEmpty || text == _task) return;
     setState(() => _task = text);
-    _save();
+    _markChanged();
   }
 
   // ---------- O'chirish ----------
@@ -255,7 +274,7 @@ class _TemplateTaskCardState extends State<TemplateTaskCard> {
     if (!mounted) return;
     setState(() => _category = name);
     widget.onCategoriesChanged();
-    _save();
+    _markChanged();
   }
 
   // ---------- UI ----------
@@ -264,9 +283,14 @@ class _TemplateTaskCardState extends State<TemplateTaskCard> {
   Widget build(BuildContext context) {
     return Card(
       margin: const EdgeInsets.only(bottom: 12),
-      elevation: 3,
+      elevation: widget.highlighted ? 8 : 3,
       color: widget.typeColor(_type),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+        side: widget.highlighted
+            ? const BorderSide(color: Color(0xFF2563EB), width: 3)
+            : BorderSide.none,
+      ),
       child: Padding(
         padding: const EdgeInsets.fromLTRB(12, 12, 10, 12),
         child: Column(
@@ -274,13 +298,15 @@ class _TemplateTaskCardState extends State<TemplateTaskCard> {
           children: [
             _buildHeader(),
             const SizedBox(height: 10),
+            // Tur va uning kunlari — bitta blok: kunlar qaysi turga
+            // tegishli ekani darhol ko'rinadi
+            _buildTypeSegment(),
+            const SizedBox(height: 8),
             Wrap(
               spacing: 8,
               runSpacing: 8,
               crossAxisAlignment: WrapCrossAlignment.center,
               children: [
-                _buildTypeSegment(),
-                if (_type != 1) _buildDaysChip(),
                 _buildCategoryChip(),
                 _buildTimeChip(),
                 _chip(
@@ -290,11 +316,8 @@ class _TemplateTaskCardState extends State<TemplateTaskCard> {
                 ),
               ],
             ),
-            if (_type != 1 && _showDays) ...[
-              const SizedBox(height: 8),
-              _type == 2 ? _buildWeekDays() : _buildMonthDays(),
-            ],
             if (_showTime) ...[const SizedBox(height: 8), _buildTimePicker()],
+            if (_changed) ...[const SizedBox(height: 10), _buildSaveBar()],
           ],
         ),
       ),
@@ -395,7 +418,7 @@ class _TemplateTaskCardState extends State<TemplateTaskCard> {
               _videoCount > 1
                   ? () {
                       setState(() => _videoCount--);
-                      _scheduleSave();
+                      _markChanged();
                     }
                   : null,
               size: 22,
@@ -415,7 +438,7 @@ class _TemplateTaskCardState extends State<TemplateTaskCard> {
               _videoCount < 8
                   ? () {
                       setState(() => _videoCount++);
-                      _scheduleSave();
+                      _markChanged();
                     }
                   : null,
               size: 22,
@@ -426,82 +449,183 @@ class _TemplateTaskCardState extends State<TemplateTaskCard> {
     );
   }
 
+  /// Tur tanlovi. Haftalik/oylik turda tanlangan kunlar shu tugmaning
+  /// o'zida yoziladi, bosilsa kunlar ro'yxati shu blok ichida ochiladi.
   Widget _buildTypeSegment() {
     const types = [
-      (1, Icons.today_outlined, 'День'),
-      (2, Icons.view_week_outlined, 'Неделя'),
-      (3, Icons.calendar_month_outlined, 'Месяц'),
+      (1, Icons.today_outlined, 'Каждый день'),
+      (2, Icons.view_week_outlined, 'По неделям'),
+      (3, Icons.calendar_month_outlined, 'По месяцам'),
     ];
+    final open = _type != 1 && _showDays;
     return Container(
       padding: const EdgeInsets.all(3),
       decoration: BoxDecoration(
         color: Colors.white.withValues(alpha: 0.7),
         borderRadius: BorderRadius.circular(10),
       ),
-      child: Row(
+      child: Column(
         mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          for (final (id, icon, label) in types)
-            GestureDetector(
-              onTap: () {
-                if (_type == id) return;
-                setState(() {
-                  _type = id;
-                  _days = [];
-                  _showDays = id != 1;
-                });
-                _save();
-              },
-              child: AnimatedContainer(
-                duration: const Duration(milliseconds: 150),
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 12,
-                  vertical: 6,
-                ),
-                decoration: BoxDecoration(
-                  color: _type == id ? Colors.white : Colors.transparent,
-                  borderRadius: BorderRadius.circular(6),
-                  boxShadow: _type == id
-                      ? const [
-                          BoxShadow(color: Color(0x14000000), blurRadius: 3),
-                        ]
-                      : null,
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(icon, size: 18, color: _type == id ? _blue : _grey),
-                    const SizedBox(width: 4),
-                    Text(
-                      label,
-                      style: TextStyle(
-                        fontSize: 15,
-                        fontWeight: FontWeight.w600,
-                        color: _type == id ? _blue : _grey,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
+          Wrap(
+            spacing: 2,
+            runSpacing: 2,
+            children: [
+              for (final (id, icon, label) in types)
+                _typeOption(id, icon, label),
+            ],
+          ),
+          if (open)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(8, 8, 8, 6),
+              child: _type == 2 ? _buildWeekDays() : _buildMonthDays(),
             ),
         ],
       ),
     );
   }
 
-  Widget _buildDaysChip() {
+  Widget _typeOption(int id, IconData icon, String label) {
+    final selected = _type == id;
     final sorted = List<int>.from(_days)..sort();
-    final label = sorted.isEmpty
-        ? 'Выберите дни'
-        : _type == 2
+    final needsDays = selected && id != 1;
+    final noDays = needsDays && sorted.isEmpty;
+    final daysLabel = !needsDays
+        ? null
+        : noDays
+        ? 'выберите дни'
+        : id == 2
         ? sorted.map(getWeekday).join(', ')
         : sorted.join(', ');
-    return _chip(
-      icon: Icons.event_outlined,
-      label: label,
-      color: sorted.isEmpty ? Colors.red : _blue,
-      trailing: _showDays ? Icons.expand_less : Icons.expand_more,
-      onTap: () => setState(() => _showDays = !_showDays),
+    final color = noDays ? Colors.red : (selected ? _blue : _grey);
+
+    return GestureDetector(
+      onTap: () {
+        if (selected) {
+          // Tanlangan turni qayta bosish — kunlarni ochish / yopish
+          if (id != 1) setState(() => _showDays = !_showDays);
+          return;
+        }
+        setState(() {
+          _type = id;
+          _days = [];
+          _showDays = id != 1;
+        });
+        _markChanged();
+      },
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 150),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+        decoration: BoxDecoration(
+          color: selected ? Colors.white : Colors.transparent,
+          borderRadius: BorderRadius.circular(7),
+          boxShadow: selected
+              ? const [BoxShadow(color: Color(0x14000000), blurRadius: 3)]
+              : null,
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 18, color: color),
+            const SizedBox(width: 4),
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 15,
+                fontWeight: FontWeight.w600,
+                color: selected ? _blue : _grey,
+              ),
+            ),
+            if (daysLabel != null) ...[
+              Text(' · ', style: TextStyle(fontSize: 15, color: _grey)),
+              ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 180),
+                child: Text(
+                  daysLabel,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w600,
+                    color: color,
+                  ),
+                ),
+              ),
+              Icon(
+                _showDays ? Icons.expand_less : Icons.expand_more,
+                size: 18,
+                color: color,
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// Saqlanmagan o'zgarishlar bo'lsa — «Отмена» va «Сохранить»
+  Widget _buildSaveBar() {
+    return Row(
+      children: [
+        if (_needsDays)
+          const Expanded(
+            child: Text(
+              'Выберите дни, чтобы сохранить',
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+                color: Colors.red,
+              ),
+            ),
+          )
+        else
+          const Spacer(),
+        SizedBox(
+          height: 36,
+          child: OutlinedButton(
+            onPressed: _saving ? null : _cancelChanges,
+            style: OutlinedButton.styleFrom(
+              foregroundColor: _grey,
+              backgroundColor: Colors.white.withValues(alpha: 0.7),
+              side: BorderSide.none,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(10),
+              ),
+            ),
+            child: const Text(
+              'Отмена',
+              style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
+            ),
+          ),
+        ),
+        const SizedBox(width: 8),
+        SizedBox(
+          height: 36,
+          child: FilledButton.icon(
+            onPressed: _saving || _needsDays ? null : _save,
+            style: FilledButton.styleFrom(
+              backgroundColor: _blue,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(10),
+              ),
+            ),
+            icon: _saving
+                ? const SizedBox.square(
+                    dimension: 16,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: Colors.white,
+                    ),
+                  )
+                : const Icon(Icons.check_rounded, size: 18),
+            label: const Text(
+              'Сохранить',
+              style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
+            ),
+          ),
+        ),
+      ],
     );
   }
 
@@ -518,7 +642,7 @@ class _TemplateTaskCardState extends State<TemplateTaskCard> {
         final name = widget.categories.firstWhere((c) => c.id == id).name;
         if (name == _category) return;
         setState(() => _category = name);
-        _save();
+        _markChanged();
       },
       itemBuilder: (_) => [
         for (final c in widget.categories)
@@ -567,7 +691,7 @@ class _TemplateTaskCardState extends State<TemplateTaskCard> {
         if (_showTime && _hour == null) {
           _hour = DateTime.now().hour;
           _minute = DateTime.now().minute;
-          _scheduleSave();
+          _markChanged();
         }
       }),
     );
@@ -600,7 +724,7 @@ class _TemplateTaskCardState extends State<TemplateTaskCard> {
     return GestureDetector(
       onTap: () {
         setState(() => selected ? _days.remove(value) : _days.add(value));
-        _scheduleSave();
+        _markChanged();
       },
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 120),
@@ -608,7 +732,8 @@ class _TemplateTaskCardState extends State<TemplateTaskCard> {
         height: 32,
         alignment: Alignment.center,
         decoration: BoxDecoration(
-          color: selected ? _blue : Colors.white,
+          // Blok foni oq — tanlanmagan kunlar och kulrang
+          color: selected ? _blue : const Color(0xFFF1F3F6),
           borderRadius: BorderRadius.circular(6),
         ),
         child: Text(
@@ -644,7 +769,7 @@ class _TemplateTaskCardState extends State<TemplateTaskCard> {
                 _hour = value.hour;
                 _minute = value.minute;
               });
-              _scheduleSave();
+              _markChanged();
             },
           ),
         ),
@@ -662,7 +787,7 @@ class _TemplateTaskCardState extends State<TemplateTaskCard> {
                 _minute = null;
                 _showTime = false;
               });
-              _save();
+              _markChanged();
             }),
           ],
         ),

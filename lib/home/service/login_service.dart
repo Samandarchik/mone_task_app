@@ -43,6 +43,8 @@ class _LoginPageState extends State<LoginPage> {
       setState(() => _loading = false);
 
       if (result['success'] == true && result['token'] != null) {
+        // Yangi kirish — oldingi super admin sessiyasi qolib ketmasin
+        await tokenStorage.clearSuperAdminSession();
         await tokenStorage.putToken(result['token']);
         await tokenStorage.putUserData(result['user']);
 

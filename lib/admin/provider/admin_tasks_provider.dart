@@ -44,7 +44,11 @@ class AdminTasksProvider extends ChangeNotifier {
   bool _filterNoVideo = false;
   bool get filterNoVideo => _filterNoVideo;
 
-  bool get isFilterActive => _selectedStatuses.isNotEmpty || _filterNoVideo;
+  bool _filterHasAudio = false;
+  bool get filterHasAudio => _filterHasAudio;
+
+  bool get isFilterActive =>
+      _selectedStatuses.isNotEmpty || _filterNoVideo || _filterHasAudio;
 
   void toggleStatusFilter(int status) {
     if (_selectedStatuses.contains(status)) {
@@ -60,9 +64,16 @@ class AdminTasksProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Faqat ovozli xabar (golosovoy) yuklangan vazifalar
+  void toggleHasAudioFilter() {
+    _filterHasAudio = !_filterHasAudio;
+    notifyListeners();
+  }
+
   void clearStatusFilter() {
     _selectedStatuses = {};
     _filterNoVideo = false;
+    _filterHasAudio = false;
     notifyListeners();
   }
 
@@ -71,6 +82,8 @@ class AdminTasksProvider extends ChangeNotifier {
   // Sana o'zgarganda faqat fetchTasks chaqiriladi, u tugagach UI yangilanadi
   void setSelectedDate(DateTime date) {
     _selectedDate = date;
+    // Boshqa sananing vazifalari ko'rinib qolmasin (xato bo'lsa ham)
+    _tasks = [];
     fetchTasks();
     // notifyListeners YO'Q — fetchTasks tugaganda o'zi chaqiradi
   }
@@ -89,6 +102,15 @@ class AdminTasksProvider extends ChangeNotifier {
       _filialsState = LoadingState.error;
     }
     notifyListeners();
+  }
+
+  /// Filiallarni loading ko'rsatmasdan qayta oladi (masalan, tartib boshqa
+  /// sahifada o'zgargandan keyin).
+  Future<void> refreshFilials() async {
+    try {
+      _filials = await _service.fetchFilials();
+      notifyListeners();
+    } catch (_) {}
   }
 
   // ── Reorder filials ──────────────────────────────────────────────────────
@@ -110,25 +132,28 @@ class AdminTasksProvider extends ChangeNotifier {
   }
 
   // ── Fetch tasks ──────────────────────────────────────────────────────────
+  // Har bir so'rovga raqam — eskirgan (keyin qaytgan) javob yangisini bosmasin
+  int _fetchSeq = 0;
+
   Future<void> fetchTasks() async {
-    // ❌ OLDIN: _tasksState = LoadingState.loading + notifyListeners()
-    //    Bu sana tanlanganda darhol rebuild → dialog yopilardi
-    //
-    // ✅ ENDI: loading state ni silent o'zgartirамiz,
-    //    notifyListeners faqat fetch TUGAGACH chaqiriladi
+    // notifyListeners faqat fetch TUGAGACH chaqiriladi. Ro'yxat bor paytda
+    // UI spinner ko'rsatmaydi (admin_task_ui), shuning uchun izoh/status
+    // kelganda fonda yangilash ro'yxatni qayta yaratmaydi va scroll joyida qoladi.
+    final seq = ++_fetchSeq;
     _tasksState = LoadingState.loading;
     _tasksError = null;
-    // notifyListeners() — BU YERDA CHAQIRMAYMIZ
 
     try {
-      _tasks = await _service.fetchTasks(_selectedDate);
+      final tasks = await _service.fetchTasks(_selectedDate);
+      if (seq != _fetchSeq) return;
+      _tasks = tasks;
       _tasksState = LoadingState.loaded;
     } catch (e) {
+      if (seq != _fetchSeq) return;
       _tasksError = e.toString();
       _tasksState = LoadingState.error;
     }
 
-    // Faqat tugagach bir marta notify — bu paytda dialog allaqachon yopilgan
     notifyListeners();
   }
 
@@ -175,6 +200,10 @@ class AdminTasksProvider extends ChangeNotifier {
       filtered = filtered.where(
         (t) => t.videoUrl == null || t.videoUrl!.isEmpty,
       );
+    }
+
+    if (_filterHasAudio) {
+      filtered = filtered.where((t) => t.checkerAudioUrls.isNotEmpty);
     }
 
     return filtered.toList();
