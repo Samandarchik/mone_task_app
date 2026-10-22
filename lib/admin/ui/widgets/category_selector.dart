@@ -121,7 +121,9 @@ class CategorySelectorState extends State<CategorySelector> {
               if (!success && mounted) {
                 ScaffoldMessenger.of(context).showSnackBar(
                   const SnackBar(
-                    content: Text("Категорию нельзя удалить — к ней привязаны данные"),
+                    content: Text(
+                      "Категорию нельзя удалить — к ней привязаны данные",
+                    ),
                   ),
                 );
               }
@@ -150,7 +152,10 @@ class CategorySelectorState extends State<CategorySelector> {
           Row(
             children: [
               Flexible(
-                child: Text("Ошибка: $error", style: const TextStyle(color: Colors.red)),
+                child: Text(
+                  "Ошибка: $error",
+                  style: const TextStyle(color: Colors.red),
+                ),
               ),
               TextButton(onPressed: loadCategories, child: const Text("Снова")),
             ],
@@ -168,7 +173,12 @@ class CategorySelectorState extends State<CategorySelector> {
                     child: Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        Flexible(child: Text(cat.name, overflow: TextOverflow.ellipsis)),
+                        Flexible(
+                          child: Text(
+                            cat.name,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
                         const SizedBox(width: 8),
                         GestureDetector(
                           onTap: () {
@@ -177,7 +187,11 @@ class CategorySelectorState extends State<CategorySelector> {
                               _confirmDelete(cat);
                             });
                           },
-                          child: const Icon(Icons.delete_outline, size: 18, color: Colors.red),
+                          child: const Icon(
+                            Icons.delete_outline,
+                            size: 18,
+                            color: Colors.red,
+                          ),
                         ),
                       ],
                     ),

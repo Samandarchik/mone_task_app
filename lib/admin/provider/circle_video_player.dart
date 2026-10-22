@@ -42,8 +42,11 @@ class CircleVideoPlayer extends StatelessWidget {
           tasks: title,
           initialIndex: initialIndex,
           onHalfWatched: onHalfWatched,
-          onUpdateStatus: (taskId, status) =>
-              tasksProvider.updateTaskStatus(taskId, status, tasksProvider.selectedDate),
+          onUpdateStatus: (taskId, status) => tasksProvider.updateTaskStatus(
+            taskId,
+            status,
+            tasksProvider.selectedDate,
+          ),
         );
       },
       child: _CircleVideoPlayerBody(selectedDate: selectedDate),
@@ -173,7 +176,8 @@ class _CircleVideoPlayerBodyState extends State<_CircleVideoPlayerBody>
     if (task == null) return;
     if (!Platform.isWindows && provider.isPlaying) provider.togglePlayPause();
 
-    final link = 'https://taskapi.monebakeryuz.uz/task/${task.date}/${task.taskId}';
+    final link =
+        'https://taskapi.monebakeryuz.uz/task/${task.date}/${task.taskId}';
     final box =
         _shareButtonKey.currentContext?.findRenderObject() as RenderBox?;
     final Rect sharePosition;
@@ -206,8 +210,8 @@ class _CircleVideoPlayerBodyState extends State<_CircleVideoPlayerBody>
 
   String? _getAudioUrl(TaskModel? task) =>
       (task != null && task.checkerAudioUrls.isNotEmpty
-          ? task.checkerAudioUrls.last
-          : null);
+      ? task.checkerAudioUrls.last
+      : null);
 
   bool _hasAudio(TaskModel? task) {
     final url = _getAudioUrl(task);
@@ -719,10 +723,7 @@ class _CircleVideoPlayerBodyState extends State<_CircleVideoPlayerBody>
 
   // ── Mini audio player ─────────────────────────────────────────────────────
 
-  Widget _buildMiniAudioPlayer(
-    TaskModel? task,
-    VideoPlayerProvider provider,
-  ) {
+  Widget _buildMiniAudioPlayer(TaskModel? task, VideoPlayerProvider provider) {
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
@@ -884,10 +885,7 @@ class _CircleVideoPlayerBodyState extends State<_CircleVideoPlayerBody>
 
   // ── Status indicator ──────────────────────────────────────────────────────
 
-  Widget _buildStatusIndicator(
-    VideoPlayerProvider provider,
-    TaskModel task,
-  ) {
+  Widget _buildStatusIndicator(VideoPlayerProvider provider, TaskModel task) {
     return Listener(
       onPointerDown: (e) => _onStatusPointerDown(e, provider, task),
       onPointerMove: _onStatusPointerMove,
@@ -905,11 +903,7 @@ class _CircleVideoPlayerBodyState extends State<_CircleVideoPlayerBody>
     );
   }
 
-  Widget _statusCircle(
-    TaskModel task,
-    int level,
-    Color activeColor,
-  ) {
+  Widget _statusCircle(TaskModel task, int level, Color activeColor) {
     final bool isActive = task.status == level;
     final bool isHolding = _pressedLevel == level;
 

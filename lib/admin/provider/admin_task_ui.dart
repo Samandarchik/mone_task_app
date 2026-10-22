@@ -19,6 +19,7 @@ import 'package:mone_task_app/core/di/di.dart';
 import 'package:mone_task_app/home/service/login_service.dart';
 import 'package:mone_task_app/home/ui/filial_select_page.dart';
 import 'package:mone_task_app/home/ui/role_home.dart';
+import 'package:mone_task_app/shared/widgets/reorderable_filial_tabs.dart';
 import 'package:mone_task_app/shared/widgets/user_avatar.dart';
 import 'package:mone_task_app/core/network/ws_service.dart';
 import 'package:mone_task_app/worker/model/user_model.dart';
@@ -624,12 +625,24 @@ class _AdminTaskUiState extends State<AdminTaskUi>
           child: Row(
             children: [
               Expanded(
-                child: TabBar(
-                  controller: _tabController,
-                  padding: EdgeInsets.zero,
-                  isScrollable: true,
-                  tabAlignment: TabAlignment.start,
-                  tabs: categories.map((c) => Tab(text: c.name)).toList(),
+                child: ReorderableFilialTabs(
+                  controller: _tabController!,
+                  filials: categories,
+                  // Tartibni faqat super_admin, barcha filiallar ko'rinib
+                  // turganda o'zgartiradi
+                  canReorder:
+                      _user?.role == 'super_admin' &&
+                      categories.length == allFilials.length,
+                  onReorder: (order) async {
+                    final ok = await tasksProvider.reorderFilials(order);
+                    if (!ok && context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text('Не удалось сохранить порядок'),
+                        ),
+                      );
+                    }
+                  },
                 ),
               ),
               // checker (Корректор) foydalanuvchilar ro'yxatini ko'ra olmaydi.

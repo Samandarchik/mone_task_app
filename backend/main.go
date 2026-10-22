@@ -446,6 +446,8 @@ func main() {
 	// Filials
 	r.HandleFunc("/api/filials", authMiddleware(getFilials)).Methods("GET")
 	r.HandleFunc("/api/filials", authMiddleware(createFilial)).Methods("POST")
+	// /reorder — {id} dan oldin bo'lishi shart, aks holda "reorder" id deb olinadi
+	r.HandleFunc("/api/filials/reorder", authMiddleware(reorderFilials)).Methods("PUT")
 	r.HandleFunc("/api/filials/{id}", authMiddleware(updateFilial)).Methods("PUT")
 	r.HandleFunc("/api/filials/{id}", authMiddleware(deleteFilial)).Methods("DELETE")
 
@@ -623,6 +625,8 @@ func createMainDB() {
 	db.Exec("ALTER TABLE task_templates ADD COLUMN order_index INTEGER DEFAULT 0")
 	db.Exec("ALTER TABLE task_templates ADD COLUMN multi_video INTEGER DEFAULT 0")
 	db.Exec("ALTER TABLE task_templates ADD COLUMN video_count INTEGER DEFAULT 1")
+	// Filiallar tartibi — barcha ekranlarda shu tartibda ko'rsatiladi
+	db.Exec("ALTER TABLE filials ADD COLUMN sort_order INTEGER DEFAULT 0")
 	// Har bir foydalanuvchining shaxsiy pin va tartibi (template bo'yicha — har kuni saqlanadi)
 	db.Exec(`CREATE TABLE IF NOT EXISTS user_task_prefs (
 		user_id INTEGER NOT NULL,
@@ -2798,7 +2802,7 @@ func getFilials(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	rows, err := db.Query("SELECT id, name FROM filials")
+	rows, err := db.Query("SELECT id, name FROM filials ORDER BY COALESCE(sort_order, 0), id")
 	if err != nil {
 		respondJSON(w, http.StatusInternalServerError, map[string]interface{}{
 			"success": false,
@@ -2850,7 +2854,8 @@ func createFilial(w http.ResponseWriter, r *http.Request) {
 	db, _ := getMainDB()
 	defer db.Close()
 
-	result, err := db.Exec("INSERT INTO filials (name) VALUES (?)", req.Name)
+	// Yangi filial ro'yxat oxiriga qo'shiladi
+	result, err := db.Exec("INSERT INTO filials (name, sort_order) VALUES (?, (SELECT COALESCE(MAX(sort_order), 0) + 1 FROM filials))", req.Name)
 	if err != nil {
 		respondJSON(w, http.StatusInternalServerError, map[string]interface{}{
 			"success": false,
@@ -2863,6 +2868,62 @@ func createFilial(w http.ResponseWriter, r *http.Request) {
 	respondJSON(w, http.StatusCreated, map[string]interface{}{
 		"success":  true,
 		"filialId": id,
+	})
+}
+
+// reorderFilials — filiallarning yangi tartibi: {"filialIds": [3, 1, 2, ...]}.
+// Ro'yxatdagi o'rni sort_order bo'lib saqlanadi.
+func reorderFilials(w http.ResponseWriter, r *http.Request) {
+	if r.Header.Get("Role") != RoleSuperAdmin {
+		respondJSON(w, http.StatusForbidden, map[string]interface{}{
+			"success": false,
+			"error":   "Ruxsat yo'q",
+		})
+		return
+	}
+
+	var req struct {
+		FilialIDs []int `json:"filialIds"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || len(req.FilialIDs) == 0 {
+		respondJSON(w, http.StatusBadRequest, map[string]interface{}{
+			"success": false,
+			"error":   "Noto'g'ri ma'lumot",
+		})
+		return
+	}
+
+	db, _ := getMainDB()
+	defer db.Close()
+
+	tx, err := db.Begin()
+	if err != nil {
+		respondJSON(w, http.StatusInternalServerError, map[string]interface{}{
+			"success": false,
+			"error":   "Server xatosi",
+		})
+		return
+	}
+	for i, id := range req.FilialIDs {
+		if _, err := tx.Exec("UPDATE filials SET sort_order = ? WHERE id = ?", i+1, id); err != nil {
+			tx.Rollback()
+			respondJSON(w, http.StatusInternalServerError, map[string]interface{}{
+				"success": false,
+				"error":   "Server xatosi",
+			})
+			return
+		}
+	}
+	if err := tx.Commit(); err != nil {
+		respondJSON(w, http.StatusInternalServerError, map[string]interface{}{
+			"success": false,
+			"error":   "Server xatosi",
+		})
+		return
+	}
+
+	respondJSON(w, http.StatusOK, map[string]interface{}{
+		"success": true,
 	})
 }
 

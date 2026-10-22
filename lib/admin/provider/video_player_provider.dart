@@ -279,7 +279,9 @@ class VideoPlayerProvider extends ChangeNotifier {
 
       // 50% haqiqiy ko'rish vaqti
       final total = _mkDuration.inMilliseconds;
-      if (!_halfWatchedFired && total > 0 && _accumulatedWatchMs >= total * 0.5) {
+      if (!_halfWatchedFired &&
+          total > 0 &&
+          _accumulatedWatchMs >= total * 0.5) {
         _halfWatchedFired = true;
         if (onHalfWatched != null && _currentIndex < tasks.length) {
           onHalfWatched!(tasks[_currentIndex].taskId);

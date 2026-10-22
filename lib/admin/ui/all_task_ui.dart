@@ -1,12 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:mone_task_app/admin/model/all_task_model.dart';
+import 'package:mone_task_app/admin/model/category_model.dart';
 import 'package:mone_task_app/admin/model/filial_model.dart';
 import 'package:mone_task_app/admin/service/task_worker_service.dart';
 import 'package:mone_task_app/admin/ui/add_admin_task.dart';
-import 'package:mone_task_app/admin/ui/edit_task_ui.dart';
-import 'package:mone_task_app/checker/model/checker_check_task_model.dart';
+import 'package:mone_task_app/admin/ui/widgets/template_task_card.dart';
 import 'package:mone_task_app/core/data/local/token_storage.dart';
 import 'package:mone_task_app/core/di/di.dart';
+import 'package:mone_task_app/shared/widgets/reorderable_filial_tabs.dart';
 import 'package:mone_task_app/utils/get_color.dart';
 
 // ==================== UI ====================
@@ -27,6 +28,14 @@ class _TemplateTaskAdminUiState extends State<TemplateTaskAdminUi> {
   final TextEditingController _filialController = TextEditingController();
   late Future<List<TemplateTaskModel>> templatesFuture;
   late Future<List<FilialModel>> categoriesFuture;
+  late Future<List<CategoryModel>> taskCategoriesFuture;
+
+  /// Sudrab o'zgartirilgan filiallar tartibi (server javobini kutmasdan)
+  List<FilialModel>? _localFilials;
+
+  /// Kartada tahrirlangan (serverga saqlangan) shablonlar — ro'yxatni
+  /// qayta yuklamasdan yangi qiymatlarni ko'rsatish uchun.
+  final Map<int, TemplateTaskModel> _edited = {};
   int selectedFilter = -1; // -1: hammasi, 1-3: type bo'yicha
 
   /// Filiallarni boshqarish va tartibni o'zgartirish — faqat super_admin.
@@ -40,6 +49,7 @@ class _TemplateTaskAdminUiState extends State<TemplateTaskAdminUi> {
     super.initState();
     templatesFuture = TemplateService().fetchTemplates();
     categoriesFuture = TemplateService().fetchFilials();
+    taskCategoriesFuture = TemplateService().fetchCategoriesList();
   }
 
   @override
@@ -87,7 +97,8 @@ class _TemplateTaskAdminUiState extends State<TemplateTaskAdminUi> {
     return FutureBuilder<List<FilialModel>>(
       future: categoriesFuture,
       builder: (context, categorySnapshot) {
-        final categories = categorySnapshot.data ?? widget.category ?? [];
+        final categories =
+            _localFilials ?? categorySnapshot.data ?? widget.category ?? [];
 
         return DefaultTabController(
           length: categories.length + (_isSuperAdmin ? 1 : 0),
@@ -104,38 +115,28 @@ class _TemplateTaskAdminUiState extends State<TemplateTaskAdminUi> {
                     );
 
                     // Agar yangi task qo'shilsa, refresh qilish
-                    if (result == true) {
-                      setState(() {
-                        templatesFuture = TemplateService().fetchTemplates();
-                      });
-                    }
+                    if (result == true) _reloadTemplates();
                   },
                   icon: const Icon(Icons.add),
                 ),
               ],
-              bottom: TabBar(
-                padding: EdgeInsets.zero,
-                isScrollable: true,
-                tabs: [
-                  ...List.generate(
-                    categories.length,
-                    (index) => GestureDetector(
-                      onLongPress: _isSuperAdmin
-                          ? () => _showEditFilialDialog(categories[index])
-                          : null,
-                      child: Tab(text: categories[index].name),
-                    ),
+              bottom: PreferredSize(
+                preferredSize: const Size.fromHeight(kTextTabBarHeight),
+                child: Builder(
+                  builder: (context) => ReorderableFilialTabs(
+                    controller: DefaultTabController.of(context),
+                    filials: categories,
+                    canReorder: _isSuperAdmin,
+                    onReorder: (order) => _saveFilialOrder(categories, order),
+                    onDoubleTap: _isSuperAdmin ? _showEditFilialDialog : null,
+                    trailing: _isSuperAdmin
+                        ? IconButton(
+                            onPressed: _showAddFilialDialog,
+                            icon: const Icon(Icons.add_circle_outline),
+                          )
+                        : null,
                   ),
-                  if (_isSuperAdmin)
-                    Tab(
-                      child: GestureDetector(
-                        onTap: () {
-                          _showAddFilialDialog();
-                        },
-                        child: const Icon(Icons.add_circle_outline),
-                      ),
-                    ),
-                ],
+                ),
               ),
             ),
             body: FutureBuilder<List<TemplateTaskModel>>(
@@ -273,6 +274,7 @@ class _TemplateTaskAdminUiState extends State<TemplateTaskAdminUi> {
                 if (result) {
                   // Yangi filiallarni yuklash
                   setState(() {
+                    _localFilials = null;
                     categoriesFuture = TemplateService().fetchFilials();
                   });
                 }
@@ -282,6 +284,22 @@ class _TemplateTaskAdminUiState extends State<TemplateTaskAdminUi> {
           ),
         ],
       ),
+    );
+  }
+
+  /// Tabni sudrab o'zgartirilgan filiallar tartibini serverga saqlaydi
+  Future<void> _saveFilialOrder(
+    List<FilialModel> previous,
+    List<FilialModel> order,
+  ) async {
+    setState(() => _localFilials = order);
+    final ok = await TemplateService().reorderFilials(
+      order.map((f) => f.filialId).toList(),
+    );
+    if (ok || !mounted) return;
+    setState(() => _localFilials = previous);
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Не удалось сохранить порядок')),
     );
   }
 
@@ -340,6 +358,7 @@ class _TemplateTaskAdminUiState extends State<TemplateTaskAdminUi> {
                 await TemplateService().deleteFilial(filial.filialId);
 
                 setState(() {
+                  _localFilials = null;
                   categoriesFuture = TemplateService().fetchFilials();
                 });
               }
@@ -364,6 +383,7 @@ class _TemplateTaskAdminUiState extends State<TemplateTaskAdminUi> {
               Navigator.pop(context);
               await TemplateService().updateFilial(filial.filialId, newName);
               setState(() {
+                _localFilials = null;
                 categoriesFuture = TemplateService().fetchFilials();
               });
             },
@@ -376,12 +396,15 @@ class _TemplateTaskAdminUiState extends State<TemplateTaskAdminUi> {
 
   Widget buildFilialTemplates(List<TemplateTaskModel> templates, int filialId) {
     // Filial bo'yicha filterlash
-    List<TemplateTaskModel> filtered = templates.where((template) {
-      // Agar filialIds bo'sh bo'lsa, barcha filiallarga tegishli
-      if (template.filialIds.isEmpty) return true;
-      // Agar filialIds ichida shu filial bo'lsa
-      return template.filialIds.contains(filialId);
-    }).toList();
+    List<TemplateTaskModel> filtered = templates
+        .map((t) => _edited[t.templateId] ?? t)
+        .where((template) {
+          // Agar filialIds bo'sh bo'lsa, barcha filiallarga tegishli
+          if (template.filialIds.isEmpty) return true;
+          // Agar filialIds ichida shu filial bo'lsa
+          return template.filialIds.contains(filialId);
+        })
+        .toList();
 
     // Type bo'yicha filterlash
     if (selectedFilter != -1) {
@@ -396,19 +419,23 @@ class _TemplateTaskAdminUiState extends State<TemplateTaskAdminUi> {
       onRefresh: () async {
         final newTemplates = TemplateService().fetchTemplates();
         setState(() {
+          _edited.clear();
           templatesFuture = newTemplates;
         });
         await newTemplates;
       },
       child: ReorderableListView.builder(
-        buildDefaultDragHandles: _isSuperAdmin,
+        // Tutqich belgisi yo'q — kartani bosib turib sudraladi
+        buildDefaultDragHandles: false,
         padding: const EdgeInsets.all(12),
         itemCount: filtered.length,
         itemBuilder: (context, index) {
           final template = filtered[index];
-          return Container(
+          return ReorderableDelayedDragStartListener(
             key: Key('template_${template.templateId}'),
-            child: _buildTemplateCard(template, index, filialId),
+            index: index,
+            enabled: _isSuperAdmin,
+            child: _buildTemplateCard(template, index + 1),
           );
         },
         onReorder: (oldIndex, newIndex) async {
@@ -433,10 +460,7 @@ class _TemplateTaskAdminUiState extends State<TemplateTaskAdminUi> {
 
           if (success) {
             print('✅ Reorder muvaffaqiyatli');
-            // Qayta yuklash
-            setState(() {
-              templatesFuture = TemplateService().fetchTemplates();
-            });
+            _reloadTemplates();
           } else {
             print('❌ Reorder muvaffaqiyatsiz');
             // Xatolik haqida xabar
@@ -454,124 +478,37 @@ class _TemplateTaskAdminUiState extends State<TemplateTaskAdminUi> {
     );
   }
 
-  Widget _buildTemplateCard(
-    TemplateTaskModel template,
-    int index,
-    int currentFilialId,
-  ) {
+  Widget _buildTemplateCard(TemplateTaskModel template, int number) {
     return FutureBuilder<List<FilialModel>>(
       future: categoriesFuture,
-      builder: (context, categorySnapshot) {
-        final categories = categorySnapshot.data ?? widget.category ?? [];
-
-        return Card(
-          margin: const EdgeInsets.only(bottom: 12),
-          elevation: 3,
-          color: getTypeColor(template.type),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12),
-          ),
-          child: InkWell(
-            borderRadius: BorderRadius.circular(12),
-            onTap: () async {
-              final result = await Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (_) => EditTaskUi(
-                    task: TaskModel(
-                      taskId: template.templateId,
-                      task: template.task,
-                      category: template.category,
-                      type: template.type,
-                      filialId: currentFilialId,
-                      days: template.days,
-                      notificationTime: template.notificationTime,
-                      multiVideo: template.multiVideo,
-                      videoCount: template.videoCount,
-                      status: 1,
-                    ),
-                  ),
-                ),
-              );
-
-              // Agar tahrirlash bo'lsa, refresh qilish
-              if (result == true) {
-                setState(() {
-                  templatesFuture = TemplateService().fetchTemplates();
-                });
-              }
-            },
-            child: Padding(
-              padding: const EdgeInsets.all(12),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 8,
-                          vertical: 4,
-                        ),
-                        decoration: BoxDecoration(
-                          color: Colors.white,
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        child: Text(
-                          '#${template.templateId} [${template.orderIndex}]',
-                          style: const TextStyle(
-                            fontSize: 12,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Text(
-                          template.task,
-                          style: const TextStyle(
-                            fontSize: 18,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 8),
-                  _buildInfoRow(Icons.category, getTypeName(template.type)),
-                  const SizedBox(height: 4),
-                  _buildInfoRow(
-                    Icons.store,
-                    getFilialNames(template.filialIds, categories),
-                  ),
-                  if (template.days != null && template.days!.isNotEmpty) ...[
-                    const SizedBox(height: 4),
-                    _buildInfoRow(
-                      Icons.calendar_today,
-                      formatDays(template.type, template.days),
-                    ),
-                  ],
-                ],
-              ),
-            ),
-          ),
+      builder: (context, filialSnapshot) {
+        final filials = filialSnapshot.data ?? widget.category ?? [];
+        return FutureBuilder<List<CategoryModel>>(
+          future: taskCategoriesFuture,
+          builder: (context, categorySnapshot) {
+            return TemplateTaskCard(
+              template: template,
+              filialNames: getFilialNames(template.filialIds, filials),
+              categories: categorySnapshot.data ?? const [],
+              onSaved: (updated) =>
+                  setState(() => _edited[updated.templateId] = updated),
+              onDeleted: _reloadTemplates,
+              typeColor: getTypeColor,
+              number: number,
+              onCategoriesChanged: () => setState(() {
+                taskCategoriesFuture = TemplateService().fetchCategoriesList();
+              }),
+            );
+          },
         );
       },
     );
   }
 
-  Widget _buildInfoRow(IconData icon, String text) {
-    return Row(
-      children: [
-        Icon(icon, size: 16, color: Colors.black54),
-        const SizedBox(width: 6),
-        Expanded(
-          child: Text(
-            text,
-            style: const TextStyle(fontSize: 14, color: Colors.black87),
-          ),
-        ),
-      ],
-    );
+  void _reloadTemplates() {
+    setState(() {
+      _edited.clear();
+      templatesFuture = TemplateService().fetchTemplates();
+    });
   }
 }

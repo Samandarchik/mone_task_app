@@ -128,6 +128,19 @@ class TemplateService {
     }
   }
 
+  /// Filiallarning yangi tartibi — barcha ekranlarda shu tartibda chiqadi
+  Future<bool> reorderFilials(List<int> filialIds) async {
+    try {
+      final response = await _dio.put(
+        "${AppUrls.filial}/reorder",
+        data: {"filialIds": filialIds},
+      );
+      return response.statusCode == 200;
+    } catch (e) {
+      return false;
+    }
+  }
+
   Future<bool> updateFilial(int filial, String name) async {
     try {
       final response = await _dio.put(

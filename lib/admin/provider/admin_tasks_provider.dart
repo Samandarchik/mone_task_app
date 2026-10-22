@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 import 'package:mone_task_app/admin/model/filial_model.dart';
+import 'package:mone_task_app/admin/service/task_worker_service.dart';
 import 'package:mone_task_app/checker/model/checker_check_task_model.dart';
 import 'package:mone_task_app/checker/service/task_worker_service.dart';
 import 'package:mone_task_app/core/network/ws_service.dart';
@@ -88,6 +89,24 @@ class AdminTasksProvider extends ChangeNotifier {
       _filialsState = LoadingState.error;
     }
     notifyListeners();
+  }
+
+  // ── Reorder filials ──────────────────────────────────────────────────────
+  /// Tab sudralganda darhol yangi tartibni ko'rsatadi va serverga saqlaydi.
+  /// Saqlanmasa — eski tartib qaytariladi.
+  Future<bool> reorderFilials(List<FilialModel> order) async {
+    final previous = _filials;
+    _filials = order;
+    notifyListeners();
+
+    final ok = await TemplateService().reorderFilials(
+      order.map((f) => f.filialId).toList(),
+    );
+    if (!ok) {
+      _filials = previous;
+      notifyListeners();
+    }
+    return ok;
   }
 
   // ── Fetch tasks ──────────────────────────────────────────────────────────

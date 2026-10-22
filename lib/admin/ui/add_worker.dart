@@ -1,4 +1,3 @@
-import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:mone_task_app/admin/model/category_model.dart';
@@ -6,6 +5,7 @@ import 'package:mone_task_app/admin/model/filial_model.dart';
 import 'package:mone_task_app/admin/service/task_worker_service.dart';
 import 'package:mone_task_app/admin/service/user_service.dart';
 import 'package:mone_task_app/checker/service/task_worker_service.dart';
+import 'package:mone_task_app/shared/widgets/switch_chip.dart';
 
 class AddWorkerPage extends StatefulWidget {
   const AddWorkerPage({super.key});
@@ -253,10 +253,15 @@ class _AddWorkerPageState extends State<AddWorkerPage> {
     return TextFormField(
       controller: _passwordController,
       obscureText: _obscurePassword,
+      style: const TextStyle(
+        fontSize: 18,
+        fontWeight: FontWeight.w600,
+        letterSpacing: 1,
+      ),
       decoration: InputDecoration(
         labelText: 'Пароль *',
         border: const OutlineInputBorder(),
-        prefixIcon: const Icon(Icons.lock),
+        prefixIcon: const Icon(Icons.key_rounded, color: Color(0xFF2563EB)),
         suffixIcon: IconButton(
           icon: Icon(
             _obscurePassword ? Icons.visibility_off : Icons.visibility,
@@ -308,20 +313,21 @@ class _AddWorkerPageState extends State<AddWorkerPage> {
             ),
           )
         else
-          ..._filials!.map(
-            (filial) => _buildSwitchRow(
-              title: filial.name,
-              value: _selectedFilialIds.contains(filial.filialId),
-              onChanged: (value) {
-                setState(() {
-                  if (value) {
-                    _selectedFilialIds.add(filial.filialId);
-                  } else {
-                    _selectedFilialIds.remove(filial.filialId);
-                  }
-                });
-              },
-            ),
+          SwitchChipGrid(
+            children: [
+              for (final filial in _filials!)
+                SwitchChip(
+                  label: filial.name,
+                  value: _selectedFilialIds.contains(filial.filialId),
+                  onChanged: (value) => setState(() {
+                    if (value) {
+                      _selectedFilialIds.add(filial.filialId);
+                    } else {
+                      _selectedFilialIds.remove(filial.filialId);
+                    }
+                  }),
+                ),
+            ],
           ),
         const SizedBox(height: 16),
       ],
@@ -364,43 +370,23 @@ class _AddWorkerPageState extends State<AddWorkerPage> {
             ),
           )
         else
-          ..._categories!.map(
-            (category) => _buildSwitchRow(
-              title: category.name,
-              value: _selectedCategories.contains(category.name),
-              onChanged: (value) {
-                setState(() {
-                  if (value) {
-                    _selectedCategories.add(category.name);
-                  } else {
-                    _selectedCategories.remove(category.name);
-                  }
-                });
-              },
-            ),
+          SwitchChipGrid(
+            children: [
+              for (final category in _categories!)
+                SwitchChip(
+                  label: category.name,
+                  value: _selectedCategories.contains(category.name),
+                  onChanged: (value) => setState(() {
+                    if (value) {
+                      _selectedCategories.add(category.name);
+                    } else {
+                      _selectedCategories.remove(category.name);
+                    }
+                  }),
+                ),
+            ],
           ),
         const SizedBox(height: 16),
-      ],
-    );
-  }
-
-  Widget _buildSwitchRow({
-    required String title,
-    required bool value,
-    required ValueChanged<bool> onChanged,
-  }) {
-    return Row(
-      children: [
-        Expanded(
-          child: GestureDetector(
-            onTap: () => onChanged(!value),
-            child: Padding(
-              padding: const EdgeInsets.symmetric(vertical: 12),
-              child: Text(title, style: const TextStyle(fontSize: 16)),
-            ),
-          ),
-        ),
-        CupertinoSwitch(value: value, onChanged: onChanged),
       ],
     );
   }

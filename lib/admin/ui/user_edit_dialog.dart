@@ -8,6 +8,7 @@ import 'package:mone_task_app/admin/service/task_worker_service.dart';
 import 'package:mone_task_app/admin/service/user_service.dart';
 import 'package:mone_task_app/core/data/local/token_storage.dart';
 import 'package:mone_task_app/core/di/di.dart';
+import 'package:mone_task_app/shared/widgets/switch_chip.dart';
 import 'package:mone_task_app/worker/model/user_model.dart';
 
 /// Foydalanuvchini bitta tap bilan tahrirlash dialogi:
@@ -214,25 +215,8 @@ class _UserEditDialogState extends State<UserEditDialog> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Row(
-                children: [
-                  const Icon(Icons.edit, color: Color(0xFF3699ff)),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: Text(
-                      widget.user.fullName.isNotEmpty
-                          ? widget.user.fullName.toUpperCase()
-                          : widget.user.username.toUpperCase(),
-                      style: const TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.w700,
-                      ),
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 16),
+              _buildHeader(),
+              const SizedBox(height: 20),
               Flexible(
                 child: SingleChildScrollView(
                   child: Column(
@@ -254,23 +238,13 @@ class _UserEditDialogState extends State<UserEditDialog> {
                         ],
                       ),
                       const SizedBox(height: 12),
-                      _field(
-                        controller: _passwordController,
-                        label: 'Пароль',
-                        icon: Icons.vpn_key_outlined,
-                      ),
-                      const SizedBox(height: 16),
+                      _buildPasswordField(),
+                      const SizedBox(height: 20),
                       // O'zining rolini o'zgartira olmaydi (super admin
                       // huquqini yo'qotib qo'ymaslik uchun).
                       if (!_isMe) ...[
-                        const Text(
-                          'Роль',
-                          style: TextStyle(
-                            fontSize: 13,
-                            color: Color(0xFF6B7280),
-                          ),
-                        ),
-                        const SizedBox(height: 8),
+                        _sectionTitle('Роль'),
+                        const SizedBox(height: 10),
                         SingleChildScrollView(
                           scrollDirection: Axis.horizontal,
                           child: SegmentedButton<String>(
@@ -291,15 +265,9 @@ class _UserEditDialogState extends State<UserEditDialog> {
                         ),
                       ],
                       if (_selectedRole == 'worker') ...[
-                        const SizedBox(height: 16),
-                        const Text(
-                          'Филиалы',
-                          style: TextStyle(
-                            fontSize: 13,
-                            color: Color(0xFF6B7280),
-                          ),
-                        ),
-                        const SizedBox(height: 8),
+                        const SizedBox(height: 20),
+                        _sectionTitle('Филиалы'),
+                        const SizedBox(height: 10),
                         Wrap(
                           spacing: 8,
                           runSpacing: 8,
@@ -320,26 +288,18 @@ class _UserEditDialogState extends State<UserEditDialog> {
                             );
                           }).toList(),
                         ),
-                        const SizedBox(height: 16),
-                        const Text(
-                          'Категории',
-                          style: TextStyle(
-                            fontSize: 13,
-                            color: Color(0xFF6B7280),
-                          ),
-                        ),
-                        const SizedBox(height: 8),
-                        Wrap(
-                          spacing: 8,
-                          runSpacing: 8,
+                        const SizedBox(height: 20),
+                        _sectionTitle('Категории'),
+                        const SizedBox(height: 10),
+                        SwitchChipGrid(
                           children: _categories.map((c) {
                             final selected = _selectedCategories.contains(
                               c.name,
                             );
-                            return FilterChip(
-                              label: Text(c.name),
-                              selected: selected,
-                              onSelected: (v) => setState(() {
+                            return SwitchChip(
+                              label: c.name,
+                              value: selected,
+                              onChanged: (v) => setState(() {
                                 if (v) {
                                   _selectedCategories.add(c.name);
                                 } else {
@@ -416,6 +376,146 @@ class _UserEditDialogState extends State<UserEditDialog> {
             ],
           ),
         ),
+      ),
+    );
+  }
+
+  static const _roleLabels = {
+    'super_admin': 'Супер админ',
+    'checker': 'Корректор',
+    'worker': 'Ревизор',
+  };
+
+  Widget _buildHeader() {
+    final name = widget.user.fullName.isNotEmpty
+        ? widget.user.fullName
+        : widget.user.username;
+    final photo = widget.user.photoUrl ?? '';
+    return Row(
+      children: [
+        CircleAvatar(
+          radius: 26,
+          backgroundColor: const Color(0xFFE0E7FF),
+          backgroundImage: photo.isNotEmpty ? NetworkImage(photo) : null,
+          child: photo.isEmpty
+              ? Text(
+                  name.trim().isNotEmpty ? name.trim()[0].toUpperCase() : '?',
+                  style: const TextStyle(
+                    fontSize: 22,
+                    fontWeight: FontWeight.w700,
+                    color: Color(0xFF3730A3),
+                  ),
+                )
+              : null,
+        ),
+        const SizedBox(width: 14),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                name,
+                style: const TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.w700,
+                  color: Color(0xFF111827),
+                ),
+                overflow: TextOverflow.ellipsis,
+              ),
+              const SizedBox(height: 2),
+              Text(
+                _roleLabels[widget.user.role] ?? widget.user.role,
+                style: const TextStyle(fontSize: 13, color: Color(0xFF6B7280)),
+              ),
+            ],
+          ),
+        ),
+        IconButton(
+          onPressed: _saving ? null : () => Navigator.pop(context, false),
+          icon: const Icon(Icons.close_rounded, color: Color(0xFF9CA3AF)),
+        ),
+      ],
+    );
+  }
+
+  Widget _sectionTitle(String text) {
+    return Text(
+      text,
+      style: const TextStyle(
+        fontSize: 14,
+        fontWeight: FontWeight.w700,
+        color: Color(0xFF374151),
+      ),
+    );
+  }
+
+  /// Parol — katta va aniq ko'rinadi, nusxa olish tugmasi bilan
+  Widget _buildPasswordField() {
+    return Container(
+      padding: const EdgeInsets.fromLTRB(10, 8, 4, 8),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF3F4F6),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 36,
+            height: 36,
+            decoration: BoxDecoration(
+              color: const Color(0xFFE0E7FF),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: const Icon(
+              Icons.key_rounded,
+              size: 20,
+              color: Color(0xFF2563EB),
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Пароль',
+                  style: TextStyle(fontSize: 12, color: Color(0xFF6B7280)),
+                ),
+                TextField(
+                  controller: _passwordController,
+                  style: const TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.w600,
+                    letterSpacing: 1,
+                    color: Color(0xFF111827),
+                  ),
+                  decoration: const InputDecoration(
+                    isDense: true,
+                    filled: false,
+                    contentPadding: EdgeInsets.only(top: 2),
+                    border: InputBorder.none,
+                    enabledBorder: InputBorder.none,
+                    focusedBorder: InputBorder.none,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          IconButton(
+            tooltip: 'Копировать',
+            icon: const Icon(
+              Icons.copy_rounded,
+              size: 20,
+              color: Color(0xFF6B7280),
+            ),
+            onPressed: () {
+              Clipboard.setData(ClipboardData(text: _passwordController.text));
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('Пароль скопирован')),
+              );
+            },
+          ),
+        ],
       ),
     );
   }

@@ -35,10 +35,12 @@ class TaskTypeSelector extends StatelessWidget {
           isExpanded: true,
           decoration: const InputDecoration(border: OutlineInputBorder()),
           items: taskTypes
-              .map((e) => DropdownMenuItem<int>(
-                    value: e['id'] as int,
-                    child: Text(e['name'] as String),
-                  ))
+              .map(
+                (e) => DropdownMenuItem<int>(
+                  value: e['id'] as int,
+                  child: Text(e['name'] as String),
+                ),
+              )
               .toList(),
           onChanged: (value) {
             if (value != null) onTypeChanged(value);
@@ -70,7 +72,10 @@ class TaskTypeSelector extends StatelessWidget {
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Text(day['name'] as String, style: const TextStyle(fontSize: 16)),
+                  Text(
+                    day['name'] as String,
+                    style: const TextStyle(fontSize: 16),
+                  ),
                   CupertinoSwitch(
                     value: isSelected,
                     onChanged: (value) {

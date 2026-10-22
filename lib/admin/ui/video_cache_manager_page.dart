@@ -49,12 +49,14 @@ class _VideoCacheManagerPageState extends State<VideoCacheManagerPage> {
           final sizeInMB = stat.size / (1024 * 1024);
           totalBytes += stat.size;
 
-          videoFiles.add(VideoFileInfo(
-            name: file.path.split('/').last,
-            path: file.path,
-            size: sizeInMB,
-            date: stat.modified,
-          ));
+          videoFiles.add(
+            VideoFileInfo(
+              name: file.path.split('/').last,
+              path: file.path,
+              size: sizeInMB,
+              date: stat.modified,
+            ),
+          );
         }
       }
 
@@ -122,10 +124,7 @@ class _VideoCacheManagerPageState extends State<VideoCacheManagerPage> {
       print('Cache tozalashda xatolik: $e');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Ошибка: $e'),
-            backgroundColor: Colors.red,
-          ),
+          SnackBar(content: Text('Ошибка: $e'), backgroundColor: Colors.red),
         );
       }
       setState(() => _isLoading = false);
@@ -174,10 +173,7 @@ class _VideoCacheManagerPageState extends State<VideoCacheManagerPage> {
       print('Video o\'chirishda xatolik: $e');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Ошибка: $e'),
-            backgroundColor: Colors.red,
-          ),
+          SnackBar(content: Text('Ошибка: $e'), backgroundColor: Colors.red),
         );
       }
     }
@@ -227,10 +223,7 @@ class _VideoCacheManagerPageState extends State<VideoCacheManagerPage> {
                   padding: const EdgeInsets.all(20),
                   decoration: BoxDecoration(
                     gradient: LinearGradient(
-                      colors: [
-                        Colors.blue.shade400,
-                        Colors.blue.shade600,
-                      ],
+                      colors: [Colors.blue.shade400, Colors.blue.shade600],
                     ),
                     borderRadius: BorderRadius.circular(16),
                     boxShadow: [
@@ -429,18 +422,11 @@ class _StatCard extends StatelessWidget {
   Widget build(BuildContext context) {
     return Column(
       children: [
-        Icon(
-          icon,
-          color: Colors.white,
-          size: 32,
-        ),
+        Icon(icon, color: Colors.white, size: 32),
         const SizedBox(height: 8),
         Text(
           label,
-          style: const TextStyle(
-            color: Colors.white70,
-            fontSize: 13,
-          ),
+          style: const TextStyle(color: Colors.white70, fontSize: 13),
         ),
         const SizedBox(height: 4),
         Text(

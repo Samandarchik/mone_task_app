@@ -88,8 +88,9 @@ class _EditUserPageState extends State<EditUserPage> {
     });
 
     try {
-      final normalized =
-          phone.startsWith('+') || phone.startsWith('998') ? phone : '998$phone';
+      final normalized = phone.startsWith('+') || phone.startsWith('998')
+          ? phone
+          : '998$phone';
       final url = '$_rezumeBaseUrl/api/public/rezume-by-phone/$normalized';
       final resp = await Dio(
         BaseOptions(
@@ -106,9 +107,9 @@ class _EditUserPageState extends State<EditUserPage> {
         return;
       }
 
-      final data = (resp.data is String
-          ? jsonDecode(resp.data as String)
-          : resp.data) as Map<String, dynamic>;
+      final data =
+          (resp.data is String ? jsonDecode(resp.data as String) : resp.data)
+              as Map<String, dynamic>;
       data.remove('interviews');
 
       // Avtomatik to'ldirish (ism bo'sh bo'lsa)
@@ -154,7 +155,9 @@ class _EditUserPageState extends State<EditUserPage> {
     final phone = _phoneController.text.trim();
     // Kod o'zgartirilgan bo'lsagina yuboramiz
     final changedPassword =
-        password.isNotEmpty && password != widget.user.password ? password : null;
+        password.isNotEmpty && password != widget.user.password
+        ? password
+        : null;
     final success = await _userService.updateUser(
       userId: widget.user.userId,
       username: _usernameController.text.trim(),
@@ -169,16 +172,18 @@ class _EditUserPageState extends State<EditUserPage> {
 
     if (success && mounted) {
       Navigator.pop(context, true);
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Сохранено')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Сохранено')));
     } else if (mounted) {
       _showError('Произошла ошибка');
     }
   }
 
   void _showError(String message) {
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(message)));
   }
 
   @override
@@ -230,8 +235,10 @@ class _EditUserPageState extends State<EditUserPage> {
                       color: Colors.red.shade50,
                       borderRadius: BorderRadius.circular(8),
                     ),
-                    child: Text(_rezumeError!,
-                        style: TextStyle(color: Colors.red.shade900)),
+                    child: Text(
+                      _rezumeError!,
+                      style: TextStyle(color: Colors.red.shade900),
+                    ),
                   ),
                   const SizedBox(height: 16),
                 ],
@@ -257,19 +264,21 @@ class _EditUserPageState extends State<EditUserPage> {
                 if (_selectedRole == 'worker') ...[
                   _buildSectionTitle('Филиал'),
                   const SizedBox(height: 8),
-                  ...filials.map((filial) => _buildSwitchRow(
-                        title: filial.name,
-                        value: _selectedFilialIds.contains(filial.filialId),
-                        onChanged: (value) {
-                          setState(() {
-                            if (value) {
-                              _selectedFilialIds.add(filial.filialId);
-                            } else {
-                              _selectedFilialIds.remove(filial.filialId);
-                            }
-                          });
-                        },
-                      )),
+                  ...filials.map(
+                    (filial) => _buildSwitchRow(
+                      title: filial.name,
+                      value: _selectedFilialIds.contains(filial.filialId),
+                      onChanged: (value) {
+                        setState(() {
+                          if (value) {
+                            _selectedFilialIds.add(filial.filialId);
+                          } else {
+                            _selectedFilialIds.remove(filial.filialId);
+                          }
+                        });
+                      },
+                    ),
+                  ),
                   const SizedBox(height: 16),
                 ],
 
@@ -293,9 +302,7 @@ class _EditUserPageState extends State<EditUserPage> {
     return TextField(
       controller: _phoneController,
       keyboardType: TextInputType.phone,
-      inputFormatters: [
-        FilteringTextInputFormatter.allow(RegExp(r'[0-9+]')),
-      ],
+      inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[0-9+]'))],
       decoration: InputDecoration(
         labelText: 'Телефон (обновить резюме)',
         hintText: '998901234567',
@@ -370,12 +377,16 @@ class _EditUserPageState extends State<EditUserPage> {
                     Text(
                       fio.isEmpty ? '(имя не найдено)' : fio,
                       style: const TextStyle(
-                          fontSize: 16, fontWeight: FontWeight.bold),
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                      ),
                     ),
                     if ((r['lavozim'] ?? '').toString().isNotEmpty) ...[
                       const SizedBox(height: 4),
-                      Text(r['lavozim'].toString(),
-                          style: const TextStyle(color: Colors.grey)),
+                      Text(
+                        r['lavozim'].toString(),
+                        style: const TextStyle(color: Colors.grey),
+                      ),
                     ],
                     const SizedBox(height: 4),
                     Text((r['telefon'] ?? '').toString()),
@@ -386,7 +397,10 @@ class _EditUserPageState extends State<EditUserPage> {
           ),
           const Divider(height: 24),
           _kv('Дата рождения', r['tugilgan_sana']),
-          _kv('Рост / Вес', '${r['boy_sm'] ?? '?'} см / ${r['vazn_kg'] ?? '?'} кг'),
+          _kv(
+            'Рост / Вес',
+            '${r['boy_sm'] ?? '?'} см / ${r['vazn_kg'] ?? '?'} кг',
+          ),
           _kv('Адрес', r['yashash_manzili']),
           _kv('Ориентир', r['moljal']),
           _kv('Общий стаж', r['umumiy_tajriba']),
@@ -395,10 +409,11 @@ class _EditUserPageState extends State<EditUserPage> {
           _kv('Семейное положение', r['oilaviy_holat']),
           if (r['tillar'] is List)
             _kv(
-                'Языки',
-                (r['tillar'] as List)
-                    .map((t) => '${(t as Map)['til']}: ${t['daraja']}')
-                    .join(', ')),
+              'Языки',
+              (r['tillar'] as List)
+                  .map((t) => '${(t as Map)['til']}: ${t['daraja']}')
+                  .join(', '),
+            ),
           if ((r['qoshimcha'] ?? '').toString().isNotEmpty)
             _kv('Дополнительно', r['qoshimcha']),
           if ((r['tg_username'] ?? '').toString().isNotEmpty)
@@ -418,8 +433,10 @@ class _EditUserPageState extends State<EditUserPage> {
         children: [
           SizedBox(
             width: 130,
-            child: Text(label,
-                style: TextStyle(fontSize: 13, color: Colors.grey.shade700)),
+            child: Text(
+              label,
+              style: TextStyle(fontSize: 13, color: Colors.grey.shade700),
+            ),
           ),
           Expanded(child: Text(v, style: const TextStyle(fontSize: 13))),
         ],
@@ -438,9 +455,9 @@ class _EditUserPageState extends State<EditUserPage> {
         prefixIcon: const Icon(Icons.key),
         suffixIcon: IconButton(
           icon: Icon(
-              _obscurePassword ? Icons.visibility_off : Icons.visibility),
-          onPressed: () =>
-              setState(() => _obscurePassword = !_obscurePassword),
+            _obscurePassword ? Icons.visibility_off : Icons.visibility,
+          ),
+          onPressed: () => setState(() => _obscurePassword = !_obscurePassword),
         ),
       ),
     );

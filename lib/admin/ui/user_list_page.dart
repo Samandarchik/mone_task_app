@@ -11,6 +11,7 @@ import 'package:mone_task_app/core/di/di.dart';
 import 'package:mone_task_app/home/model/login_model.dart';
 import 'package:mone_task_app/home/service/api_service.dart';
 import 'package:mone_task_app/home/ui/role_home.dart';
+import 'package:mone_task_app/shared/widgets/switch_chip.dart';
 import 'package:mone_task_app/worker/model/user_model.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -587,29 +588,8 @@ class _UsersPageState extends State<UsersPage> {
                     ),
                   ],
                   if (u.password.isNotEmpty) ...[
-                    const SizedBox(height: 4),
-                    Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        const Icon(
-                          Icons.key_rounded,
-                          size: 14,
-                          color: Color(0xFF9CA3AF),
-                        ),
-                        const SizedBox(width: 4),
-                        Flexible(
-                          child: Text(
-                            u.password,
-                            style: const TextStyle(
-                              fontSize: 13,
-                              fontWeight: FontWeight.w500,
-                              color: Color(0xFF6B7280),
-                            ),
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ),
-                      ],
-                    ),
+                    const SizedBox(height: 6),
+                    _passwordLine(u.password),
                   ],
                 ],
               ),
@@ -669,78 +649,28 @@ class _UsersPageState extends State<UsersPage> {
     final canMutate = sl<TokenStorage>().getUserData()?.role == 'super_admin';
     final ids = u.filialIds ?? const <int>[];
 
-    // «Задачи» — o'z filiallari uchun vazifa qo'shish/tahrirlash/o'chirish ruxsati.
-    final manageTasksSwitch = Row(
-      children: [
-        const Icon(Icons.edit_note_rounded, size: 18, color: Color(0xFF4F46E5)),
-        const SizedBox(width: 6),
-        const Expanded(
-          child: Text(
-            'Задачи (добавлять / изменять / удалять)',
-            style: TextStyle(
-              fontSize: 13,
-              fontWeight: FontWeight.w700,
-              color: Color(0xFF4F46E5),
-            ),
-            overflow: TextOverflow.ellipsis,
-          ),
-        ),
-        Transform.scale(
-          scale: 0.8,
-          child: CupertinoSwitch(
-            value: u.canManageTasks,
-            activeTrackColor: const Color(0xFF4F46E5),
-            onChanged: canMutate ? (v) => _toggleManageTasks(u, v) : null,
-          ),
-        ),
-      ],
-    );
-
-    Widget cell(int i) {
-      if (i >= _filials.length) return const SizedBox.shrink();
-      final f = _filials[i];
-      final on = ids.contains(f.filialId);
-      return Row(
-        children: [
-          Expanded(
-            child: Text(
-              f.name,
-              style: const TextStyle(
-                fontSize: 13,
-                fontWeight: FontWeight.w600,
-                color: Color(0xFF374151),
-              ),
-              overflow: TextOverflow.ellipsis,
-            ),
-          ),
-          Transform.scale(
-            scale: 0.8,
-            child: CupertinoSwitch(
-              value: on,
-              activeTrackColor: const Color(0xFF059669),
-              onChanged: canMutate
-                  ? (v) => _toggleFilial(u, f.filialId, v)
-                  : null,
-            ),
-          ),
-        ],
-      );
-    }
-
     return Column(
       mainAxisSize: MainAxisSize.min,
-      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        manageTasksSwitch,
-        const Divider(height: 8),
-        for (var i = 0; i < _filials.length; i += 2)
-          Row(
-            children: [
-              Expanded(child: cell(i)),
-              const SizedBox(width: 16),
-              Expanded(child: cell(i + 1)),
-            ],
-          ),
+        // «Задачи» — o'z filiallari uchun vazifa qo'shish/tahrirlash/o'chirish ruxsati.
+        SwitchChip(
+          label: 'Задачи (добавлять / изменять / удалять)',
+          value: u.canManageTasks,
+          onChanged: canMutate ? (v) => _toggleManageTasks(u, v) : null,
+        ),
+        const SizedBox(height: 10),
+        SwitchChipGrid(
+          children: [
+            for (final f in _filials)
+              SwitchChip(
+                label: f.name,
+                value: ids.contains(f.filialId),
+                onChanged: canMutate
+                    ? (v) => _toggleFilial(u, f.filialId, v)
+                    : null,
+              ),
+          ],
+        ),
       ],
     );
   }
@@ -1047,25 +977,35 @@ class _UsersPageState extends State<UsersPage> {
     );
   }
 
+  /// Parol — kattaroq, kulrang "pill" ichida
   Widget _passwordLine(String password) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 4),
-      child: Row(
-        children: [
-          const Icon(Icons.key_rounded, size: 14, color: Color(0xFF9CA3AF)),
-          const SizedBox(width: 8),
-          Flexible(
-            child: Text(
-              password,
-              style: const TextStyle(
-                fontSize: 13,
-                fontWeight: FontWeight.w500,
-                color: Color(0xFF6B7280),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+        decoration: BoxDecoration(
+          color: const Color(0xFFEFF4FF),
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(Icons.key_rounded, size: 16, color: Color(0xFF2563EB)),
+            const SizedBox(width: 8),
+            Flexible(
+              child: Text(
+                password,
+                style: const TextStyle(
+                  fontSize: 15,
+                  fontWeight: FontWeight.w600,
+                  letterSpacing: 0.5,
+                  color: Color(0xFF111827),
+                ),
+                overflow: TextOverflow.ellipsis,
               ),
-              overflow: TextOverflow.ellipsis,
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }

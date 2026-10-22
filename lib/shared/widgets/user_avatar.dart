@@ -17,7 +17,9 @@ class UserAvatar extends StatelessWidget {
     return CircleAvatar(
       radius: radius,
       backgroundColor: const Color(0xFF3699ff),
-      backgroundImage: (url != null && url.isNotEmpty) ? NetworkImage(url) : null,
+      backgroundImage: (url != null && url.isNotEmpty)
+          ? NetworkImage(url)
+          : null,
       child: (url == null || url.isEmpty)
           ? Text(
               letter,
