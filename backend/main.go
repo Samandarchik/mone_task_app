@@ -567,6 +567,12 @@ func initDB() {
 	ensureTodayDB()
 	migrateExistingDBs()
 
+	// Kategoriyalar: Утренний админ / Вечерний админ / Шеф повар
+	if db, err := getMainDB(); err == nil {
+		migrateCategories(db)
+		db.Close()
+	}
+
 	log.Println("Database initialized successfully")
 }
 
@@ -687,18 +693,6 @@ func createMainDB() {
 		}
 	}
 
-	// Create categories
-	db.QueryRow("SELECT COUNT(*) FROM categories").Scan(&count)
-	if count == 0 {
-		categories := []string{
-			"Bar",
-			"Magazin",
-			"Povar",
-		}
-		for _, name := range categories {
-			db.Exec("INSERT INTO categories (name) VALUES (?)", name)
-		}
-	}
 }
 
 func getDBPath(date time.Time) string {
@@ -3067,7 +3061,7 @@ func getCategories(w http.ResponseWriter, r *http.Request) {
 	db, _ := getMainDB()
 	defer db.Close()
 
-	rows, err := db.Query("SELECT id, name FROM categories ORDER BY name ASC")
+	rows, err := db.Query("SELECT id, name FROM categories ORDER BY sort_order = 0, sort_order, id")
 	if err != nil {
 		respondJSON(w, http.StatusInternalServerError, map[string]interface{}{
 			"success": false,
