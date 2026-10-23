@@ -45,7 +45,8 @@ android {
 
     buildTypes {
         release {
-            signingConfig = signingConfigs.release
+            // key.properties bo'lmasa — vaqtincha debug kalit bilan imzolanadi
+            signingConfig = keystorePropertiesFile.exists() ? signingConfigs.release : signingConfigs.debug
             // Shrinking va obfuscation (ixtiyoriy)
             minifyEnabled true
             shrinkResources true
