@@ -1,5 +1,6 @@
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
+import 'package:mone_task_app/checker/service/task_worker_service.dart';
 import 'package:mone_task_app/checker/ui/player2.dart';
 import 'package:mone_task_app/core/constants/urls.dart';
 import 'package:mone_task_app/core/context_extension.dart';
@@ -8,6 +9,7 @@ import 'package:mone_task_app/core/di/di.dart';
 import 'package:mone_task_app/deep_link_service.dart';
 import 'package:mone_task_app/home/service/login_service.dart';
 import 'package:mone_task_app/home/ui/role_home.dart';
+import 'package:mone_task_app/shared/models/task_model.dart';
 
 /// Deep link orqali kelganda ko'rinadigan sahifa.
 /// Login so'ramasdan to'g'ridan-to'g'ri video ko'rsatadi.
@@ -26,6 +28,7 @@ class _DeepLinkPageState extends State<DeepLinkPage> {
   String? _taskName;
   String? _videoUrl;
   String? _submittedBy;
+  TaskModel? _task;
 
   @override
   void initState() {
@@ -60,6 +63,7 @@ class _DeepLinkPageState extends State<DeepLinkPage> {
           _taskName = task['task'] ?? '';
           _videoUrl = task['videoUrl'];
           _submittedBy = task['submittedBy'];
+          _task = TaskModel.fromJson(task);
           _isLoading = false;
         });
       } else {
@@ -88,6 +92,21 @@ class _DeepLinkPageState extends State<DeepLinkPage> {
         _isLoading = false;
       });
     }
+  }
+
+  /// Checker videoning 50% ini ko'rsa — avtomatik status=3 (boshqa
+  /// ekranlardagi kabi). Barcha videolar yuklanmagan bo'lsa tasdiqlanmaydi.
+  Future<void> _onHalfWatched() async {
+    final task = _task;
+    if (task == null || task.status == 3 || !task.videosComplete) return;
+    if (sl<TokenStorage>().getUserData()?.role != 'checker') return;
+    final ok = await TaskViewService().updateTaskStatus(
+      widget.data.taskId,
+      3,
+      null,
+      widget.data.date,
+    );
+    if (ok) task.status = 3;
   }
 
   void _goToApp() {
@@ -189,6 +208,7 @@ class _DeepLinkPageState extends State<DeepLinkPage> {
                   ? Center(
                       child: CircleVideoPlayer2(
                         videoUrl: _fullVideoUrl(_videoUrl!),
+                        onHalfWatched: _onHalfWatched,
                       ),
                     )
                   : const Center(

@@ -29,6 +29,8 @@ abstract final class AppUrls {
   static const String forceLogout = '$baseUrl/api/auth/force-logout';
   static const String myEmployees = '$baseUrl/api/my/employees';
   static const String myDelegations = '$baseUrl/api/my/delegations';
+  static const String myDemands = '$baseUrl/api/my/demands';
+  static const String attendance = '$baseUrl/api/attendance';
   static const String reportsExcel = '/api/reports/excel';
 }
 

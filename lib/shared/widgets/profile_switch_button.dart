@@ -97,7 +97,7 @@ class ProfileSwitchButton extends StatelessWidget {
             child: const Icon(
               Icons.person_rounded,
               size: 22,
-              color: Color(0xFF2563EB),
+              color: Colors.black,
             ),
           ),
         ),

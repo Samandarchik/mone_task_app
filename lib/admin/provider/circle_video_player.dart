@@ -14,6 +14,7 @@ import 'package:provider/provider.dart';
 import 'package:record/record.dart';
 import 'package:media_kit_video/media_kit_video.dart' as mkv;
 import 'package:mone_task_app/core/utils/share_helper.dart';
+import 'package:mone_task_app/shared/widgets/status_permission.dart';
 import 'package:video_player/video_player.dart';
 
 class CircleVideoPlayer extends StatelessWidget {
@@ -86,7 +87,6 @@ class _CircleVideoPlayerBodyState extends State<_CircleVideoPlayerBody>
 
   // ── Status button Listener ────────────────────────────────────────────────
   int? _pressedLevel;
-  int? _lastPressedLevel; // audio yuborilgandan keyin status uchun
   bool _pressedInside = true;
 
   final Map<int, GlobalKey> _statusKeys = {
@@ -304,16 +304,8 @@ class _CircleVideoPlayerBodyState extends State<_CircleVideoPlayerBody>
         widget.selectedDate,
       );
 
-      if (success && mounted) {
-        // ✅ Faqat audio muvaffaqiyatli yuborilgandan KEYIN status yangilanadi
-        if (_lastPressedLevel != null) {
-          await provider.updateTaskStatus(
-            task.taskId,
-            _lastPressedLevel!,
-            task.date,
-          );
-        }
-      }
+      // Status serverda rolga qarab o'rnatiladi: Ревизор → sariq «Р»,
+      // Admin → qizil «А» (WS orqali ro'yxat yangilanadi).
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -348,7 +340,6 @@ class _CircleVideoPlayerBodyState extends State<_CircleVideoPlayerBody>
     if (mounted) {
       setState(() {
         _isRecording = false;
-        _lastPressedLevel = null;
       });
     }
   }
@@ -402,13 +393,15 @@ class _CircleVideoPlayerBodyState extends State<_CircleVideoPlayerBody>
     // Status 3 qo'lda o'zgartirib bo'lmaydi — faqat 50% video ko'rish orqali
     if (tappedLevel == 3) return;
 
+    // Sariq «Р» — faqat Ревизор, qizil «А» — faqat Админ
+    if (!checkStatusPermission(context, tappedLevel)) return;
+
     setState(() {
       _pressedLevel = tappedLevel;
-      _lastPressedLevel = tappedLevel;
       _pressedInside = true;
     });
 
-    // Status 1 va 2 — avval audio yoziladi, status KEYIN o'zgaradi
+    // Status 1 va 2 tugmasi — ovoz yoziladi, status rolga qarab serverda o'rnatiladi
     if (!_isRecording && !_isSending) {
       await _startRecording(provider);
     }
@@ -935,15 +928,20 @@ class _CircleVideoPlayerBodyState extends State<_CircleVideoPlayerBody>
               ]
             : [],
       ),
-      child: isActive
+      alignment: Alignment.center,
+      child: statusLetter(level) != null
+          ? Text(
+              statusLetter(level)!,
+              style: TextStyle(
+                fontSize: _statusIconSize,
+                fontWeight: FontWeight.w800,
+                height: 1,
+                color: Colors.white,
+              ),
+            )
+          : isActive
           ? Icon(Icons.check, size: _statusIconSize, color: Colors.white)
-          : (level != 3
-                ? Icon(
-                    Icons.mic_rounded,
-                    size: _statusIconSize - 2,
-                    color: Colors.white, // ← mic ham rangli
-                  )
-                : null),
+          : null,
     );
   }
   // ── Video circle ──────────────────────────────────────────────────────────

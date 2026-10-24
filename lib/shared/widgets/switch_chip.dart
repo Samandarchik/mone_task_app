@@ -13,13 +13,27 @@ class SwitchChip extends StatelessWidget {
   /// Kalitcha oldida ko'rsatiladigan son (masalan, nechta odamda yoqilgan)
   final int? count;
 
+  /// Nomdan oldin turadigan element (masalan, sudrash dastagi).
+  final Widget? leading;
+
   const SwitchChip({
     super.key,
     required this.label,
     required this.value,
     this.onChanged,
     this.count,
+    this.leading,
   });
+
+  /// Shu tugmaning nusxasi, faqat [leading] almashtirilgan.
+  SwitchChip withLeading(Widget leading) => SwitchChip(
+    key: key,
+    label: label,
+    value: value,
+    onChanged: onChanged,
+    count: count,
+    leading: leading,
+  );
 
   @override
   Widget build(BuildContext context) {
@@ -31,7 +45,7 @@ class SwitchChip extends StatelessWidget {
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 180),
           height: 52,
-          padding: const EdgeInsets.only(left: 14, right: 6),
+          padding: EdgeInsets.only(left: leading == null ? 14 : 4, right: 6),
           decoration: BoxDecoration(
             color: value ? const Color(0xFFF0FBF3) : Colors.white,
             borderRadius: BorderRadius.circular(12),
@@ -41,6 +55,7 @@ class SwitchChip extends StatelessWidget {
           ),
           child: Row(
             children: [
+              if (leading != null) ...[leading!, const SizedBox(width: 4)],
               Expanded(
                 child: Text(
                   label,
@@ -114,8 +129,9 @@ class _CountPill extends StatelessWidget {
 /// [SwitchChip]larni ikki teng ustunda joylaydi — ikkala tomon bir xil
 /// kenglikda va bir xil oraliqda turadi.
 ///
-/// [onReorder] berilsa, tugmani bosib turib boshqa tugma ustiga sudrab
-/// joyini almashtirish mumkin: `onReorder(eski, yangi)`.
+/// [onReorder] berilsa, har tugmada sudrash dastagi (⠿) chiqadi — uni
+/// ushlab boshqa tugma ustiga sudrab joyini almashtirish mumkin. Tugmaning
+/// o'zini bosib turib sudrash ham ishlaydi: `onReorder(eski, yangi)`.
 class SwitchChipGrid extends StatelessWidget {
   final List<Widget> children;
   final double spacing;
@@ -157,20 +173,27 @@ class SwitchChipGrid extends StatelessWidget {
   }
 
   Widget _cell(int index, double width) {
-    final child = children[index];
+    var child = children[index];
     if (onReorder == null) return child;
+
+    final feedback = Material(
+      color: Colors.transparent,
+      elevation: 6,
+      borderRadius: BorderRadius.circular(12),
+      child: SizedBox(width: width, child: child),
+    );
+    if (child is SwitchChip) {
+      child = child.withLeading(
+        _DragHandle(index: index, feedback: feedback),
+      );
+    }
 
     return DragTarget<int>(
       onWillAcceptWithDetails: (details) => details.data != index,
       onAcceptWithDetails: (details) => onReorder!(details.data, index),
       builder: (context, candidates, _) => LongPressDraggable<int>(
         data: index,
-        feedback: Material(
-          color: Colors.transparent,
-          elevation: 6,
-          borderRadius: BorderRadius.circular(12),
-          child: SizedBox(width: width, child: child),
-        ),
+        feedback: feedback,
         childWhenDragging: Opacity(opacity: 0.3, child: child),
         child: candidates.isEmpty
             ? child
@@ -182,6 +205,42 @@ class SwitchChipGrid extends StatelessWidget {
                 ),
                 child: child,
               ),
+      ),
+    );
+  }
+}
+
+/// Sudrash dastagi: bosilishi bilanoq sudraladi (sichqoncha uchun qulay),
+/// oddiy bosish kalitchani o'zgartirmaydi.
+class _DragHandle extends StatelessWidget {
+  final int index;
+  final Widget feedback;
+
+  const _DragHandle({required this.index, required this.feedback});
+
+  @override
+  Widget build(BuildContext context) {
+    return Tooltip(
+      message: 'Перетащите, чтобы изменить порядок',
+      waitDuration: const Duration(milliseconds: 600),
+      child: MouseRegion(
+        cursor: SystemMouseCursors.grab,
+        child: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: () {}, // bosish tugmaning o'ziga o'tib ketmasin
+          child: Draggable<int>(
+            data: index,
+            feedback: feedback,
+            child: const Padding(
+              padding: EdgeInsets.symmetric(horizontal: 4, vertical: 10),
+              child: Icon(
+                Icons.drag_indicator_rounded,
+                size: 22,
+                color: Color(0xFF9CA3AF),
+              ),
+            ),
+          ),
+        ),
       ),
     );
   }

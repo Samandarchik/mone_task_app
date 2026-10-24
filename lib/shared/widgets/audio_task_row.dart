@@ -9,6 +9,10 @@ import 'package:mone_task_app/core/constants/urls.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:record/record.dart';
 
+// Ovoz yozish rangi (filtrdagi mic tugmasi bilan bir xil)
+const Color _voiceColor = Color(0xFF9575CD);
+const Color _voiceDark = Color(0xFF7E57C2);
+
 class AudioTaskRow extends StatefulWidget {
   final int taskId;
   final List<String> audioUrls;
@@ -497,17 +501,17 @@ class _AudioTaskRowState extends State<AudioTaskRow>
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
         decoration: BoxDecoration(
-          color: Colors.black.withOpacity(0.07),
+          color: _voiceColor.withValues(alpha: 0.18),
           borderRadius: BorderRadius.circular(20),
         ),
         child: const Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(Icons.mic_none_rounded, size: 18),
+            Icon(Icons.mic_none_rounded, size: 18, color: _voiceDark),
             SizedBox(width: 6),
             Text(
               'Зажмите для записи голоса',
-              style: TextStyle(fontSize: 12, color: Colors.black87),
+              style: TextStyle(fontSize: 12, color: _voiceDark),
             ),
           ],
         ),
@@ -526,12 +530,12 @@ class _AudioTaskRowState extends State<AudioTaskRow>
         decoration: BoxDecoration(
           color: _swipedUp
               ? Colors.orange.withOpacity(0.12)
-              : Colors.red.withOpacity(0.07),
+              : _voiceColor.withValues(alpha: 0.1),
           borderRadius: BorderRadius.circular(20),
           border: Border.all(
             color: _swipedUp
                 ? Colors.orange.withOpacity(0.6)
-                : Colors.red.withOpacity(0.25),
+                : _voiceColor.withValues(alpha: 0.4),
           ),
         ),
         child: Row(
@@ -545,7 +549,7 @@ class _AudioTaskRowState extends State<AudioTaskRow>
                 height: 9,
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
-                  color: (_swipedUp ? Colors.orange : Colors.red).withOpacity(
+                  color: (_swipedUp ? Colors.orange : _voiceColor).withOpacity(
                     0.35 + 0.65 * _pulseCtrl.value,
                   ),
                 ),
@@ -557,7 +561,7 @@ class _AudioTaskRowState extends State<AudioTaskRow>
               style: TextStyle(
                 fontSize: 14,
                 fontWeight: FontWeight.w600,
-                color: _swipedUp ? Colors.orange : Colors.red,
+                color: _swipedUp ? Colors.orange : _voiceDark,
               ),
             ),
             const SizedBox(width: 8),
@@ -619,9 +623,9 @@ class _AudioTaskRowState extends State<AudioTaskRow>
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
       decoration: BoxDecoration(
-        color: Colors.orange.withOpacity(0.08),
+        color: _voiceColor.withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(22),
-        border: Border.all(color: Colors.orange.withOpacity(0.4)),
+        border: Border.all(color: _voiceColor.withValues(alpha: 0.4)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -633,7 +637,7 @@ class _AudioTaskRowState extends State<AudioTaskRow>
               'Прослушайте перед отправкой',
               style: TextStyle(
                 fontSize: 11,
-                color: Colors.orange,
+                color: _voiceDark,
                 fontWeight: FontWeight.w600,
               ),
             ),
@@ -648,7 +652,7 @@ class _AudioTaskRowState extends State<AudioTaskRow>
                   width: 36,
                   height: 36,
                   decoration: const BoxDecoration(
-                    color: Colors.orange,
+                    color: _voiceColor,
                     shape: BoxShape.circle,
                   ),
                   child: Icon(
@@ -678,10 +682,10 @@ class _AudioTaskRowState extends State<AudioTaskRow>
                         overlayShape: const RoundSliderOverlayShape(
                           overlayRadius: 12,
                         ),
-                        activeTrackColor: Colors.orange,
+                        activeTrackColor: _voiceColor,
                         inactiveTrackColor: Colors.black12,
-                        thumbColor: Colors.orange,
-                        overlayColor: Colors.orange.withOpacity(0.15),
+                        thumbColor: _voiceColor,
+                        overlayColor: _voiceColor.withValues(alpha: 0.15),
                       ),
                       child: Slider(
                         value: progress,
@@ -804,7 +808,7 @@ class _AudioTaskRowState extends State<AudioTaskRow>
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
         decoration: BoxDecoration(
-          color: Colors.black.withValues(alpha: 0.06),
+          color: _voiceColor.withValues(alpha: 0.1),
           borderRadius: BorderRadius.circular(22),
         ),
         child: Row(
@@ -817,7 +821,7 @@ class _AudioTaskRowState extends State<AudioTaskRow>
                 width: 36,
                 height: 36,
                 decoration: const BoxDecoration(
-                  color: Color(0xFF2196F3),
+                  color: _voiceColor,
                   shape: BoxShape.circle,
                 ),
                 child: Icon(
@@ -847,12 +851,10 @@ class _AudioTaskRowState extends State<AudioTaskRow>
                       overlayShape: const RoundSliderOverlayShape(
                         overlayRadius: 12,
                       ),
-                      activeTrackColor: const Color(0xFF2196F3),
+                      activeTrackColor: _voiceColor,
                       inactiveTrackColor: Colors.black12,
-                      thumbColor: const Color(0xFF2196F3),
-                      overlayColor: const Color(
-                        0xFF2196F3,
-                      ).withValues(alpha: 0.15),
+                      thumbColor: _voiceColor,
+                      overlayColor: _voiceColor.withValues(alpha: 0.15),
                     ),
                     child: Slider(
                       value: isThisPlaying ? progress : 0.0,

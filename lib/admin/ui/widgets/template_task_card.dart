@@ -4,6 +4,7 @@ import 'package:mone_task_app/admin/model/all_task_model.dart';
 import 'package:mone_task_app/admin/model/category_model.dart';
 import 'package:mone_task_app/admin/model/edit_task_ui_model.dart';
 import 'package:mone_task_app/admin/service/task_worker_service.dart';
+import 'package:mone_task_app/admin/ui/widgets/category_manager_dialog.dart';
 import 'package:mone_task_app/utils/get_color.dart';
 
 const _blue = Color(0xFF2563EB);
@@ -15,11 +16,13 @@ const _border = Color(0xFFE5E7EB);
 /// Har bir o'zgarish darhol serverga saqlanadi.
 class TemplateTaskCard extends StatefulWidget {
   final TemplateTaskModel template;
-  final String filialNames;
   final List<CategoryModel> categories;
   final ValueChanged<TemplateTaskModel> onSaved;
   final VoidCallback onDeleted;
   final VoidCallback onCategoriesChanged;
+
+  /// Kategoriya nomi o'zgardi — shablonlarni serverdan qayta olish kerak
+  final VoidCallback? onTemplatesStale;
   final Color Function(int type) typeColor;
 
   /// Ro'yxatdagi tartib raqami (1 dan)
@@ -31,11 +34,11 @@ class TemplateTaskCard extends StatefulWidget {
   const TemplateTaskCard({
     super.key,
     required this.template,
-    required this.filialNames,
     required this.categories,
     required this.onSaved,
     required this.onDeleted,
     required this.onCategoriesChanged,
+    this.onTemplatesStale,
     required this.typeColor,
     required this.number,
     this.highlighted = false,
@@ -170,6 +173,7 @@ class _TemplateTaskCardState extends State<TemplateTaskCard> {
         task: _task,
         type: _type,
         orderIndex: original.orderIndex,
+        pinned: original.pinned,
         filialIds: original.filialIds,
         days: days,
         createdAt: original.createdAt,
@@ -277,6 +281,15 @@ class _TemplateTaskCardState extends State<TemplateTaskCard> {
     _markChanged();
   }
 
+  Future<void> _manageCategories() async {
+    final renamed = await showCategoryManager(context, widget.categories);
+    if (renamed == null || !mounted) return;
+    widget.onCategoriesChanged();
+    final newName = renamed[_category];
+    if (newName != null) setState(() => _category = newName);
+    if (renamed.isNotEmpty) widget.onTemplatesStale?.call();
+  }
+
   // ---------- UI ----------
 
   @override
@@ -306,15 +319,7 @@ class _TemplateTaskCardState extends State<TemplateTaskCard> {
               spacing: 8,
               runSpacing: 8,
               crossAxisAlignment: WrapCrossAlignment.center,
-              children: [
-                _buildCategoryChip(),
-                _buildTimeChip(),
-                _chip(
-                  icon: Icons.storefront_outlined,
-                  label: widget.filialNames,
-                  color: _grey,
-                ),
-              ],
+              children: [_buildCategoryChip(), _buildTimeChip()],
             ),
             if (_showTime) ...[const SizedBox(height: 8), _buildTimePicker()],
             if (_changed) ...[const SizedBox(height: 10), _buildSaveBar()],
@@ -404,11 +409,11 @@ class _TemplateTaskCardState extends State<TemplateTaskCard> {
     return Tooltip(
       message: 'Количество видео',
       child: Container(
-        height: 38,
-        padding: const EdgeInsets.symmetric(horizontal: 2),
+        height: 50,
+        padding: const EdgeInsets.symmetric(horizontal: 4),
         decoration: BoxDecoration(
           color: Colors.white,
-          borderRadius: BorderRadius.circular(19),
+          borderRadius: BorderRadius.circular(25),
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
@@ -421,14 +426,15 @@ class _TemplateTaskCardState extends State<TemplateTaskCard> {
                       _markChanged();
                     }
                   : null,
-              size: 22,
+              size: 30,
+              padding: 8,
             ),
-            const Icon(Icons.videocam_outlined, size: 22, color: _blue),
-            const SizedBox(width: 4),
+            const Icon(Icons.videocam_outlined, size: 28, color: _blue),
+            const SizedBox(width: 6),
             Text(
               '$_videoCount',
               style: const TextStyle(
-                fontSize: 17,
+                fontSize: 22,
                 fontWeight: FontWeight.w700,
                 color: _blue,
               ),
@@ -441,7 +447,8 @@ class _TemplateTaskCardState extends State<TemplateTaskCard> {
                       _markChanged();
                     }
                   : null,
-              size: 22,
+              size: 30,
+              padding: 8,
             ),
           ],
         ),
@@ -639,6 +646,10 @@ class _TemplateTaskCardState extends State<TemplateTaskCard> {
           _addCategory();
           return;
         }
+        if (id == -2) {
+          _manageCategories();
+          return;
+        }
         final name = widget.categories.firstWhere((c) => c.id == id).name;
         if (name == _category) return;
         setState(() => _category = name);
@@ -668,6 +679,17 @@ class _TemplateTaskCardState extends State<TemplateTaskCard> {
               Icon(Icons.add, size: 15, color: _blue),
               SizedBox(width: 6),
               Text('Новая', style: TextStyle(fontSize: 15, color: _blue)),
+            ],
+          ),
+        ),
+        const PopupMenuItem<int>(
+          value: -2,
+          height: 40,
+          child: Row(
+            children: [
+              Icon(Icons.tune, size: 15, color: _grey),
+              SizedBox(width: 6),
+              Text('Настроить', style: TextStyle(fontSize: 15, color: _grey)),
             ],
           ),
         ),
@@ -839,12 +861,13 @@ class _TemplateTaskCardState extends State<TemplateTaskCard> {
     VoidCallback? onTap, {
     double size = 17,
     Color color = _blue,
+    double padding = 4,
   }) {
     return InkWell(
       customBorder: const CircleBorder(),
       onTap: onTap,
       child: Padding(
-        padding: const EdgeInsets.all(4),
+        padding: EdgeInsets.all(padding),
         child: Icon(
           icon,
           size: size,

@@ -51,7 +51,7 @@ class _UserEditDialogState extends State<UserEditDialog> {
   late final TextEditingController _phoneController;
   late final TextEditingController _passwordController;
   late String _selectedRole;
-  late List<int> _selectedFilialIds;
+  late final List<int> _selectedFilialIds;
   late List<String> _selectedCategories;
 
   List<CategoryModel> _categories = [];
@@ -265,29 +265,6 @@ class _UserEditDialogState extends State<UserEditDialog> {
                         ),
                       ],
                       if (_selectedRole == 'worker') ...[
-                        const SizedBox(height: 20),
-                        _sectionTitle('Филиалы'),
-                        const SizedBox(height: 10),
-                        Wrap(
-                          spacing: 8,
-                          runSpacing: 8,
-                          children: widget.filials.map((f) {
-                            final selected = _selectedFilialIds.contains(
-                              f.filialId,
-                            );
-                            return FilterChip(
-                              label: Text(f.name),
-                              selected: selected,
-                              onSelected: (v) => setState(() {
-                                if (v) {
-                                  _selectedFilialIds.add(f.filialId);
-                                } else {
-                                  _selectedFilialIds.remove(f.filialId);
-                                }
-                              }),
-                            );
-                          }).toList(),
-                        ),
                         const SizedBox(height: 20),
                         _sectionTitle('Категории'),
                         const SizedBox(height: 10),

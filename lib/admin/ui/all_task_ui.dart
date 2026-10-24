@@ -8,7 +8,9 @@ import 'package:mone_task_app/admin/ui/add_admin_task.dart';
 import 'package:mone_task_app/admin/ui/widgets/template_task_card.dart';
 import 'package:mone_task_app/core/data/local/token_storage.dart';
 import 'package:mone_task_app/core/di/di.dart';
+import 'package:mone_task_app/shared/services/task_prefs_service.dart';
 import 'package:mone_task_app/shared/widgets/reorderable_filial_tabs.dart';
+import 'package:mone_task_app/shared/widgets/task_reorder_list.dart';
 import 'package:mone_task_app/utils/get_color.dart';
 
 // ==================== UI ====================
@@ -42,6 +44,9 @@ class _TemplateTaskAdminUiState extends State<TemplateTaskAdminUi> {
   /// Kartada tahrirlangan (serverga saqlangan) shablonlar — ro'yxatni
   /// qayta yuklamasdan yangi qiymatlarni ko'rsatish uchun.
   final Map<int, TemplateTaskModel> _edited = {};
+
+  /// Sudrab o'zgartirilgan tartib — server javobini kutmasdan ko'rsatiladi
+  List<TemplateTaskModel>? _reordered;
   int selectedFilter = -1; // -1: hammasi, 1-3: type bo'yicha
 
   /// Bosh sahifa bilan bir joyda turish (filial + tepadagi vazifa)
@@ -109,12 +114,6 @@ class _TemplateTaskAdminUiState extends State<TemplateTaskAdminUi> {
       default:
         return Colors.grey.shade100;
     }
-  }
-
-  String getFilialNames(List<int> filialIds, List<FilialModel> categories) {
-    if (filialIds.isEmpty) return "Все филиалы";
-    final names = {for (var filial in categories) filial.filialId: filial.name};
-    return filialIds.map((id) => names[id] ?? "?").join(", ");
   }
 
   String formatDays(int type, List<int>? days) {
@@ -260,7 +259,7 @@ class _TemplateTaskAdminUiState extends State<TemplateTaskAdminUi> {
                     );
                   }
 
-                  final allTemplates = snapshot.data!;
+                  final allTemplates = _reordered ?? snapshot.data!;
 
                   return TabBarView(
                     children: [
@@ -430,46 +429,53 @@ class _TemplateTaskAdminUiState extends State<TemplateTaskAdminUi> {
         final newTemplates = TemplateService().fetchTemplates();
         setState(() {
           _edited.clear();
+          _reordered = null;
           templatesFuture = newTemplates;
         });
         await newTemplates;
       },
-      onReorder: (oldIndex, newIndex) async {
-        if (!_isSuperAdmin) return;
-        // MUHIM: oldIndex va newIndex bu list indekslari (0-dan boshlanadi)
-        // Lekin backend orderIndex kutadi (1-dan boshlanadi)
+      onReorder: (o, n) => _reorderTemplates(
+        templates,
+        filtered,
+        filialId,
+        o,
+        n > o ? n - 1 : n,
+      ),
+    );
+  }
 
-        // Eski va yangi pozitsiyalarni olish
-        final oldOrderIndex = filtered[oldIndex].orderIndex;
-        final newOrderIndex = newIndex >= filtered.length
-            ? filtered.last.orderIndex
-            : filtered[newIndex].orderIndex;
+  /// Bosh sahifadagi kabi: kartani bosib turib sudrash — shaxsiy tartib filial
+  /// bo'yicha saqlanadi (super admin uchun umumiy tartib ham shu bo'ladi),
+  /// shuning uchun ikkala sahifada ketma-ketlik bir xil qoladi.
+  /// Qadalgan vazifa faqat qadalganlar orasida joy almashadi.
+  Future<void> _reorderTemplates(
+    List<TemplateTaskModel> all,
+    List<TemplateTaskModel> visible,
+    int filialId,
+    int oldIndex,
+    int newIndex,
+  ) async {
+    if (!_isSuperAdmin) return;
+    final list = reorderedPinnedAware(
+      visible,
+      oldIndex,
+      newIndex,
+      (t) => t.pinned,
+    );
+    final merged = mergeOrderBy(all, list, (t) => t.templateId);
+    setState(() => _reordered = merged);
 
-        print('🔄 Drag: List index $oldIndex → $newIndex');
-        print('📍 Order index $oldOrderIndex → $newOrderIndex');
-
-        // Backend ga yuborish
-        final success = await TemplateService().updateTaskReorder(
-          oldOrderIndex,
-          newOrderIndex,
-        );
-
-        if (success) {
-          print('✅ Reorder muvaffaqiyatli');
-          _reloadTemplates();
-        } else {
-          print('❌ Reorder muvaffaqiyatsiz');
-          // Xatolik haqida xabar
-          if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
-                content: Text('Ошибка при изменении порядка'),
-                backgroundColor: Colors.red,
-              ),
-            );
-          }
-        }
-      },
+    final ok = await TaskPrefsService().saveOrder([
+      for (final t in merged)
+        if (t.filialIds.isEmpty || t.filialIds.contains(filialId)) t.templateId,
+    ]);
+    if (ok || !mounted) return;
+    _reloadTemplates();
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Ошибка при изменении порядка'),
+        backgroundColor: Colors.red,
+      ),
     );
   }
 
@@ -483,7 +489,6 @@ class _TemplateTaskAdminUiState extends State<TemplateTaskAdminUi> {
           builder: (context, categorySnapshot) {
             return TemplateTaskCard(
               template: template,
-              filialNames: getFilialNames(template.filialIds, filials),
               categories: categorySnapshot.data ?? const [],
               onSaved: (updated) =>
                   setState(() => _edited[updated.templateId] = updated),
@@ -494,6 +499,7 @@ class _TemplateTaskAdminUiState extends State<TemplateTaskAdminUi> {
               onCategoriesChanged: () => setState(() {
                 taskCategoriesFuture = TemplateService().fetchCategoriesList();
               }),
+              onTemplatesStale: _reloadTemplates,
             );
           },
         );
@@ -504,6 +510,7 @@ class _TemplateTaskAdminUiState extends State<TemplateTaskAdminUi> {
   void _reloadTemplates() {
     setState(() {
       _edited.clear();
+      _reordered = null;
       templatesFuture = TemplateService().fetchTemplates();
     });
   }

@@ -13,6 +13,7 @@ import 'package:mone_task_app/admin/provider/circle_video_player.dart';
 import 'package:mone_task_app/admin/provider/task_view_sync.dart';
 import 'package:mone_task_app/admin/service/get_excel_ui.dart';
 import 'package:mone_task_app/admin/ui/all_task_ui.dart';
+import 'package:mone_task_app/admin/ui/attendance_page.dart';
 import 'package:mone_task_app/admin/ui/user_list_page.dart';
 import 'package:mone_task_app/checker/model/checker_check_task_model.dart';
 import 'package:mone_task_app/core/context_extension.dart';
@@ -136,8 +137,17 @@ class _AdminTaskUiState extends State<AdminTaskUi>
     );
     if (!mounted) return;
 
+    // «Все задачи» da filiallar tartibi o'zgargan bo'lishi mumkin — tablar
+    // yangi tartibni olsin, tanlangan filial esa yangi o'rnidan topilsin.
+    final provider = context.read<AdminTasksProvider>();
+    await provider.refreshFilials();
+    if (!mounted) return;
+    final ordered = provider.filials
+        .where((f) => categories.any((c) => c.filialId == f.filialId))
+        .toList();
+
     final templateId = TaskViewSync.templateId;
-    final tab = categories.indexWhere(
+    final tab = ordered.indexWhere(
       (f) => f.filialId == TaskViewSync.filialId,
     );
     final controller = _tabController;
@@ -589,18 +599,20 @@ class _AdminTaskUiState extends State<AdminTaskUi>
           _StatusFilterButton(
             status: 2,
             color: Colors.orange,
+            label: 'Р',
             provider: tasksProvider,
           ),
           _StatusFilterButton(
             status: 1,
             color: Colors.red,
+            label: 'А',
             provider: tasksProvider,
           ),
           _ToggleFilterButton(
             selected: tasksProvider.filterHasAudio,
             onTap: tasksProvider.toggleHasAudioFilter,
             icon: Icons.mic_rounded,
-            color: Colors.deepPurple,
+            color: Colors.deepPurple.shade300,
             tooltip: 'Голосовые загружены',
           ),
           _ToggleFilterButton(
@@ -676,7 +688,7 @@ class _AdminTaskUiState extends State<AdminTaskUi>
           else ...[
             IconButton(
               onPressed: () => _openAllTasks(categories),
-              icon: const Icon(CupertinoIcons.list_bullet),
+              icon: const Icon(Icons.edit_outlined),
               tooltip: 'Все задачи',
             ),
             IconButton(
@@ -687,7 +699,7 @@ class _AdminTaskUiState extends State<AdminTaskUi>
             IconButton(
               onPressed: () =>
                   context.push(ExcelReportPage(filials: categories)),
-              icon: const Icon(CupertinoIcons.doc_plaintext),
+              icon: const Icon(CupertinoIcons.list_bullet),
               tooltip: 'Отчеты',
             ),
             // Korrektor: vaqti o'tib, bajarilmagan vazifalar — profil oldida
@@ -730,6 +742,14 @@ class _AdminTaskUiState extends State<AdminTaskUi>
                   },
                 ),
               ),
+              // Davomat (Workly): kim ishga kelgan — faqat super_admin.
+              if (_user?.role == 'super_admin')
+                IconButton(
+                  onPressed: () =>
+                      context.push(AttendancePage(filials: allFilials)),
+                  icon: const Icon(Icons.how_to_reg, color: Colors.blue),
+                  tooltip: 'Кто пришёл на работу',
+                ),
               // checker (Корректор) foydalanuvchilar ro'yxatini ko'ra olmaydi.
               if (_user?.role != 'checker')
                 IconButton(
@@ -820,10 +840,14 @@ class _StatusFilterButton extends StatelessWidget {
   final Color color;
   final AdminTasksProvider provider;
 
+  /// Tugma ichidagi harf: «Р» — Ревизор (sariq), «А» — Админ (qizil)
+  final String? label;
+
   const _StatusFilterButton({
     required this.status,
     required this.color,
     required this.provider,
+    this.label,
   });
 
   @override
@@ -858,7 +882,18 @@ class _StatusFilterButton extends StatelessWidget {
                   ]
                 : [],
           ),
-          child: isSelected
+          alignment: Alignment.center,
+          child: label != null
+              ? Text(
+                  label!,
+                  style: TextStyle(
+                    fontSize: iconSize * 0.85,
+                    fontWeight: FontWeight.w800,
+                    height: 1,
+                    color: isSelected ? Colors.white : color,
+                  ),
+                )
+              : isSelected
               ? Icon(Icons.check, size: iconSize, color: Colors.white)
               : null,
         ),

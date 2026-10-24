@@ -385,6 +385,7 @@ type TaskTemplate struct {
 	Category         string `json:"category"`
 	NotificationTime string `json:"notificationTime,omitempty"`
 	OrderIndex       int    `json:"orderIndex"`
+	Pinned           bool   `json:"pinned"` // joriy foydalanuvchi qadab qo'ygan
 	MultiVideo       bool   `json:"multiVideo"`
 	VideoCount       int    `json:"videoCount"`
 	CreatedAt        string `json:"createdAt"`
@@ -433,6 +434,7 @@ func main() {
 	r.HandleFunc("/api/tasks/{id}", authMiddleware(deleteTask)).Methods("DELETE")
 	r.HandleFunc("/api/tasks/{id}/submit", authMiddleware(submitTask)).Methods("POST")
 	r.HandleFunc("/api/tasks/{id}/check", authMiddleware(checkTask)).Methods("POST")
+	r.HandleFunc("/api/tasks/{id}/demand", authMiddleware(demandTask)).Methods("POST")
 	r.HandleFunc("/api/tasks/{id}/check/{date}", authMiddleware(checkTask)).Methods("POST")
 	r.HandleFunc("/api/tasks/{id}/voice-comment/{date}", authMiddleware(submitCheckerAudio)).Methods("POST")
 	r.HandleFunc("/api/tasks/{id}/voice-comment/{date}/{audioIndex}", authMiddleware(deleteCheckerAudio)).Methods("DELETE")
@@ -455,6 +457,7 @@ func main() {
 	// Categories
 	r.HandleFunc("/api/categories", authMiddleware(getCategories)).Methods("GET")
 	r.HandleFunc("/api/categories", authMiddleware(createCategory)).Methods("POST")
+	r.HandleFunc("/api/categories/reorder", authMiddleware(reorderCategories)).Methods("PUT")
 	r.HandleFunc("/api/categories/{id}", authMiddleware(updateCategory)).Methods("PUT")
 	r.HandleFunc("/api/categories/{id}", authMiddleware(deleteCategory)).Methods("DELETE")
 
@@ -476,10 +479,14 @@ func main() {
 	r.HandleFunc("/api/users/{id}", authMiddleware(deleteUser)).Methods("DELETE")
 
 	// Сотрудники — worker o'z yordamchilarini qo'shadi va vazifalarini biriktiradi
+	// Davomat (Workly): bugun kim ishga kelgan — faqat super_admin.
+	r.HandleFunc("/api/attendance", authMiddleware(getAttendance)).Methods("GET")
+
 	r.HandleFunc("/api/my/employees", authMiddleware(getMyEmployees)).Methods("GET")
 	r.HandleFunc("/api/my/employees", authMiddleware(createMyEmployee)).Methods("POST")
 	r.HandleFunc("/api/my/employees/{id}", authMiddleware(updateMyEmployee)).Methods("PUT")
 	r.HandleFunc("/api/my/employees/{id}", authMiddleware(deleteMyEmployee)).Methods("DELETE")
+	r.HandleFunc("/api/my/demands", authMiddleware(getMyDemands)).Methods("GET")
 	r.HandleFunc("/api/my/delegations/{templateId}", authMiddleware(setTaskDelegation)).Methods("PUT")
 
 	// Debug
@@ -567,12 +574,6 @@ func initDB() {
 	ensureTodayDB()
 	migrateExistingDBs()
 
-	// Kategoriyalar: Утренний админ / Вечерний админ / Шеф повар
-	if db, err := getMainDB(); err == nil {
-		migrateCategories(db)
-		db.Close()
-	}
-
 	log.Println("Database initialized successfully")
 }
 
@@ -634,6 +635,7 @@ func createMainDB() {
 	db.Exec("ALTER TABLE task_templates ADD COLUMN video_count INTEGER DEFAULT 1")
 	// Filiallar tartibi — barcha ekranlarda shu tartibda ko'rsatiladi
 	db.Exec("ALTER TABLE filials ADD COLUMN sort_order INTEGER DEFAULT 0")
+	migrateCategoryOrder(db)
 	// Har bir foydalanuvchining shaxsiy pin va tartibi (template bo'yicha — har kuni saqlanadi)
 	db.Exec(`CREATE TABLE IF NOT EXISTS user_task_prefs (
 		user_id INTEGER NOT NULL,
@@ -647,6 +649,7 @@ func createMainDB() {
 	db.Exec("ALTER TABLE users ADD COLUMN password TEXT DEFAULT ''")
 	db.Exec("ALTER TABLE users ADD COLUMN can_manage_tasks INTEGER DEFAULT 0")
 	migrateEmployees(db)
+	migrateDemands(db)
 
 	var needsUpdate int
 	db.QueryRow("SELECT COUNT(*) FROM task_templates WHERE order_index = 0").Scan(&needsUpdate)
@@ -693,6 +696,18 @@ func createMainDB() {
 		}
 	}
 
+	// Create categories
+	db.QueryRow("SELECT COUNT(*) FROM categories").Scan(&count)
+	if count == 0 {
+		categories := []string{
+			"Bar",
+			"Magazin",
+			"Povar",
+		}
+		for _, name := range categories {
+			db.Exec("INSERT INTO categories (name) VALUES (?)", name)
+		}
+	}
 }
 
 func getDBPath(date time.Time) string {
@@ -1125,7 +1140,9 @@ func getTasks(w http.ResponseWriter, r *http.Request) {
 			filialIDs = parseFilialIDs(filialIDsStr.String)
 		}
 
-		if len(filialIDs) == 0 {
+		// Filial yoki kategoriya tanlanmagan — xodim hech qanday vazifa ko'rmaydi
+		// (getNotifications, filialWorkers va delegatsiya bilan bir xil qoida).
+		if len(filialIDs) == 0 || len(categories) == 0 {
 			respondJSON(w, http.StatusOK, map[string]interface{}{
 				"success": true,
 				"data":    []Task{},
@@ -1139,29 +1156,18 @@ func getTasks(w http.ResponseWriter, r *http.Request) {
 			args = append(args, id)
 		}
 
-		if len(categories) == 0 {
-			// Filialga ruxsat berilgan, lekin kategoriya tanlanmagan —
-			// shu holatda foydalanuvchi filialdagi barcha vazifalarni ko'radi.
-			query = fmt.Sprintf(`
-				SELECT id, template_id, filial_id, worker_ids, task, type, status, video_url, checker_audio_url, submitted_at, submitted_by, days, category, notification_time, order_index
-				FROM tasks
-				WHERE filial_id IN (%s)
-				ORDER BY order_index ASC
-			`, strings.Join(filialPlaceholders, ","))
-		} else {
-			categoryPlaceholders := make([]string, len(categories))
-			for i, cat := range categories {
-				categoryPlaceholders[i] = "?"
-				args = append(args, cat)
-			}
-
-			query = fmt.Sprintf(`
-				SELECT id, template_id, filial_id, worker_ids, task, type, status, video_url, checker_audio_url, submitted_at, submitted_by, days, category, notification_time, order_index
-				FROM tasks
-				WHERE filial_id IN (%s) AND (category = '' OR category IN (%s))
-				ORDER BY order_index ASC
-			`, strings.Join(filialPlaceholders, ","), strings.Join(categoryPlaceholders, ","))
+		categoryPlaceholders := make([]string, len(categories))
+		for i, cat := range categories {
+			categoryPlaceholders[i] = "?"
+			args = append(args, cat)
 		}
+
+		query = fmt.Sprintf(`
+			SELECT id, template_id, filial_id, worker_ids, task, type, status, video_url, checker_audio_url, submitted_at, submitted_by, days, category, notification_time, order_index
+			FROM tasks
+			WHERE filial_id IN (%s) AND (category = '' OR category IN (%s))
+			ORDER BY order_index ASC
+		`, strings.Join(filialPlaceholders, ","), strings.Join(categoryPlaceholders, ","))
 	} else if role == RoleEmployee {
 		var ok bool
 		query, args, ok = employeeTasksQuery(userID)
@@ -1311,6 +1317,7 @@ func templateAllowed(allowed map[int]bool, templateID string) bool {
 }
 
 func getAllTasks(w http.ResponseWriter, r *http.Request) {
+	userID, _ := strconv.Atoi(r.Header.Get("UserID"))
 	allowed, ok := taskManagerFilials(r)
 	if !ok {
 		respondJSON(w, http.StatusForbidden, map[string]interface{}{
@@ -1369,6 +1376,7 @@ func getAllTasks(w http.ResponseWriter, r *http.Request) {
 				own = append(own, t)
 			}
 		}
+		applyUserTemplatePrefs(userID, own)
 		respondJSON(w, http.StatusOK, map[string]interface{}{
 			"success": true,
 			"data":    own,
@@ -1395,6 +1403,9 @@ func getAllTasks(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}
+
+	// Bosh sahifa bilan bir xil ketma-ketlik: pin + shaxsiy tartib
+	applyUserTemplatePrefs(userID, templates)
 
 	respondJSON(w, http.StatusOK, map[string]interface{}{
 		"success": true,
@@ -2537,16 +2548,40 @@ func submitCheckerAudio(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	respondJSON(w, http.StatusOK, map[string]interface{}{
+	// Ovozli izoh statusni avtomatik belgilaydi: Ревизор (checker) → sariq «Р»,
+	// Admin (super_admin) → qizil «А». Boshqa rollar statusni o'zgartirmaydi.
+	newStatus := 0
+	switch r.Header.Get("Role") {
+	case RoleChecker:
+		newStatus = StatusPending
+	case RoleSuperAdmin:
+		newStatus = StatusNotDone
+	}
+	if newStatus == StatusPending {
+		// Ko'p videoli task barcha videolar yuklanmaguncha sariq bo'lmaydi
+		if have, need := taskVideoProgress(db, taskID); need > 1 && have < need {
+			newStatus = 0
+		}
+	}
+	if newStatus != 0 {
+		db.Exec("UPDATE tasks SET status = ? WHERE id = ?", newStatus, taskID)
+	}
+
+	resp := map[string]interface{}{
 		"success":          true,
 		"checkerAudioUrls": fullAudioURLs(existing),
 		"commentBy":        username,
-	})
+	}
+	if newStatus != 0 {
+		resp["status"] = newStatus
+	}
+	respondJSON(w, http.StatusOK, resp)
 
 	// WS broadcast: audio comment added
 	hub.broadcast("task_updated", map[string]interface{}{
 		"taskId": taskID,
 		"action": "audio_comment",
+		"status": newStatus,
 		"date":   date.Format("2006-01-02"),
 	})
 }
@@ -3057,167 +3092,6 @@ func deleteFilial(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-func getCategories(w http.ResponseWriter, r *http.Request) {
-	db, _ := getMainDB()
-	defer db.Close()
-
-	rows, err := db.Query("SELECT id, name FROM categories ORDER BY sort_order = 0, sort_order, id")
-	if err != nil {
-		respondJSON(w, http.StatusInternalServerError, map[string]interface{}{
-			"success": false,
-			"error":   "Server xatosi",
-		})
-		return
-	}
-	defer rows.Close()
-
-	categories := []Category{}
-	for rows.Next() {
-		var c Category
-		rows.Scan(&c.ID, &c.Name)
-		categories = append(categories, c)
-	}
-
-	respondJSON(w, http.StatusOK, map[string]interface{}{
-		"success": true,
-		"data":    categories,
-	})
-}
-
-func createCategory(w http.ResponseWriter, r *http.Request) {
-	role := r.Header.Get("Role")
-	if role != RoleSuperAdmin {
-		respondJSON(w, http.StatusForbidden, map[string]interface{}{
-			"success": false,
-			"error":   "Ruxsat yo'q",
-		})
-		return
-	}
-
-	var req struct {
-		Name string `json:"name"`
-	}
-
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		respondJSON(w, http.StatusBadRequest, map[string]interface{}{
-			"success": false,
-			"error":   "Noto'g'ri ma'lumot",
-		})
-		return
-	}
-
-	db, _ := getMainDB()
-	defer db.Close()
-
-	result, err := db.Exec("INSERT INTO categories (name) VALUES (?)", req.Name)
-	if err != nil {
-		respondJSON(w, http.StatusBadRequest, map[string]interface{}{
-			"success": false,
-			"error":   "Bu category allaqachon mavjud",
-		})
-		return
-	}
-
-	id, _ := result.LastInsertId()
-	respondJSON(w, http.StatusCreated, map[string]interface{}{
-		"success":    true,
-		"categoryId": id,
-	})
-}
-
-func updateCategory(w http.ResponseWriter, r *http.Request) {
-	role := r.Header.Get("Role")
-	if role != RoleSuperAdmin {
-		respondJSON(w, http.StatusForbidden, map[string]interface{}{
-			"success": false,
-			"error":   "Ruxsat yo'q",
-		})
-		return
-	}
-
-	vars := mux.Vars(r)
-	id := vars["id"]
-
-	var req struct {
-		Name string `json:"name"`
-	}
-
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		respondJSON(w, http.StatusBadRequest, map[string]interface{}{
-			"success": false,
-			"error":   "Noto'g'ri ma'lumot",
-		})
-		return
-	}
-
-	db, _ := getMainDB()
-	defer db.Close()
-
-	_, err := db.Exec("UPDATE categories SET name = ? WHERE id = ?", req.Name, id)
-	if err != nil {
-		respondJSON(w, http.StatusInternalServerError, map[string]interface{}{
-			"success": false,
-			"error":   "Server xatosi",
-		})
-		return
-	}
-
-	respondJSON(w, http.StatusOK, map[string]interface{}{
-		"success": true,
-	})
-}
-
-func deleteCategory(w http.ResponseWriter, r *http.Request) {
-	role := r.Header.Get("Role")
-	if role != RoleSuperAdmin {
-		respondJSON(w, http.StatusForbidden, map[string]interface{}{
-			"success": false,
-			"error":   "Ruxsat yo'q",
-		})
-		return
-	}
-
-	vars := mux.Vars(r)
-	id := vars["id"]
-
-	db, _ := getMainDB()
-	defer db.Close()
-
-	var categoryName string
-	err := db.QueryRow("SELECT name FROM categories WHERE id = ?", id).Scan(&categoryName)
-	if err != nil {
-		respondJSON(w, http.StatusNotFound, map[string]interface{}{
-			"success": false,
-			"error":   "Category topilmadi",
-		})
-		return
-	}
-
-	var userCount int
-	db.QueryRow("SELECT COUNT(*) FROM users WHERE categories LIKE ?", "%"+categoryName+"%").Scan(&userCount)
-	if userCount > 0 {
-		respondJSON(w, http.StatusBadRequest, map[string]interface{}{
-			"success": false,
-			"error":   "Bu category'ni o'chirib bo'lmaydi, unga biriktirilgan userlar mavjud",
-		})
-		return
-	}
-
-	_, err = db.Exec("DELETE FROM categories WHERE id = ?", id)
-	if err != nil {
-		respondJSON(w, http.StatusInternalServerError, map[string]interface{}{
-			"success": false,
-			"error":   "Server xatosi",
-		})
-		return
-	}
-
-	respondJSON(w, http.StatusOK, map[string]interface{}{
-		"success": true,
-		"message": "Category o'chirildi",
-	})
-}
-
 func generateJSONReport(w http.ResponseWriter, r *http.Request) {
 	role := r.Header.Get("Role")
 	if role != RoleSuperAdmin && role != RoleChecker {
@@ -3361,8 +3235,14 @@ func generateReportData(filialID int, startDate, endDate time.Time) []map[string
 				_, t.VideoURL = parseVideoURLs(&videoURL.String)
 			}
 
+			submitted := (submittedAt.Valid && submittedAt.String != "") || (videoURL.Valid && videoURL.String != "")
 			if t.Status == nil {
-				t.StatusText = "Tekshirilmoqda"
+				// NULL status: video yuborilgan bo'lsa tekshirilmoqda, aks holda bajarilmagan
+				if submitted {
+					t.StatusText = "Tekshirilmoqda"
+				} else {
+					t.StatusText = "Bajarilmagan"
+				}
 			} else {
 				switch *t.Status {
 				case StatusNotDone:
@@ -3709,8 +3589,14 @@ func createExcelReport(filialID int, filialName string, startDate, endDate time.
 			var cellContent string
 			var cellStyleToUse int
 
-			// NULL status = video yuborilgan, tekshirilmoqda
-			if !status.Valid {
+			submitted := (submittedAt.Valid && submittedAt.String != "") || (videoURL.Valid && videoURL.String != "")
+
+			// NULL status + video yuborilgan = tekshirilmoqda
+			// NULL status + hech narsa yuborilmagan = bajarilmagan (bo'sh katak)
+			if !status.Valid && !submitted {
+				cellStyleToUse = cellStyle
+				cellContent = ""
+			} else if !status.Valid {
 				cellStyleToUse = statusReviewStyle
 				if submittedAt.Valid && submittedBy.Valid {
 					parsedTime, _ := time.Parse(time.RFC3339, submittedAt.String)
@@ -4599,10 +4485,75 @@ func maxTaskVideos(need int) int {
 	return MaxExtraVideosTotal
 }
 
-// applyUserTaskPrefs - foydalanuvchining pin va shaxsiy tartibini qo'llaydi:
-// avval qadalganlar, keyin shaxsiy tartib, qolganlari umumiy tartibda.
+// userTaskPrefs - foydalanuvchining pin va shaxsiy tartibi (shablon bo'yicha).
+type userTaskPrefs struct {
+	pinned   map[int]bool
+	position map[int]int
+}
+
+func loadUserTaskPrefs(mainDB *sql.DB, userID int) userTaskPrefs {
+	p := userTaskPrefs{pinned: map[int]bool{}, position: map[int]int{}}
+	if userID == 0 {
+		return p
+	}
+	rows, err := mainDB.Query("SELECT template_id, pinned, position FROM user_task_prefs WHERE user_id = ?", userID)
+	if err != nil {
+		return p
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var tid int
+		var pin bool
+		var pos sql.NullInt64
+		rows.Scan(&tid, &pin, &pos)
+		p.pinned[tid] = pin
+		if pos.Valid {
+			p.position[tid] = int(pos.Int64)
+		}
+	}
+	return p
+}
+
+// key - bosh sahifa va «Все задачи» uchun BIR XIL tartib qoidasi:
+// qadalganlar tepada, keyin shaxsiy tartib, qolganlari umumiy order_index bo'yicha.
+func (p userTaskPrefs) key(templateID, orderIndex int) (pinned bool, k int) {
+	if pos, ok := p.position[templateID]; ok {
+		return p.pinned[templateID], pos
+	}
+	return p.pinned[templateID], 1000000 + orderIndex
+}
+
+func prefsLess(aPinned bool, aKey int, bPinned bool, bKey int) bool {
+	if aPinned != bPinned {
+		return aPinned
+	}
+	return aKey < bKey
+}
+
+// templateOrderIndexes - shablonlarning joriy umumiy tartibi (main.db).
+func templateOrderIndexes(mainDB *sql.DB) map[int]int {
+	order := map[int]int{}
+	rows, err := mainDB.Query("SELECT id, order_index FROM task_templates")
+	if err != nil {
+		return order
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var id, idx int
+		if rows.Scan(&id, &idx) == nil {
+			order[id] = idx
+		}
+	}
+	return order
+}
+
+// applyUserTaskPrefs - kunlik vazifalarni foydalanuvchi ko'radigan tartibga
+// soladi. Asos - shablonning JORIY umumiy tartibi (kunlik bazadagi order_index
+// kategoriya bo'yicha alohida beriladi va shablonlar qayta tartiblanganda
+// eskirib qoladi), ustiga pin va shaxsiy tartib. «Все задачи» ham aynan shu
+// qoida bilan saralanadi (applyUserTemplatePrefs) - ikkala sahifa bir xil.
 func applyUserTaskPrefs(userID int, tasks []Task) {
-	if userID == 0 || len(tasks) == 0 {
+	if len(tasks) == 0 {
 		return
 	}
 	mainDB, err := getMainDB()
@@ -4611,39 +4562,87 @@ func applyUserTaskPrefs(userID int, tasks []Task) {
 	}
 	defer mainDB.Close()
 
-	rows, err := mainDB.Query("SELECT template_id, pinned, position FROM user_task_prefs WHERE user_id = ?", userID)
+	templateOrder := templateOrderIndexes(mainDB)
+	for i := range tasks {
+		if idx, ok := templateOrder[tasks[i].TemplateID]; ok {
+			tasks[i].OrderIndex = idx
+		}
+	}
+
+	prefs := loadUserTaskPrefs(mainDB, userID)
+	for i := range tasks {
+		tasks[i].Pinned = prefs.pinned[tasks[i].TemplateID]
+	}
+	sort.SliceStable(tasks, func(a, b int) bool {
+		ap, ak := prefs.key(tasks[a].TemplateID, tasks[a].OrderIndex)
+		bp, bk := prefs.key(tasks[b].TemplateID, tasks[b].OrderIndex)
+		return prefsLess(ap, ak, bp, bk)
+	})
+}
+
+// applyUserTemplatePrefs - shablonlar ro'yxatini («Все задачи») bosh sahifa
+// bilan bir xil tartibga soladi: qadalganlar, shaxsiy tartib, umumiy tartib.
+func applyUserTemplatePrefs(userID int, templates []TaskTemplate) {
+	if userID == 0 || len(templates) == 0 {
+		return
+	}
+	mainDB, err := getMainDB()
 	if err != nil {
 		return
 	}
-	pinned := map[int]bool{}
-	position := map[int]int{}
+	defer mainDB.Close()
+
+	prefs := loadUserTaskPrefs(mainDB, userID)
+	for i := range templates {
+		templates[i].Pinned = prefs.pinned[templates[i].ID]
+	}
+	sort.SliceStable(templates, func(a, b int) bool {
+		ap, ak := prefs.key(templates[a].ID, templates[a].OrderIndex)
+		bp, bk := prefs.key(templates[b].ID, templates[b].OrderIndex)
+		return prefsLess(ap, ak, bp, bk)
+	})
+}
+
+// applyGlobalTemplateOrder - berilgan shablonlarni umumiy tartibda o'zlari
+// egallab turgan joylar ichida yangi ketma-ketlikda joylaydi; ro'yxatda
+// bo'lmagan shablonlar o'z joyida qoladi (bitta filial ichida sudralganda
+// boshqa filiallar tartibi buzilmaydi).
+func applyGlobalTemplateOrder(tx *sql.Tx, order []int) error {
+	rows, err := tx.Query("SELECT id FROM task_templates ORDER BY order_index ASC, id ASC")
+	if err != nil {
+		return err
+	}
+	all := []int{}
+	exists := map[int]bool{}
 	for rows.Next() {
-		var tid int
-		var pin bool
-		var pos sql.NullInt64
-		rows.Scan(&tid, &pin, &pos)
-		pinned[tid] = pin
-		if pos.Valid {
-			position[tid] = int(pos.Int64)
+		var id int
+		if rows.Scan(&id) == nil {
+			all = append(all, id)
+			exists[id] = true
 		}
 	}
 	rows.Close()
 
-	for i := range tasks {
-		tasks[i].Pinned = pinned[tasks[i].TemplateID]
-	}
-	key := func(t Task) int {
-		if p, ok := position[t.TemplateID]; ok {
-			return p
+	queue := []int{}
+	moving := map[int]bool{}
+	for _, id := range order {
+		if exists[id] && !moving[id] {
+			moving[id] = true
+			queue = append(queue, id)
 		}
-		return 1000000 + t.OrderIndex
 	}
-	sort.SliceStable(tasks, func(a, b int) bool {
-		if tasks[a].Pinned != tasks[b].Pinned {
-			return tasks[a].Pinned
+
+	k := 0
+	for i, id := range all {
+		if moving[id] {
+			id = queue[k]
+			k++
 		}
-		return key(tasks[a]) < key(tasks[b])
-	})
+		if _, err := tx.Exec("UPDATE task_templates SET order_index = ? WHERE id = ?", i+1, id); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // setTaskPin - joriy foydalanuvchi uchun vazifani qadash / qadashni olish
@@ -4692,6 +4691,14 @@ func setTaskOrder(w http.ResponseWriter, r *http.Request) {
 	for i, tid := range req.Order {
 		if _, err := tx.Exec(`INSERT INTO user_task_prefs (user_id, template_id, position) VALUES (?, ?, ?)
 			ON CONFLICT(user_id, template_id) DO UPDATE SET position = excluded.position`, userID, tid, i+1); err != nil {
+			respondJSON(w, http.StatusInternalServerError, map[string]interface{}{"success": false, "error": "Server xatosi"})
+			return
+		}
+	}
+	// Super admin tartibi - umumiy (hamma uchun asos) tartib ham shu bo'ladi:
+	// bosh sahifada ham, «Все задачи» da ham sudrash bir xil natija beradi.
+	if r.Header.Get("Role") == RoleSuperAdmin {
+		if err := applyGlobalTemplateOrder(tx, req.Order); err != nil {
 			respondJSON(w, http.StatusInternalServerError, map[string]interface{}{"success": false, "error": "Server xatosi"})
 			return
 		}

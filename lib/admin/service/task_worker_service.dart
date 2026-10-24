@@ -212,6 +212,45 @@ class TemplateService {
     }
   }
 
+  /// Kategoriyalarning yangi tartibi — ro'yxatlarda shu tartibda chiqadi
+  Future<bool> reorderCategories(List<int> categoryIds) async {
+    try {
+      final response = await _dio.put(
+        "${AppUrls.categories}/reorder",
+        data: {"categoryIds": categoryIds},
+      );
+      return response.statusCode == 200;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  /// Nomini o'zgartirish — server vazifa va xodimlardagi nomni ham yangilaydi.
+  /// Xato bo'lsa — uning matni, aks holda null.
+  Future<String?> renameCategory(int id, String name) async {
+    try {
+      await _dio.put("${AppUrls.categories}/$id", data: {"name": name});
+      return null;
+    } on DioException catch (e) {
+      return _serverError(e) ?? 'Не удалось переименовать';
+    }
+  }
+
+  /// O'chirish — ishlatilayotgan bo'lsa server rad etadi va sababini aytadi
+  Future<String?> removeCategory(int id) async {
+    try {
+      await _dio.delete("${AppUrls.categories}/$id");
+      return null;
+    } on DioException catch (e) {
+      return _serverError(e) ?? 'Не удалось удалить';
+    }
+  }
+
+  String? _serverError(DioException e) {
+    final data = e.response?.data;
+    return data is Map && data['error'] is String ? data['error'] : null;
+  }
+
   Future<bool> putStatus(int id, int status) async {
     try {
       final response = await _dio.post(

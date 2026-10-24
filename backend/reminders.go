@@ -6,7 +6,6 @@ import (
 	"log"
 	"net/http"
 	"sort"
-	"strings"
 	"time"
 )
 
@@ -30,6 +29,9 @@ type OverdueTask struct {
 	Time       string `json:"time"`
 	// LateMinutes — vaqtidan necha daqiqa o'tdi
 	LateMinutes int `json:"lateMinutes"`
+	// Responsible — kim bajarishi kerak; Demand — revizor talabi (demands.go)
+	Responsible []Responsible `json:"responsible,omitempty"`
+	Demand      *DemandInfo   `json:"demand,omitempty"`
 }
 
 // sendTo — faqat shartga mos ulangan foydalanuvchilarga yuboradi
@@ -174,7 +176,13 @@ func filialWorkers(mainDB *sql.DB, filialID int, category string) map[int]bool {
 		if !inFilial {
 			continue
 		}
-		if category != "" && !strings.Contains(categoriesStr, category) {
+		var cats []string
+		json.Unmarshal([]byte(categoriesStr), &cats)
+		// Kategoriya tanlanmagan xodim vazifa ko'rmaydi (getTasks bilan bir xil)
+		if len(cats) == 0 {
+			continue
+		}
+		if category != "" && !containsString(cats, category) {
 			continue
 		}
 		result[id] = true
@@ -216,6 +224,7 @@ func checkAndSendNotifications() {
 	if now.Minute()%10 != 0 {
 		return
 	}
+	remindDemands(now)
 	var late []OverdueTask
 	for _, t := range tasks {
 		if t.LateMinutes > 0 {
@@ -254,6 +263,7 @@ func getOverdueTasks(w http.ResponseWriter, r *http.Request) {
 	if late == nil {
 		late = []OverdueTask{}
 	}
+	late = withResponsibles(late)
 	respondJSON(w, http.StatusOK, map[string]interface{}{
 		"success": true,
 		"data":    late,

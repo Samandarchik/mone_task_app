@@ -7,6 +7,7 @@ import 'package:mone_task_app/admin/provider/admin_tasks_provider.dart';
 import 'package:mone_task_app/admin/provider/video_download_provider.dart';
 import 'package:mone_task_app/admin/ui/audio_task_row.dart';
 import 'package:mone_task_app/checker/model/checker_check_task_model.dart';
+import 'package:mone_task_app/shared/widgets/status_permission.dart';
 import 'package:mone_task_app/shared/widgets/task_video_strip.dart';
 import 'package:mone_task_app/utils/get_color.dart';
 import 'package:provider/provider.dart';
@@ -362,9 +363,13 @@ class _StatusButtons extends StatelessWidget {
     final isWaiting = task.videosComplete && current == null;
     final size = isTablet ? 38.0 : 28.0;
 
+    final letter = statusLetter(level);
+
     return GestureDetector(
-      onTap: enabled
+      onTap: enabled || statusDeniedMessage(level) != null
           ? () async {
+              if (!checkStatusPermission(context, level)) return;
+              if (!enabled) return;
               if (current != level) {
                 await context.read<AdminTasksProvider>().updateTaskStatus(
                   task.taskId,
@@ -391,7 +396,20 @@ class _StatusButtons extends StatelessWidget {
               ? [BoxShadow(color: color.withValues(alpha: 0.35), blurRadius: 6)]
               : const [],
         ),
-        child: isActive
+        alignment: Alignment.center,
+        child: letter != null
+            ? Text(
+                letter,
+                style: TextStyle(
+                  fontSize: size * 0.45,
+                  fontWeight: FontWeight.w800,
+                  height: 1,
+                  color: isActive
+                      ? Colors.white
+                      : color.withValues(alpha: enabled ? 0.9 : 0.45),
+                ),
+              )
+            : isActive
             ? Icon(Icons.check, size: size * 0.55, color: Colors.white)
             : isWaiting
             ? Icon(

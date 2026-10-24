@@ -191,6 +191,15 @@ func deleteEmployeesOf(db *sql.DB, ownerID string) {
 	db.Exec("DELETE FROM users WHERE owner_id = ? AND role = ?", ownerID, RoleEmployee)
 }
 
+func containsString(list []string, v string) bool {
+	for _, x := range list {
+		if x == v {
+			return true
+		}
+	}
+	return false
+}
+
 func containsInt(list []int, v int) bool {
 	for _, x := range list {
 		if x == v {
@@ -390,7 +399,8 @@ func setTaskDelegation(w http.ResponseWriter, r *http.Request) {
 	}
 	var cats []string
 	json.Unmarshal([]byte(ownerCategories.String), &cats)
-	categoryOK := len(cats) == 0 || tplCategory == ""
+	// Kategoriyasiz worker vazifa ko'rmaydi — demak, bera ham olmaydi.
+	categoryOK := len(cats) > 0 && tplCategory == ""
 	for _, c := range cats {
 		if c == tplCategory {
 			categoryOK = true

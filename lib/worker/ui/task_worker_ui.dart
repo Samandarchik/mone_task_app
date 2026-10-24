@@ -26,7 +26,6 @@ import 'package:mone_task_app/worker/model/task_worker_model.dart';
 import 'package:mone_task_app/worker/model/response_task_model.dart';
 import 'package:mone_task_app/worker/model/user_model.dart';
 import 'package:mone_task_app/worker/service/log_out.dart';
-import 'package:mone_task_app/worker/service/employee_service.dart';
 import 'package:mone_task_app/worker/service/task_worker_service.dart';
 import 'package:mone_task_app/worker/ui/my_employees_page.dart';
 import 'dart:async';
@@ -54,9 +53,6 @@ class _TaskWorkerUiState extends State<TaskWorkerUi> {
   UserModel? user;
   StreamSubscription? _wsSub;
 
-  /// Sotrudnik id → ismi (kartada «Поручено» uchun, faqat worker)
-  Map<int, String> _employeeNames = {};
-
   /// Worker o'z vazifalarini sotrudniklariga biriktira oladi
   bool get _isOwner => user?.role == 'worker';
   bool get _isEmployee => user?.role == 'sotrudnik';
@@ -67,6 +63,10 @@ class _TaskWorkerUiState extends State<TaskWorkerUi> {
     user = tokenStorage.getUserData();
     _fetchTasks(showLoading: true);
     _initWs();
+    // Revizor talabi bo'lsa — ilova ochilishi bilan majburiy oyna
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) checkMyDemands(context);
+    });
   }
 
   void _initWs() {
@@ -81,6 +81,8 @@ class _TaskWorkerUiState extends State<TaskWorkerUi> {
         if (data is Map<String, dynamic> && mounted) {
           showTaskReminder(context, data);
         }
+      } else if (event['event'] == 'task_demand') {
+        if (mounted) checkMyDemands(context);
       } else if (event['event'] == 'user_updated') {
         final data = event['data'];
         if (data is Map<String, dynamic>) {
@@ -109,15 +111,9 @@ class _TaskWorkerUiState extends State<TaskWorkerUi> {
       });
     try {
       final tasks = await TaskWorkerService().fetchTasks(date: _selectedDate);
-      final employees = _isOwner
-          ? await EmployeeService().fetchEmployees().catchError(
-              (_) => <EmployeeModel>[],
-            )
-          : const <EmployeeModel>[];
       if (mounted)
         setState(() {
           _tasks = tasks;
-          _employeeNames = {for (final e in employees) e.userId: e.username};
           _isLoading = false;
           _hasError = false;
         });
@@ -139,16 +135,6 @@ class _TaskWorkerUiState extends State<TaskWorkerUi> {
       MaterialPageRoute(builder: (_) => const MyEmployeesPage()),
     );
     if (mounted) _refresh();
-  }
-
-  Future<void> _delegate(TaskModel task) async {
-    final saved = await showDelegateSheet(
-      context,
-      templateId: task.templateId,
-      taskTitle: task.task,
-      delegatedTo: task.delegatedTo,
-    );
-    if (saved && mounted) _refresh();
   }
 
   Future<void> _openTaskManager() async {
@@ -175,10 +161,13 @@ class _TaskWorkerUiState extends State<TaskWorkerUi> {
     }
 
     // Kategoriya bo'yicha filtrlash — faqat worker rolida.
-    final cats = user?.categories;
-    if (user?.role == 'worker' && cats != null && cats.isNotEmpty) {
-      final allowed = cats.toSet();
-      tasks = tasks.where((t) => allowed.contains(t.category)).toList();
+    // Kategoriya tanlanmagan bo'lsa — hech qanday vazifa ko'rinmaydi
+    // (backend ham shunday qaytaradi).
+    if (user?.role == 'worker') {
+      final allowed = (user?.categories ?? const <String>[]).toSet();
+      tasks = allowed.isEmpty
+          ? const <TaskModel>[]
+          : tasks.where((t) => allowed.contains(t.category)).toList();
     }
 
     return tasks;
@@ -720,10 +709,6 @@ class _TaskWorkerUiState extends State<TaskWorkerUi> {
                           color: Color(0xFF111827),
                         ),
                       ),
-                      if (task.delegatedTo.isNotEmpty) ...[
-                        const SizedBox(height: 6),
-                        _delegatedChip(task),
-                      ],
                       if (task.submittedBy != null || slots > 1) ...[
                         const SizedBox(height: 4),
                         Text(
@@ -769,17 +754,6 @@ class _TaskWorkerUiState extends State<TaskWorkerUi> {
                         : Icons.push_pin_outlined,
                   ),
                 ),
-                if (_isOwner)
-                  IconButton(
-                    onPressed: () => _delegate(task),
-                    visualDensity: VisualDensity.compact,
-                    iconSize: 20,
-                    tooltip: 'Поручить сотруднику',
-                    color: task.delegatedTo.isNotEmpty
-                        ? const Color(0xFF2563EB)
-                        : const Color(0xFF9CA3AF),
-                    icon: const Icon(Icons.person_add_alt_1_rounded),
-                  ),
               ],
             ),
           ),
@@ -823,30 +797,6 @@ class _TaskWorkerUiState extends State<TaskWorkerUi> {
                 TaskWorkerService().deleteAudio(id, date, idx),
           ),
         ],
-      ),
-    );
-  }
-
-  Widget _delegatedChip(TaskModel task) {
-    final names = [
-      for (final id in task.delegatedTo) _employeeNames[id] ?? '#$id',
-    ];
-    return GestureDetector(
-      onTap: () => _delegate(task),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-        decoration: BoxDecoration(
-          color: const Color(0xFFEFF4FF),
-          borderRadius: BorderRadius.circular(8),
-        ),
-        child: Text(
-          "👤 Поручено: ${names.join(', ')}",
-          style: const TextStyle(
-            fontSize: 12,
-            fontWeight: FontWeight.w600,
-            color: Color(0xFF2563EB),
-          ),
-        ),
       ),
     );
   }

@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'package:dio/dio.dart';
 import 'package:mone_task_app/core/constants/urls.dart';
 import 'package:mone_task_app/core/di/di.dart';
@@ -85,6 +86,8 @@ class ExcelReportService {
         throw Exception('Ошибка при скачивании Excel: ${response.statusCode}');
       }
     } on DioException catch (e) {
+      // Fayl yozish xatosi (masalan, ruxsat yo'q) — chaqiruvchi o'zi hal qiladi
+      if (e.error is FileSystemException) throw e.error!;
       if (e.response != null) {
         throw Exception('Ошибка сервера: ${e.response?.statusCode}');
       } else if (e.type == DioExceptionType.connectionTimeout) {

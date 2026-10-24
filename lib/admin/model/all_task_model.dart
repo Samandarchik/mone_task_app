@@ -5,6 +5,9 @@ class TemplateTaskModel {
   final int type; // 0: oylik, 1: kunlik, 2: haftalik, 3: oyning kunlari
   final List<int> filialIds;
   final int orderIndex;
+
+  /// Joriy foydalanuvchi qadab qo'ygan — bosh sahifadagi kabi tepada turadi
+  final bool pinned;
   final List<int>? days;
   final String category;
   final String createdAt;
@@ -17,6 +20,7 @@ class TemplateTaskModel {
     required this.task,
     required this.type,
     required this.orderIndex,
+    this.pinned = false,
     required this.filialIds,
     this.days,
     required this.createdAt,
@@ -32,6 +36,7 @@ class TemplateTaskModel {
       task: json['task'] ?? '',
       type: json['type'] ?? 0,
       orderIndex: json['orderIndex'] ?? 1,
+      pinned: json['pinned'] ?? false,
       filialIds: List<int>.from(json['filialIds'] ?? []),
       days: json['days'] != null ? List<int>.from(json['days']) : null,
       createdAt: json['createdAt'] ?? '',
