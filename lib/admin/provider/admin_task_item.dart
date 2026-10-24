@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/gestures.dart';
@@ -7,10 +8,13 @@ import 'package:mone_task_app/admin/provider/admin_tasks_provider.dart';
 import 'package:mone_task_app/admin/provider/video_download_provider.dart';
 import 'package:mone_task_app/admin/ui/audio_task_row.dart';
 import 'package:mone_task_app/checker/model/checker_check_task_model.dart';
+import 'package:mone_task_app/checker/service/task_worker_service.dart';
 import 'package:mone_task_app/shared/widgets/status_permission.dart';
 import 'package:mone_task_app/shared/widgets/task_video_strip.dart';
 import 'package:mone_task_app/utils/get_color.dart';
+import 'package:path_provider/path_provider.dart';
 import 'package:provider/provider.dart';
+import 'package:record/record.dart';
 
 class AdminTaskListItem extends StatelessWidget {
   final int index;
@@ -323,7 +327,7 @@ class AdminTaskListItem extends StatelessWidget {
 
 // ── Status tugmalari: yashil / sariq / qizil ───────────────────────────────
 
-class _StatusButtons extends StatelessWidget {
+class _StatusButtons extends StatefulWidget {
   final TaskModel task;
   final DateTime selectedDate;
   final bool isTablet;
@@ -335,90 +339,254 @@ class _StatusButtons extends StatelessWidget {
   });
 
   @override
+  State<_StatusButtons> createState() => _StatusButtonsState();
+}
+
+/// Sariq «Р» / qizil «А» doirasini bosib turish — ovoz yoziladi va
+/// qo'yib yuborilganda yuboriladi (status serverda rolga qarab qo'yiladi).
+/// Qisqa bosish — avvalgidek faqat status o'zgaradi.
+class _StatusButtonsState extends State<_StatusButtons> {
+  final AudioRecorder _recorder = AudioRecorder();
+  int? _holdingLevel;
+  bool _isRecording = false;
+  bool _isSending = false;
+  bool _cancelled = false;
+  bool _pressing = false; // barmoq hali doirada
+  int _recordSeconds = 0;
+  Timer? _recordTimer;
+
+  TaskModel get task => widget.task;
+
+  @override
+  void dispose() {
+    _recordTimer?.cancel();
+    _recorder.dispose();
+    super.dispose();
+  }
+
+  Future<void> _startRecording(int level) async {
+    if (_isRecording || _isSending) return;
+    if (!checkStatusPermission(context, level)) return;
+    _pressing = true;
+
+    if (!await _recorder.hasPermission()) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Доступ к микрофону не предоставлен')),
+        );
+      }
+      return;
+    }
+
+    final dir = await getTemporaryDirectory();
+    final path =
+        '${dir.path}/voice_${task.taskId}_${DateTime.now().millisecondsSinceEpoch}.m4a';
+    await _recorder.start(
+      const RecordConfig(encoder: AudioEncoder.aacLc, bitRate: 128000),
+      path: path,
+    );
+    // Mikrofon ochilguncha barmoq qo'yib yuborilgan — yozuvni tashlaymiz
+    if (!_pressing || !mounted) {
+      final p = await _recorder.stop();
+      if (p != null) {
+        try {
+          File(p).deleteSync();
+        } catch (_) {}
+      }
+      return;
+    }
+
+    _recordSeconds = 0;
+    _recordTimer = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (mounted) setState(() => _recordSeconds++);
+    });
+    if (mounted) {
+      setState(() {
+        _holdingLevel = level;
+        _isRecording = true;
+        _cancelled = false;
+      });
+    }
+  }
+
+  Future<void> _stopAndSend() async {
+    _pressing = false;
+    if (!_isRecording) return;
+    _recordTimer?.cancel();
+    _recordTimer = null;
+
+    final path = await _recorder.stop();
+    final cancelled = _cancelled;
+    if (mounted) {
+      setState(() {
+        _isRecording = false;
+        _holdingLevel = null;
+      });
+    }
+    if (path == null) return;
+
+    final file = File(path);
+    if (cancelled || !await file.exists() || await file.length() < 100) {
+      try {
+        file.deleteSync();
+      } catch (_) {}
+      return;
+    }
+
+    if (mounted) setState(() => _isSending = true);
+    bool success = false;
+    try {
+      success = await TaskViewService().pushAudio(
+        task.taskId,
+        file,
+        widget.selectedDate,
+      );
+    } catch (_) {}
+    if (!mounted) return;
+    setState(() => _isSending = false);
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(success ? 'Аудио отправлено ✓' : 'Произошла ошибка'),
+        backgroundColor: success ? Colors.green : Colors.red,
+        duration: const Duration(milliseconds: 800),
+      ),
+    );
+  }
+
+  Future<void> _onTap(int level, bool enabled) async {
+    if (!checkStatusPermission(context, level)) return;
+    if (!enabled || task.status == level) return;
+    await context.read<AdminTasksProvider>().updateTaskStatus(
+      task.taskId,
+      level,
+      widget.selectedDate,
+    );
+  }
+
+  @override
   Widget build(BuildContext context) {
     final hasVideo = task.hasAnyVideo;
     // Barcha videolar yuklanmaguncha tasdiqlab (sariq) bo'lmaydi
     final complete = task.videosComplete;
-    final gap = isTablet ? 14.0 : 8.0;
+    final gap = widget.isTablet ? 14.0 : 8.0;
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        _circle(context, 3, Colors.green, enabled: false),
+        if (_isRecording) ...[
+          Icon(Icons.fiber_manual_record, size: 12, color: Colors.red),
+          const SizedBox(width: 4),
+          Text(
+            _cancelled
+                ? 'Отмена'
+                : '${_recordSeconds ~/ 60}:${(_recordSeconds % 60).toString().padLeft(2, '0')}',
+            style: const TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w600,
+              color: Colors.red,
+            ),
+          ),
+          SizedBox(width: gap),
+        ] else if (_isSending) ...[
+          const SizedBox(
+            width: 16,
+            height: 16,
+            child: CircularProgressIndicator(strokeWidth: 2),
+          ),
+          SizedBox(width: gap),
+        ],
+        _circle(3, Colors.green, enabled: false),
         SizedBox(width: gap),
-        _circle(context, 2, Colors.orange, enabled: complete),
+        _circle(2, Colors.orange, enabled: complete),
         SizedBox(width: gap),
-        _circle(context, 1, Colors.red, enabled: hasVideo),
+        _circle(1, Colors.red, enabled: hasVideo),
       ],
     );
   }
 
-  Widget _circle(
-    BuildContext context,
-    int level,
-    Color color, {
-    required bool enabled,
-  }) {
+  Widget _circle(int level, Color color, {required bool enabled}) {
     final current = task.status;
     final isActive = current == level;
+    final isHolding = _holdingLevel == level;
     final isWaiting = task.videosComplete && current == null;
-    final size = isTablet ? 38.0 : 28.0;
-
+    final baseSize = widget.isTablet ? 38.0 : 28.0;
+    final size = isHolding ? baseSize + 8 : baseSize;
     final letter = statusLetter(level);
 
-    return GestureDetector(
-      onTap: enabled || statusDeniedMessage(level) != null
-          ? () async {
-              if (!checkStatusPermission(context, level)) return;
-              if (!enabled) return;
-              if (current != level) {
-                await context.read<AdminTasksProvider>().updateTaskStatus(
-                  task.taskId,
-                  level,
-                  selectedDate,
-                );
-              }
-            }
-          : null,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 120),
-        width: size,
-        height: size,
-        decoration: BoxDecoration(
-          shape: BoxShape.circle,
-          color: isActive ? color : color.withValues(alpha: 0.08),
-          border: Border.all(
-            color: isActive
-                ? color
-                : color.withValues(alpha: enabled ? 0.45 : 0.25),
-            width: 2,
-          ),
-          boxShadow: isActive
-              ? [BoxShadow(color: color.withValues(alpha: 0.35), blurRadius: 6)]
-              : const [],
+    final circle = AnimatedContainer(
+      duration: const Duration(milliseconds: 120),
+      width: size,
+      height: size,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        color: isActive || isHolding ? color : color.withValues(alpha: 0.08),
+        border: Border.all(
+          color: isActive || isHolding
+              ? color
+              : color.withValues(alpha: enabled ? 0.45 : 0.25),
+          width: 2,
         ),
-        alignment: Alignment.center,
-        child: letter != null
-            ? Text(
-                letter,
-                style: TextStyle(
-                  fontSize: size * 0.45,
-                  fontWeight: FontWeight.w800,
-                  height: 1,
-                  color: isActive
-                      ? Colors.white
-                      : color.withValues(alpha: enabled ? 0.9 : 0.45),
-                ),
-              )
-            : isActive
-            ? Icon(Icons.check, size: size * 0.55, color: Colors.white)
-            : isWaiting
-            ? Icon(
-                Icons.check,
-                size: size * 0.55,
-                color: color.withValues(alpha: 0.5),
-              )
-            : null,
+        boxShadow: isActive || isHolding
+            ? [BoxShadow(color: color.withValues(alpha: 0.35), blurRadius: 6)]
+            : const [],
       ),
+      alignment: Alignment.center,
+      child: isHolding
+          ? Icon(Icons.mic_rounded, size: size * 0.55, color: Colors.white)
+          : letter != null
+          ? Text(
+              letter,
+              style: TextStyle(
+                fontSize: size * 0.45,
+                fontWeight: FontWeight.w800,
+                height: 1,
+                color: isActive
+                    ? Colors.white
+                    : color.withValues(alpha: enabled ? 0.9 : 0.45),
+              ),
+            )
+          : isActive
+          ? Icon(Icons.check, size: size * 0.55, color: Colors.white)
+          : isWaiting
+          ? Icon(
+              Icons.check,
+              size: size * 0.55,
+              color: color.withValues(alpha: 0.5),
+            )
+          : null,
+    );
+
+    // Yashil — qo'lda bosilmaydi
+    if (letter == null) return circle;
+
+    // Uzoq bosish kartani sudrashdan (500ms) oldinroq ishga tushadi —
+    // shuning uchun bosib turish ovoz yozadi, karta sudralmaydi.
+    return RawGestureDetector(
+      behavior: HitTestBehavior.opaque,
+      gestures: {
+        TapGestureRecognizer:
+            GestureRecognizerFactoryWithHandlers<TapGestureRecognizer>(
+              () => TapGestureRecognizer(),
+              (r) => r.onTap = () => _onTap(level, enabled),
+            ),
+        LongPressGestureRecognizer:
+            GestureRecognizerFactoryWithHandlers<LongPressGestureRecognizer>(
+              () => LongPressGestureRecognizer(
+                duration: const Duration(milliseconds: 250),
+              ),
+              (r) => r
+                ..onLongPressStart = ((_) => _startRecording(level))
+                ..onLongPressMoveUpdate = (d) {
+                  // Uzoqqa surib qo'yib yuborilsa — bekor qilinadi
+                  final cancel = d.localOffsetFromOrigin.distance > 80;
+                  if (cancel != _cancelled && _isRecording) {
+                    setState(() => _cancelled = cancel);
+                  }
+                }
+                ..onLongPressEnd = ((_) => _stopAndSend())
+                ..onLongPressCancel = () => _stopAndSend(),
+            ),
+      },
+      child: circle,
     );
   }
 }

@@ -14,6 +14,7 @@ import 'package:mone_task_app/core/constants/urls.dart';
 import 'package:mone_task_app/core/context_extension.dart';
 import 'package:mone_task_app/core/data/local/active_filial.dart';
 import 'package:mone_task_app/core/data/local/token_storage.dart';
+import 'package:mone_task_app/home/service/api_service.dart';
 import 'package:mone_task_app/home/ui/filial_select_page.dart';
 import 'package:mone_task_app/home/ui/role_home.dart';
 import 'package:mone_task_app/shared/services/task_prefs_service.dart';
@@ -63,10 +64,29 @@ class _TaskWorkerUiState extends State<TaskWorkerUi> {
     user = tokenStorage.getUserData();
     _fetchTasks(showLoading: true);
     _initWs();
+    _syncUser();
     // Revizor talabi bo'lsa — ilova ochilishi bilan majburiy oyna
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) checkMyDemands(context);
     });
+  }
+
+  /// Ilova yopiq paytda o'zgargan ruxsatlar (masalan, «Задачи») WS orqali
+  /// kelmaydi — saqlangan ma'lumotni serverdagisi bilan yangilaymiz.
+  Future<void> _syncUser() async {
+    final data = await ApiService().me();
+    if (data == null || !mounted) return;
+    final before = user;
+    final updated = applyUserUpdateEvent(data);
+    if (updated == null || !mounted) return;
+    final filialsChanged =
+        (before?.filialIds ?? const <int>[]).join(',') !=
+        (updated.filialIds ?? const <int>[]).join(',');
+    if (before?.role != updated.role || filialsChanged) {
+      context.pushAndRemove(landingForUser(updated));
+    } else {
+      setState(() => user = updated);
+    }
   }
 
   void _initWs() {

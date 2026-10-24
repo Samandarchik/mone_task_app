@@ -16,6 +16,7 @@ abstract final class AppUrls {
   static const String login = '$baseUrl/api/auth/login';
   static const String register = '$baseUrl/api/auth/register';
   static const String logOut = '$baseUrl/api/auth/logout';
+  static const String me = '$baseUrl/api/auth/me';
   static const String refresh = '$baseUrl/refresh';
   static const String tasks = '$baseUrl/api/tasks';
   static const String tasksAll = '$baseUrl/api/tasks/all';

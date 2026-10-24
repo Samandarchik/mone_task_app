@@ -319,7 +319,7 @@ const (
 
 	// AppVersion — har deployda oshiriladi. /api/version orqali tekshiriladi:
 	// serverda yangi kod ishga tushganini bir zumda bilish uchun.
-	AppVersion = "1.1.0-filial-filter"
+	AppVersion = "1.2.0-refresh-today"
 )
 
 type User struct {
@@ -422,6 +422,7 @@ func main() {
 	r.HandleFunc("/api/auth/register", register).Methods("POST")
 	r.HandleFunc("/api/auth/login", login).Methods("POST")
 	r.HandleFunc("/api/auth/logout", authMiddleware(logout)).Methods("POST")
+	r.HandleFunc("/api/auth/me", authMiddleware(me)).Methods("GET")
 	r.HandleFunc("/api/auth/force-logout/{userId}", authMiddleware(forceLogout)).Methods("POST")
 
 	// Tasks
@@ -429,6 +430,7 @@ func main() {
 	r.HandleFunc("/api/tasks/all", authMiddleware(getAllTasks)).Methods("GET")
 	r.HandleFunc("/api/tasks/overdue", authMiddleware(getOverdueTasks)).Methods("GET")
 	r.HandleFunc("/api/tasks", authMiddleware(createTask)).Methods("POST")
+	r.HandleFunc("/api/tasks/refresh-today", authMiddleware(refreshTodayTasksHandler)).Methods("POST")
 	r.HandleFunc("/api/tasks/{id}", authMiddleware(getTask)).Methods("GET")
 	r.HandleFunc("/api/tasks/{id}", authMiddleware(updateTask)).Methods("PUT")
 	r.HandleFunc("/api/tasks/{id}", authMiddleware(deleteTask)).Methods("DELETE")
@@ -1056,6 +1058,44 @@ func logout(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// me — joriy foydalanuvchining amaldagi ruxsatlari. Ilova ochilganda
+// saqlangan (eski) ma'lumotni yangilash uchun: ilova yopiq paytda berilgan
+// ruxsatlar (masalan, «Задачи») WS hodisasi orqali yetib kelmaydi.
+func me(w http.ResponseWriter, r *http.Request) {
+	db, err := getMainDB()
+	if err != nil {
+		respondJSON(w, http.StatusInternalServerError, map[string]interface{}{
+			"success": false,
+			"error":   "Server xatosi",
+		})
+		return
+	}
+	defer db.Close()
+
+	var user User
+	var filialIDsStr, categoriesStr sql.NullString
+	err = db.QueryRow("SELECT id, username, role, filial_ids, categories, COALESCE(can_manage_tasks, 0) FROM users WHERE id = ?",
+		r.Header.Get("UserID")).Scan(&user.ID, &user.Username, &user.Role, &filialIDsStr, &categoriesStr, &user.CanManageTasks)
+	if err != nil {
+		respondJSON(w, http.StatusNotFound, map[string]interface{}{
+			"success": false,
+			"error":   "Foydalanuvchi topilmadi",
+		})
+		return
+	}
+	if categoriesStr.Valid && categoriesStr.String != "" {
+		json.Unmarshal([]byte(categoriesStr.String), &user.Categories)
+	}
+	if filialIDsStr.Valid && filialIDsStr.String != "" {
+		user.FilialIDs = parseFilialIDs(filialIDsStr.String)
+	}
+
+	respondJSON(w, http.StatusOK, map[string]interface{}{
+		"success": true,
+		"user":    user,
+	})
+}
+
 func forceLogout(w http.ResponseWriter, r *http.Request) {
 	role := r.Header.Get("Role")
 	if role != RoleSuperAdmin {
@@ -1242,6 +1282,8 @@ func getTasks(w http.ResponseWriter, r *http.Request) {
 		tasks = append(tasks, t)
 	}
 
+	// Bir shablon uchun bitta karta (dublikatlar ilovadagi ro'yxatni buzadi)
+	tasks = dedupeTasks(tasks)
 	applyUserTaskPrefs(userID, tasks)
 	if role == RoleWorker {
 		fillDelegations(userID, tasks)
@@ -3983,27 +4025,58 @@ func deleteUser(w http.ResponseWriter, r *http.Request) {
 }
 
 func startScheduler() {
+	// Server ishga tushganda darhol bugungi vazifalarni yaratadi
+	refreshTodayTasks()
+
 	ticker := time.NewTicker(1 * time.Minute)
 	defer ticker.Stop()
 
-	var lastRun string
+	lastRun := time.Now().Format("2006-01-02")
 
 	for range ticker.C {
 		now := time.Now()
 		currentDay := now.Format("2006-01-02")
 
-		if now.Hour() == 0 && now.Minute() == 0 && lastRun != currentDay {
+		// Kun almashganda, hamda har 10 daqiqada — keyin biriktirilgan
+		// ishchilar uchun yetishmayotgan vazifalar ham chiqadi.
+		// createTasksForDate mavjud vazifani qayta yaratmaydi.
+		if lastRun != currentDay || now.Minute()%10 == 0 {
 			lastRun = currentDay
-			log.Println("=== Starting daily tasks creation ===")
-
-			ensureTodayDB()
-			createDailyTasks()
-			createWeeklyTasks()
-			createMonthlyTasks()
-
-			log.Println("=== Task creation completed ===")
+			refreshTodayTasks()
 		}
 	}
+}
+
+func refreshTodayTasks() {
+	log.Println("=== Starting daily tasks creation ===")
+	ensureTodayDB()
+	createDailyTasks()
+	createWeeklyTasks()
+	createMonthlyTasks()
+	// Avval yaratilib qolgan bo'sh dublikatlarni tozalaymiz
+	if taskDB, err := getTaskDB(time.Now()); err == nil {
+		removeUntouchedDuplicates(taskDB)
+		taskDB.Close()
+	}
+	log.Println("=== Task creation completed ===")
+}
+
+// POST /api/tasks/refresh-today — bugungi yetishmayotgan vazifalarni hozir yaratish
+func refreshTodayTasksHandler(w http.ResponseWriter, r *http.Request) {
+	role := r.Header.Get("Role")
+	if role != RoleSuperAdmin {
+		respondJSON(w, http.StatusForbidden, map[string]interface{}{
+			"success": false,
+			"error":   "Faqat super admin ruxsati",
+		})
+		return
+	}
+
+	refreshTodayTasks()
+
+	respondJSON(w, http.StatusOK, map[string]interface{}{
+		"success": true,
+	})
 }
 
 func startCleanup() {
@@ -4216,11 +4289,18 @@ func createTasksForDate(templateID int, task string, taskType int, filialIDs []i
 			continue
 		}
 
+		// Bir shablon uchun bitta filialda bitta vazifa. Kategoriya yoki matn
+		// o'zgargan bo'lsa (shablon tahrirlandi, kategoriya o'chirildi) mavjud
+		// vazifani yangilaymiz - yangisini yaratmaymiz, dublikat bo'lmasin.
 		var existingID int
-		err = taskDB.QueryRow("SELECT id FROM tasks WHERE template_id = ? AND filial_id = ? AND category = ?",
-			templateID, filialID, category).Scan(&existingID)
+		var existingTask, existingCategory string
+		err = taskDB.QueryRow("SELECT id, task, category FROM tasks WHERE template_id = ? AND filial_id = ? ORDER BY id LIMIT 1",
+			templateID, filialID).Scan(&existingID, &existingTask, &existingCategory)
 
 		if err == nil {
+			if existingTask != task || existingCategory != category {
+				taskDB.Exec("UPDATE tasks SET task = ?, category = ? WHERE id = ?", task, category, existingID)
+			}
 			continue
 		}
 

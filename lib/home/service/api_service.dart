@@ -40,4 +40,16 @@ class ApiService {
       return {'success': false, 'message': 'Непредвиденная ошибка: $e'};
     }
   }
+
+  /// Joriy foydalanuvchining serverdagi amaldagi ma'lumoti (rol, filiallar,
+  /// «Задачи» ruxsati). Xato bo'lsa null.
+  Future<Map<String, dynamic>?> me() async {
+    try {
+      final response = await dio.get(AppUrls.me);
+      final user = response.data is Map ? response.data['user'] : null;
+      return user is Map ? Map<String, dynamic>.from(user) : null;
+    } catch (_) {
+      return null;
+    }
+  }
 }

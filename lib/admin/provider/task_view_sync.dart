@@ -40,7 +40,11 @@ class TaskSyncScope {
 /// so'raganda kerakli vazifaga scroll qiladi.
 mixin TaskScrollSync<T extends StatefulWidget> on State<T> {
   final ScrollController syncController = ScrollController();
-  final Map<int, GlobalKey> _keys = {};
+
+  /// Har bir element uchun alohida kalit. Bir shablonning ikkita vazifasi
+  /// (dublikat) bo'lsa ham GlobalKey to'qnashmasin — aks holda ro'yxat buziladi.
+  final Map<Object, GlobalKey> _keys = {};
+  final Map<Object, int> _templateOf = {};
 
   TaskSyncScope? get syncScope;
   int get syncFilialId;
@@ -50,9 +54,13 @@ mixin TaskScrollSync<T extends StatefulWidget> on State<T> {
 
   bool get _isCurrent => TaskViewSync.filialId == syncFilialId;
 
-  /// Vazifa kartasini o'rash uchun kalit (shablon bo'yicha)
-  GlobalKey syncKey(int templateId) =>
-      _keys.putIfAbsent(templateId, () => GlobalKey());
+  /// Vazifa kartasini o'rash uchun kalit. [itemKey] — elementning o'ziga xos
+  /// identifikatori (masalan, taskId); berilmasa shablon ID ishlatiladi.
+  GlobalKey syncKey(int templateId, [Object? itemKey]) {
+    final key = itemKey ?? templateId;
+    _templateOf[key] = templateId;
+    return _keys.putIfAbsent(key, () => GlobalKey());
+  }
 
   @override
   void initState() {
@@ -113,11 +121,21 @@ mixin TaskScrollSync<T extends StatefulWidget> on State<T> {
       if (viewport == null) continue;
       final offset = viewport.getOffsetToReveal(object, 0).offset;
       if (offset <= pixels + 24 && offset > bestOffset) {
-        best = entry.key;
+        best = _templateOf[entry.key];
         bestOffset = offset;
       }
     }
     return best;
+  }
+
+  /// Shablonning qurilgan kartasi (dublikat bo'lsa — birinchisi)
+  BuildContext? _contextOfTemplate(int templateId) {
+    for (final entry in _keys.entries) {
+      if (_templateOf[entry.key] != templateId) continue;
+      final context = entry.value.currentContext;
+      if (context != null) return context;
+    }
+    return null;
   }
 
   /// Vazifani ro'yxat tepasiga olib keladi. Ro'yxat dangasa quriladi —
@@ -128,7 +146,7 @@ mixin TaskScrollSync<T extends StatefulWidget> on State<T> {
     if (index < 0) return;
 
     for (var attempt = 0; attempt < 8 && mounted; attempt++) {
-      final context = _keys[templateId]?.currentContext;
+      final context = _contextOfTemplate(templateId);
       if (context != null) {
         await Scrollable.ensureVisible(
           context,

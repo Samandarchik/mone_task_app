@@ -170,7 +170,7 @@ class _AdminTaskListWidgetState extends State<AdminTaskListWidget>
             return KeyedSubtree(
               key: ValueKey(task.taskId),
               child: KeyedSubtree(
-                key: syncKey(task.templateId),
+                key: syncKey(task.templateId, task.taskId),
                 child: AdminTaskListItem(
                   index: i + 1,
                   reorderIndex: i,
