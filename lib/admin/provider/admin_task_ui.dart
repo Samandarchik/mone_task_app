@@ -3,7 +3,7 @@ import 'dart:io';
 import 'dart:ui';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
-import 'package:path_provider/path_provider.dart';
+import 'package:mone_task_app/core/utils/video_cache_dir.dart';
 import 'package:mone_task_app/shared/widgets/task_reminders.dart';
 import 'package:mone_task_app/shared/widgets/profile_switch_button.dart';
 import 'package:mone_task_app/admin/model/filial_model.dart';
@@ -437,8 +437,7 @@ class _AdminTaskUiState extends State<AdminTaskUi>
     );
 
     try {
-      final directory = await getApplicationDocumentsDirectory();
-      final videosDir = Directory('${directory.path}/videos');
+      final videosDir = await getVideoCacheDir();
 
       int deleted = 0;
       if (await videosDir.exists()) {

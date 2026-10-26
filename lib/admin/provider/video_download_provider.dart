@@ -5,7 +5,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:mone_task_app/checker/model/checker_check_task_model.dart';
 import 'package:mone_task_app/core/constants/urls.dart';
-import 'package:path_provider/path_provider.dart';
+import 'package:mone_task_app/core/utils/video_cache_dir.dart';
 
 enum VideoStatus { notStarted, downloading, cached, error }
 
@@ -151,6 +151,8 @@ class VideoDownloadProvider extends ChangeNotifier {
 
       final tempFile = File(tempPath);
       if (await tempFile.exists() && await tempFile.length() > 0) {
+        // Windowsda mavjud faylga rename xato berishi mumkin
+        if (await file.exists()) await file.delete();
         await tempFile.rename(localPath);
         _updateState(
           videoUrl,
@@ -168,6 +170,7 @@ class VideoDownloadProvider extends ChangeNotifier {
         );
       }
     } catch (e) {
+      debugPrint('Video yuklab bo\'lmadi ($videoUrl): $e');
       try {
         final localPath = await _getLocalFilePath(videoUrl);
         final tempFile = File('$localPath.tmp');
@@ -196,11 +199,7 @@ class VideoDownloadProvider extends ChangeNotifier {
   }
 
   Future<String> _getLocalFilePath(String videoUrl) async {
-    final directory = await getApplicationDocumentsDirectory();
-    final videosDir = Directory('${directory.path}/videos');
-    if (!await videosDir.exists()) {
-      await videosDir.create(recursive: true);
-    }
+    final videosDir = await getVideoCacheDir();
     final fileName = videoUrl
         .split('/')
         .last

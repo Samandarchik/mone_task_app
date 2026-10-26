@@ -9,7 +9,7 @@ import 'package:mone_task_app/core/constants/urls.dart';
 import 'package:mone_task_app/utils/get_color.dart';
 import 'package:mone_task_app/core/utils/share_helper.dart';
 import 'package:dio/dio.dart';
-import 'package:path_provider/path_provider.dart';
+import 'package:mone_task_app/core/utils/video_cache_dir.dart';
 import 'dart:io';
 
 class TaskListWidget extends StatefulWidget {
@@ -44,19 +44,11 @@ class _TaskListWidgetState extends State<TaskListWidget> {
   }
 
   Future<void> _loadCachedVideos() async {
-    final directory = await getApplicationDocumentsDirectory();
-    final videosDir = Directory('${directory.path}/videos');
-    if (!await videosDir.exists()) {
-      await videosDir.create(recursive: true);
-    }
+    await getVideoCacheDir();
   }
 
   Future<String> _getLocalFilePath(String videoUrl) async {
-    final directory = await getApplicationDocumentsDirectory();
-    final videosDir = Directory('${directory.path}/videos');
-    if (!await videosDir.exists()) {
-      await videosDir.create(recursive: true);
-    }
+    final videosDir = await getVideoCacheDir();
     final fileName = videoUrl
         .split('/')
         .last

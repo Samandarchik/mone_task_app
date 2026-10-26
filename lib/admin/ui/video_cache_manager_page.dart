@@ -1,7 +1,7 @@
 import 'dart:io';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
-import 'package:path_provider/path_provider.dart';
+import 'package:mone_task_app/core/utils/video_cache_dir.dart';
 
 class VideoCacheManagerPage extends StatefulWidget {
   const VideoCacheManagerPage({super.key});
@@ -26,8 +26,7 @@ class _VideoCacheManagerPageState extends State<VideoCacheManagerPage> {
     setState(() => _isLoading = true);
 
     try {
-      final directory = await getApplicationDocumentsDirectory();
-      final videosDir = Directory('${directory.path}/videos');
+      final videosDir = await getVideoCacheDir();
 
       if (!await videosDir.exists()) {
         setState(() {
@@ -102,8 +101,7 @@ class _VideoCacheManagerPageState extends State<VideoCacheManagerPage> {
     setState(() => _isLoading = true);
 
     try {
-      final directory = await getApplicationDocumentsDirectory();
-      final videosDir = Directory('${directory.path}/videos');
+      final videosDir = await getVideoCacheDir();
 
       if (await videosDir.exists()) {
         await videosDir.delete(recursive: true);
