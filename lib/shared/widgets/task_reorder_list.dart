@@ -4,36 +4,14 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:mone_task_app/shared/models/task_model.dart';
 
-/// Qadalgan vazifalar tepada — tartibning qolgan qismi saqlanadi.
-List<TaskModel> pinnedFirst(List<TaskModel> tasks) => [
-  ...tasks.where((t) => t.pinned),
-  ...tasks.where((t) => !t.pinned),
-];
-
-/// Telegram'dagidek: qadalgan element faqat qadalganlar orasida,
-/// qolganlari faqat o'zaro joy almashadi. [visible] dagi yangi tartibni qaytaradi.
-/// Bosh sahifa (vazifalar) va «Все задачи» (shablonlar) uchun umumiy.
-List<T> reorderedPinnedAware<T>(
-  List<T> visible,
-  int oldIndex,
-  int newIndex,
-  bool Function(T item) isPinned,
-) {
+/// Telegram'dagidek: [visible] ro'yxatda elementni [oldIndex] dan [newIndex]
+/// ga ko'chiradi. Bosh sahifa (vazifalar) va «Все задачи» (shablonlar) uchun umumiy.
+List<T> reordered<T>(List<T> visible, int oldIndex, int newIndex) {
   final list = [...visible];
   final moved = list.removeAt(oldIndex);
-  final pinnedCount = list.where(isPinned).length;
-  final target = isPinned(moved)
-      ? newIndex.clamp(0, pinnedCount)
-      : newIndex.clamp(pinnedCount, list.length);
-  list.insert(target, moved);
+  list.insert(newIndex.clamp(0, list.length), moved);
   return list;
 }
-
-List<TaskModel> reorderedTasks(
-  List<TaskModel> visible,
-  int oldIndex,
-  int newIndex,
-) => reorderedPinnedAware(visible, oldIndex, newIndex, (t) => t.pinned);
 
 /// [visible] ro'yxatidagi yangi tartibni umumiy [all] ro'yxatga joylaydi
 /// (boshqa filial / filtrdan tashqaridagi elementlar o'z joyida qoladi).

@@ -29,7 +29,6 @@ class AdminTaskListItem extends StatelessWidget {
   /// [videoIndex] — taskning nechanchi videosi bosilgani
   final void Function(int videoIndex) onShowVideoPlayer;
   final VoidCallback onShareVideo;
-  final VoidCallback onTogglePin;
 
   /// ReorderableListView ichidagi o'rni — sarlavhani bosib turib sudrash uchun
   final int? reorderIndex;
@@ -52,7 +51,6 @@ class AdminTaskListItem extends StatelessWidget {
     required this.onShowVideoPlayer,
     required this.role,
     required this.onShareVideo,
-    required this.onTogglePin,
     this.reorderIndex,
     this.nextVideoUrl,
     this.onEdit,
@@ -237,22 +235,6 @@ class AdminTaskListItem extends StatelessWidget {
               if (submitted != null) _chip(Icons.person_outline, submitted),
               if (_hasVideo) _buildDownloadBadge(),
             ],
-          ),
-        ),
-        SizedBox(
-          width: 32,
-          height: 32,
-          child: IconButton(
-            padding: EdgeInsets.zero,
-            iconSize: 18,
-            tooltip: task.pinned ? 'Открепить' : 'Закрепить',
-            color: task.pinned
-                ? const Color(0xFF2563EB)
-                : const Color(0xFF9CA3AF),
-            onPressed: onTogglePin,
-            icon: Icon(
-              task.pinned ? Icons.push_pin_rounded : Icons.push_pin_outlined,
-            ),
           ),
         ),
         if (_hasVideo)

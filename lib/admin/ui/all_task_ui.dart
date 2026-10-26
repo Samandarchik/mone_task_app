@@ -414,6 +414,14 @@ class _TemplateTaskAdminUiState extends State<TemplateTaskAdminUi> {
       filtered = filtered.where((t) => t.type == selectedFilter).toList();
     }
 
+    // Bosh sahifa bilan bir xil: foydalanuvchining shu filialdagi shaxsiy
+    // tartibi (super admin uchun yo'q — ro'yxat umumiy tartibda keladi)
+    if (filtered.every((t) => t.positions.containsKey(filialId))) {
+      filtered.sort(
+        (a, b) => a.positions[filialId]!.compareTo(b.positions[filialId]!),
+      );
+    }
+
     if (filtered.isEmpty) {
       return const Center(child: Text("Для этого филиала нет шаблонов"));
     }
@@ -447,7 +455,6 @@ class _TemplateTaskAdminUiState extends State<TemplateTaskAdminUi> {
   /// Bosh sahifadagi kabi: kartani bosib turib sudrash — shaxsiy tartib filial
   /// bo'yicha saqlanadi (super admin uchun umumiy tartib ham shu bo'ladi),
   /// shuning uchun ikkala sahifada ketma-ketlik bir xil qoladi.
-  /// Qadalgan vazifa faqat qadalganlar orasida joy almashadi.
   Future<void> _reorderTemplates(
     List<TemplateTaskModel> all,
     List<TemplateTaskModel> visible,
@@ -456,16 +463,11 @@ class _TemplateTaskAdminUiState extends State<TemplateTaskAdminUi> {
     int newIndex,
   ) async {
     if (!_isSuperAdmin) return;
-    final list = reorderedPinnedAware(
-      visible,
-      oldIndex,
-      newIndex,
-      (t) => t.pinned,
-    );
+    final list = reordered(visible, oldIndex, newIndex);
     final merged = mergeOrderBy(all, list, (t) => t.templateId);
     setState(() => _reordered = merged);
 
-    final ok = await TaskPrefsService().saveOrder([
+    final ok = await TaskPrefsService().saveOrder(filialId, [
       for (final t in merged)
         if (t.filialIds.isEmpty || t.filialIds.contains(filialId)) t.templateId,
     ]);

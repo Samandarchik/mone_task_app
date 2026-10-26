@@ -3,11 +3,8 @@
 class TaskModel {
   int taskId;
 
-  /// Shablon ID — kunlar bo'yicha o'zgarmaydi (pin va shaxsiy tartib uchun)
+  /// Shablon ID — kunlar bo'yicha o'zgarmaydi (shaxsiy tartib uchun)
   int templateId;
-
-  /// Joriy foydalanuvchi qadab qo'ygan
-  bool pinned;
   String task;
   int type;
   int filialId;
@@ -36,7 +33,6 @@ class TaskModel {
   TaskModel({
     required this.taskId,
     this.templateId = 0,
-    this.pinned = false,
     required this.task,
     required this.type,
     this.filialId = 0,
@@ -72,7 +68,6 @@ class TaskModel {
     return TaskModel(
       taskId: json['taskId'] ?? 0,
       templateId: json['templateId'] ?? 0,
-      pinned: json['pinned'] ?? false,
       task: json['task'] ?? '',
       type: json['type'] ?? 1,
       filialId: json['filialId'] ?? 0,

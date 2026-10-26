@@ -157,17 +157,8 @@ class AdminTasksProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  // ── Pin va shaxsiy tartib ────────────────────────────────────────────────
+  // ── Shaxsiy tartib ──────────────────────────────────────────────────────
   final TaskPrefsService _prefs = TaskPrefsService();
-
-  Future<void> togglePin(TaskModel task) async {
-    task.pinned = !task.pinned;
-    _tasks = pinnedFirst(_tasks);
-    notifyListeners();
-    final ok = await _prefs.setPinned(task.templateId, task.pinned);
-    // Qadash olinganda vazifa shaxsiy tartibdagi joyiga qaytadi — serverdan olamiz
-    if (!ok || !task.pinned) await fetchTasks();
-  }
 
   /// Ko'rinib turgan ro'yxatda (filtr bilan ham) bosib turib sudrash
   Future<void> reorderVisible(
@@ -175,13 +166,15 @@ class AdminTasksProvider extends ChangeNotifier {
     int oldIndex,
     int newIndex,
   ) async {
-    final list = reorderedTasks(visible, oldIndex, newIndex);
+    final list = reordered(visible, oldIndex, newIndex);
+    // Yo'lda turgan (eski tartibli) javob yangi tartibni bosib ketmasin
+    _fetchSeq++;
     _tasks = mergeOrder(_tasks, list);
     notifyListeners();
 
     // Shaxsiy tartib filial bo'yicha to'liq saqlanadi
     final filialId = list.first.filialId;
-    final ok = await _prefs.saveOrder([
+    final ok = await _prefs.saveOrder(filialId, [
       for (final t in _tasks)
         if (t.filialId == filialId) t.templateId,
     ]);

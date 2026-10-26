@@ -176,6 +176,10 @@ class _AddAdminTaskState extends State<AddAdminTask> {
                   filials: filials,
                   selectedIds: _selectedFilials,
                   onChanged: (ids) => setState(() => _selectedFilials = ids),
+                  // Har bir vazifa faqat bitta filialga tegishli
+                  hint: _selectedFilials.length > 1
+                      ? "Для каждого филиала будет создана отдельная задача"
+                      : null,
                 ),
                 const SizedBox(height: 12),
 

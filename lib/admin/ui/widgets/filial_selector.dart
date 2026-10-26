@@ -9,6 +9,9 @@ class FilialSelector extends StatelessWidget {
   final String title;
   final bool required;
 
+  /// Sarlavha tagidagi izoh (bo'lsa)
+  final String? hint;
+
   const FilialSelector({
     super.key,
     required this.filials,
@@ -16,6 +19,7 @@ class FilialSelector extends StatelessWidget {
     required this.onChanged,
     this.title = "Филиалы:",
     this.required = false,
+    this.hint,
   });
 
   @override
@@ -45,6 +49,13 @@ class FilialSelector extends StatelessWidget {
             ],
           ],
         ),
+        if (hint != null) ...[
+          const SizedBox(height: 4),
+          Text(
+            hint!,
+            style: const TextStyle(fontSize: 13, color: Color(0xFF6B7280)),
+          ),
+        ],
         const SizedBox(height: 10),
         ...filials.map((filial) {
           final isSelected = selectedIds.contains(filial.filialId);

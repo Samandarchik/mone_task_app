@@ -123,7 +123,11 @@ class _TaskWorkerUiState extends State<TaskWorkerUi> {
     super.dispose();
   }
 
+  // Har bir so'rovga raqam — eskirgan (keyin qaytgan) javob yangisini bosmasin
+  int _fetchSeq = 0;
+
   Future<void> _fetchTasks({bool showLoading = false}) async {
+    final seq = ++_fetchSeq;
     if (showLoading)
       setState(() {
         _isLoading = true;
@@ -131,6 +135,7 @@ class _TaskWorkerUiState extends State<TaskWorkerUi> {
       });
     try {
       final tasks = await TaskWorkerService().fetchTasks(date: _selectedDate);
+      if (seq != _fetchSeq) return;
       if (mounted)
         setState(() {
           _tasks = tasks;
@@ -138,6 +143,7 @@ class _TaskWorkerUiState extends State<TaskWorkerUi> {
           _hasError = false;
         });
     } catch (e) {
+      if (seq != _fetchSeq) return;
       if (mounted)
         setState(() {
           _isLoading = false;
@@ -582,25 +588,25 @@ class _TaskWorkerUiState extends State<TaskWorkerUi> {
     );
   }
 
-  Future<void> _togglePin(TaskModel task) async {
-    setState(() {
-      task.pinned = !task.pinned;
-      _tasks = pinnedFirst(_tasks);
-    });
-    final ok = await _prefs.setPinned(task.templateId, task.pinned);
-    // Qadash olinganda vazifa shaxsiy tartibdagi joyiga qaytadi
-    if (!ok || !task.pinned) _refresh();
-  }
-
   Future<void> _reorder(
     List<TaskModel> visible,
     int oldIndex,
     int newIndex,
   ) async {
-    final list = reorderedTasks(visible, oldIndex, newIndex);
+    final list = reordered(visible, oldIndex, newIndex);
+    // Yo'lda turgan (eski tartibli) javob yangi tartibni bosib ketmasin
+    _fetchSeq++;
     setState(() => _tasks = mergeOrder(_tasks, list));
-    final ok = await _prefs.saveOrder([for (final t in _tasks) t.templateId]);
-    if (!ok) _refresh();
+    // Tartib filial bo'yicha saqlanadi (filial tanlanmagan bo'lsa ro'yxatda
+    // bir nechta filial bo'lishi mumkin)
+    final results = await Future.wait([
+      for (final filialId in {for (final t in list) t.filialId})
+        _prefs.saveOrder(filialId, [
+          for (final t in _tasks)
+            if (t.filialId == filialId) t.templateId,
+        ]),
+    ]);
+    if (results.contains(false)) _refresh();
   }
 
   List<String> _taskVideos(TaskModel task) => task.videoUrls.isNotEmpty
@@ -758,21 +764,6 @@ class _TaskWorkerUiState extends State<TaskWorkerUi> {
                   taskStatus: task.status == 0 ? null : task.status,
                   // Barcha videolar yuklanmaguncha vazifa tugallanmagan
                   hasVideo: task.videosComplete,
-                ),
-                const SizedBox(width: 2),
-                IconButton(
-                  onPressed: () => _togglePin(task),
-                  visualDensity: VisualDensity.compact,
-                  iconSize: 18,
-                  tooltip: task.pinned ? 'Открепить' : 'Закрепить',
-                  color: task.pinned
-                      ? const Color(0xFF2563EB)
-                      : const Color(0xFF9CA3AF),
-                  icon: Icon(
-                    task.pinned
-                        ? Icons.push_pin_rounded
-                        : Icons.push_pin_outlined,
-                  ),
                 ),
               ],
             ),

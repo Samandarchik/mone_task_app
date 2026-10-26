@@ -201,7 +201,6 @@ class _AdminTaskListWidgetState extends State<AdminTaskListWidget>
                     );
                   },
                   onShareVideo: () => _shareTaskLink(task),
-                  onTogglePin: () => tasksProvider.togglePin(task),
                   onEdit: widget.onEditTask == null
                       ? null
                       : () => widget.onEditTask!(task),

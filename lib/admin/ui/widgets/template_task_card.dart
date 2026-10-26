@@ -173,7 +173,7 @@ class _TemplateTaskCardState extends State<TemplateTaskCard> {
         task: _task,
         type: _type,
         orderIndex: original.orderIndex,
-        pinned: original.pinned,
+        positions: original.positions,
         filialIds: original.filialIds,
         days: days,
         createdAt: original.createdAt,
