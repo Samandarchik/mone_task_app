@@ -172,7 +172,7 @@ class AdminTasksProvider extends ChangeNotifier {
     _tasks = mergeOrder(_tasks, list);
     notifyListeners();
 
-    // Shaxsiy tartib filial bo'yicha to'liq saqlanadi
+    // Filial tartibi hamma uchun bitta — boshqalarda WS orqali yangilanadi
     final filialId = list.first.filialId;
     final ok = await _prefs.saveOrder(filialId, [
       for (final t in _tasks)
@@ -245,6 +245,8 @@ class AdminTasksProvider extends ChangeNotifier {
     _wsSub?.cancel();
     _wsSub = ws.onEvent.listen((event) {
       if (event['event'] != 'task_updated') return;
+      // O'zimiz sudragan tartib — ekranda allaqachon shunday
+      if (isOwnOrderChange(event)) return;
 
       final data = event['data'];
       if (data == null) return;

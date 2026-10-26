@@ -94,7 +94,8 @@ class _TaskWorkerUiState extends State<TaskWorkerUi> {
     ws.connect();
     _wsSub = ws.onEvent.listen((event) {
       if (event['event'] == 'task_updated') {
-        _fetchTasks(showLoading: false);
+        // O'zimiz sudragan tartib — ekranda allaqachon shunday
+        if (!isOwnOrderChange(event)) _fetchTasks(showLoading: false);
       } else if (event['event'] == 'task_reminder') {
         // Vazifa vaqti keldi — ilovaning o'zida bir marta eslatma
         final data = event['data'];

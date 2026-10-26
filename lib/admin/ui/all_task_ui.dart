@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:mone_task_app/admin/model/all_task_model.dart';
 import 'package:mone_task_app/admin/model/category_model.dart';
@@ -8,6 +10,7 @@ import 'package:mone_task_app/admin/ui/add_admin_task.dart';
 import 'package:mone_task_app/admin/ui/widgets/template_task_card.dart';
 import 'package:mone_task_app/core/data/local/token_storage.dart';
 import 'package:mone_task_app/core/di/di.dart';
+import 'package:mone_task_app/core/network/ws_service.dart';
 import 'package:mone_task_app/shared/services/task_prefs_service.dart';
 import 'package:mone_task_app/shared/widgets/reorderable_filial_tabs.dart';
 import 'package:mone_task_app/shared/widgets/task_reorder_list.dart';
@@ -61,9 +64,18 @@ class _TemplateTaskAdminUiState extends State<TemplateTaskAdminUi> {
   final bool _isSuperAdmin =
       sl<TokenStorage>().getUserData()?.role == 'super_admin';
 
+  StreamSubscription? _wsSub;
+
   @override
   void initState() {
     super.initState();
+    // Boshqa foydalanuvchi tartibni o'zgartirsa — darhol shu tartibda
+    _wsSub = WsService().onEvent.listen((event) {
+      final data = event['data'];
+      if (event['event'] != 'task_updated' || data is! Map) return;
+      if (data['action'] != 'order_changed' || isOwnOrderChange(event)) return;
+      if (mounted) _reloadTemplates();
+    });
     templatesFuture = TemplateService().fetchTemplates();
     categoriesFuture = TemplateService().fetchFilials();
     taskCategoriesFuture = TemplateService().fetchCategoriesList();
@@ -96,6 +108,7 @@ class _TemplateTaskAdminUiState extends State<TemplateTaskAdminUi> {
 
   @override
   void dispose() {
+    _wsSub?.cancel();
     _tabs?.removeListener(_onTabChanged);
     _filialController.dispose();
     super.dispose();
@@ -414,14 +427,6 @@ class _TemplateTaskAdminUiState extends State<TemplateTaskAdminUi> {
       filtered = filtered.where((t) => t.type == selectedFilter).toList();
     }
 
-    // Bosh sahifa bilan bir xil: foydalanuvchining shu filialdagi shaxsiy
-    // tartibi (super admin uchun yo'q — ro'yxat umumiy tartibda keladi)
-    if (filtered.every((t) => t.positions.containsKey(filialId))) {
-      filtered.sort(
-        (a, b) => a.positions[filialId]!.compareTo(b.positions[filialId]!),
-      );
-    }
-
     if (filtered.isEmpty) {
       return const Center(child: Text("Для этого филиала нет шаблонов"));
     }
@@ -431,7 +436,8 @@ class _TemplateTaskAdminUiState extends State<TemplateTaskAdminUi> {
       filialId: filialId,
       templates: filtered,
       scope: _syncScope,
-      canReorder: _isSuperAdmin,
+      // Sahifaga kira olgan har kim (o'z filiallarida) — tartib hamma uchun bitta
+      canReorder: true,
       cardBuilder: _buildTemplateCard,
       onRefresh: () async {
         final newTemplates = TemplateService().fetchTemplates();
@@ -452,9 +458,8 @@ class _TemplateTaskAdminUiState extends State<TemplateTaskAdminUi> {
     );
   }
 
-  /// Bosh sahifadagi kabi: kartani bosib turib sudrash — shaxsiy tartib filial
-  /// bo'yicha saqlanadi (super admin uchun umumiy tartib ham shu bo'ladi),
-  /// shuning uchun ikkala sahifada ketma-ketlik bir xil qoladi.
+  /// Bosh sahifadagi kabi: kartani bosib turib sudrash — filial tartibi hamma
+  /// uchun bitta, ikkala sahifada ham, boshqa foydalanuvchilarda ham (WS).
   Future<void> _reorderTemplates(
     List<TemplateTaskModel> all,
     List<TemplateTaskModel> visible,
@@ -462,7 +467,6 @@ class _TemplateTaskAdminUiState extends State<TemplateTaskAdminUi> {
     int oldIndex,
     int newIndex,
   ) async {
-    if (!_isSuperAdmin) return;
     final list = reordered(visible, oldIndex, newIndex);
     final merged = mergeOrderBy(all, list, (t) => t.templateId);
     setState(() => _reordered = merged);

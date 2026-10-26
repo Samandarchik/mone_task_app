@@ -387,10 +387,6 @@ type TaskTemplate struct {
 	MultiVideo       bool   `json:"multiVideo"`
 	VideoCount       int    `json:"videoCount"`
 	CreatedAt        string `json:"createdAt"`
-	// Joriy foydalanuvchining filial bo'yicha shaxsiy tartibi (filialId → kalit).
-	// «Все задачи» har bir filial tabini shu bo'yicha saralaydi; super admin
-	// uchun bo'sh - unda ro'yxatning o'z (umumiy) tartibi.
-	Positions map[int]int `json:"positions,omitempty"`
 }
 
 type Claims struct {
@@ -641,7 +637,7 @@ func createMainDB() {
 	// Filiallar tartibi — barcha ekranlarda shu tartibda ko'rsatiladi
 	db.Exec("ALTER TABLE filials ADD COLUMN sort_order INTEGER DEFAULT 0")
 	migrateCategoryOrder(db)
-	// Eski (filialsiz) shaxsiy tartib — eski ilova versiyalari uchun qoldirildi
+	// Eski shaxsiy tartib (endi ishlatilmaydi - tartib hamma uchun bitta)
 	db.Exec(`CREATE TABLE IF NOT EXISTS user_task_prefs (
 		user_id INTEGER NOT NULL,
 		template_id INTEGER NOT NULL,
@@ -649,8 +645,7 @@ func createMainDB() {
 		position INTEGER,
 		PRIMARY KEY (user_id, template_id)
 	)`)
-	// Shaxsiy tartib filial bo'yicha: bitta shablon bir nechta filialda bo'lsa,
-	// bir filialda sudrash boshqasidagi tartibni buzmasin.
+	// Eski filial bo'yicha shaxsiy tartib (endi ishlatilmaydi)
 	db.Exec(`CREATE TABLE IF NOT EXISTS user_filial_task_order (
 		user_id INTEGER NOT NULL,
 		filial_id INTEGER NOT NULL,
@@ -1296,7 +1291,7 @@ func getTasks(w http.ResponseWriter, r *http.Request) {
 
 	// Bir shablon uchun bitta karta (dublikatlar ilovadagi ro'yxatni buzadi)
 	tasks = dedupeTasks(tasks)
-	applyUserTaskPrefs(userID, tasks)
+	applyTemplateOrder(tasks)
 	if role == RoleWorker {
 		fillDelegations(userID, tasks)
 	}
@@ -1371,7 +1366,6 @@ func templateAllowed(allowed map[int]bool, templateID string) bool {
 }
 
 func getAllTasks(w http.ResponseWriter, r *http.Request) {
-	userID, _ := strconv.Atoi(r.Header.Get("UserID"))
 	allowed, ok := taskManagerFilials(r)
 	if !ok {
 		respondJSON(w, http.StatusForbidden, map[string]interface{}{
@@ -1430,7 +1424,6 @@ func getAllTasks(w http.ResponseWriter, r *http.Request) {
 				own = append(own, t)
 			}
 		}
-		applyUserTemplatePrefs(userID, own)
 		respondJSON(w, http.StatusOK, map[string]interface{}{
 			"success": true,
 			"data":    own,
@@ -1457,9 +1450,6 @@ func getAllTasks(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}
-
-	// Bosh sahifa bilan bir xil ketma-ketlik: pin + shaxsiy tartib
-	applyUserTemplatePrefs(userID, templates)
 
 	respondJSON(w, http.StatusOK, map[string]interface{}{
 		"success": true,
@@ -4589,66 +4579,6 @@ func maxTaskVideos(need int) int {
 	return MaxExtraVideosTotal
 }
 
-// userTaskPrefs - foydalanuvchining shaxsiy tartibi. Foydalanuvchi ID siga
-// bog'langan - dasturdan chiqib qayta kirganda ham saqlanib qoladi.
-type userTaskPrefs struct {
-	// filialID → templateID → o'rni
-	byFilial map[int]map[int]int
-	// Eski (filialsiz) tartib - filialda hali sudralmagan bo'lsa ishlatiladi
-	legacy map[int]int
-}
-
-// loadUserTaskPrefs - super admin uchun bo'sh: uning tartibi umumiy tartib
-// (task_templates.order_index), hamma uchun asos.
-func loadUserTaskPrefs(mainDB *sql.DB, userID int) userTaskPrefs {
-	p := userTaskPrefs{byFilial: map[int]map[int]int{}, legacy: map[int]int{}}
-	if userID == 0 {
-		return p
-	}
-	var role string
-	mainDB.QueryRow("SELECT role FROM users WHERE id = ?", userID).Scan(&role)
-	if role == RoleSuperAdmin {
-		return p
-	}
-	rows, err := mainDB.Query("SELECT filial_id, template_id, position FROM user_filial_task_order WHERE user_id = ?", userID)
-	if err == nil {
-		for rows.Next() {
-			var fid, tid, pos int
-			if rows.Scan(&fid, &tid, &pos) == nil {
-				if p.byFilial[fid] == nil {
-					p.byFilial[fid] = map[int]int{}
-				}
-				p.byFilial[fid][tid] = pos
-			}
-		}
-		rows.Close()
-	}
-	rows, err = mainDB.Query("SELECT template_id, position FROM user_task_prefs WHERE user_id = ? AND position IS NOT NULL", userID)
-	if err == nil {
-		for rows.Next() {
-			var tid, pos int
-			if rows.Scan(&tid, &pos) == nil {
-				p.legacy[tid] = pos
-			}
-		}
-		rows.Close()
-	}
-	return p
-}
-
-// key - bosh sahifa va «Все задачи» uchun BIR XIL tartib qoidasi (filial
-// ichida): shaxsiy tartib, qolganlari umumiy order_index bo'yicha oxirida.
-func (p userTaskPrefs) key(filialID, templateID, orderIndex int) int {
-	positions, ok := p.byFilial[filialID]
-	if !ok {
-		positions = p.legacy
-	}
-	if pos, ok := positions[templateID]; ok {
-		return pos
-	}
-	return 1000000 + orderIndex
-}
-
 // templateOrderIndexes - shablonlarning joriy umumiy tartibi (main.db).
 func templateOrderIndexes(mainDB *sql.DB) map[int]int {
 	order := map[int]int{}
@@ -4666,12 +4596,11 @@ func templateOrderIndexes(mainDB *sql.DB) map[int]int {
 	return order
 }
 
-// applyUserTaskPrefs - kunlik vazifalarni foydalanuvchi ko'radigan tartibga
-// soladi. Asos - shablonning JORIY umumiy tartibi (kunlik bazadagi order_index
-// kategoriya bo'yicha alohida beriladi va shablonlar qayta tartiblanganda
-// eskirib qoladi), ustiga shaxsiy tartib. «Все задачи» ham aynan shu
-// qoida bilan saralanadi (applyUserTemplatePrefs) - ikkala sahifa bir xil.
-func applyUserTaskPrefs(userID int, tasks []Task) {
+// applyTemplateOrder - kunlik vazifalarni shablonlarning JORIY umumiy
+// tartibida saralaydi (kunlik bazadagi order_index kategoriya bo'yicha alohida
+// beriladi va shablonlar qayta tartiblanganda eskirib qoladi). Tartib hamma
+// uchun bitta: bosh sahifa ham, «Все задачи» ham, har bir foydalanuvchida ham.
+func applyTemplateOrder(tasks []Task) {
 	if len(tasks) == 0 {
 		return
 	}
@@ -4687,45 +4616,9 @@ func applyUserTaskPrefs(userID int, tasks []Task) {
 			tasks[i].OrderIndex = idx
 		}
 	}
-
-	prefs := loadUserTaskPrefs(mainDB, userID)
-	// Kalitlar filial ichida solishtiriladi; ilova ro'yxatni filial bo'yicha
-	// ajratadi, shuning uchun har bir filial o'z tartibida qoladi.
 	sort.SliceStable(tasks, func(a, b int) bool {
-		return prefs.key(tasks[a].FilialID, tasks[a].TemplateID, tasks[a].OrderIndex) <
-			prefs.key(tasks[b].FilialID, tasks[b].TemplateID, tasks[b].OrderIndex)
+		return tasks[a].OrderIndex < tasks[b].OrderIndex
 	})
-}
-
-// applyUserTemplatePrefs - «Все задачи» bosh sahifa bilan bir xil tartibda
-// bo'lishi uchun har bir shablonga filial bo'yicha shaxsiy kalitni yozadi
-// (bitta shablon bir nechta filial tabida turli o'rinda bo'lishi mumkin).
-// Ro'yxatning o'zi umumiy tartibda qoladi.
-func applyUserTemplatePrefs(userID int, templates []TaskTemplate) {
-	if userID == 0 || len(templates) == 0 {
-		return
-	}
-	mainDB, err := getMainDB()
-	if err != nil {
-		return
-	}
-	defer mainDB.Close()
-
-	prefs := loadUserTaskPrefs(mainDB, userID)
-	if len(prefs.byFilial) == 0 && len(prefs.legacy) == 0 {
-		return
-	}
-	allFilials := allFilialIDs(mainDB)
-	for i := range templates {
-		filials := templates[i].FilialIDs
-		if len(filials) == 0 {
-			filials = allFilials
-		}
-		templates[i].Positions = map[int]int{}
-		for _, fid := range filials {
-			templates[i].Positions[fid] = prefs.key(fid, templates[i].ID, templates[i].OrderIndex)
-		}
-	}
 }
 
 func allFilialIDs(mainDB *sql.DB) []int {
@@ -4755,70 +4648,6 @@ func uniqueIDs(ids []int) []int {
 		}
 	}
 	return out
-}
-
-// saveFilialOrder - foydalanuvchining shu filialdagi to'liq tartibini qayta
-// yozadi: [order] dagi shablonlar o'zlari egallab turgan joylar ichida yangi
-// ketma-ketlikda turadi, qolganlari (bugun ko'rinmaydigan haftalik/oylik,
-// filtrdan tashqaridagilar) o'z joyida qoladi.
-func saveFilialOrder(tx *sql.Tx, prefs userTaskPrefs, userID, filialID int, order []int) error {
-	rows, err := tx.Query("SELECT id, filial_ids, order_index FROM task_templates")
-	if err != nil {
-		return err
-	}
-	type item struct{ id, key int }
-	base := []item{}
-	inBase := map[int]bool{}
-	orderIdx := map[int]int{}
-	for rows.Next() {
-		var id, idx int
-		var filialIDs string
-		if rows.Scan(&id, &filialIDs, &idx) != nil {
-			continue
-		}
-		orderIdx[id] = idx
-		ids := parseFilialIDs(filialIDs)
-		inFilial := len(ids) == 0
-		for _, fid := range ids {
-			if fid == filialID {
-				inFilial = true
-			}
-		}
-		if inFilial {
-			base = append(base, item{id, prefs.key(filialID, id, idx)})
-			inBase[id] = true
-		}
-	}
-	rows.Close()
-	// Shablon filialdan olib tashlangan, lekin bugungi vazifasi qolgan bo'lsa ham
-	for _, id := range order {
-		if !inBase[id] {
-			base = append(base, item{id, prefs.key(filialID, id, orderIdx[id])})
-			inBase[id] = true
-		}
-	}
-	sort.SliceStable(base, func(a, b int) bool { return base[a].key < base[b].key })
-
-	moving := map[int]bool{}
-	for _, id := range order {
-		moving[id] = true
-	}
-	if _, err := tx.Exec("DELETE FROM user_filial_task_order WHERE user_id = ? AND filial_id = ?", userID, filialID); err != nil {
-		return err
-	}
-	k := 0
-	for i, it := range base {
-		id := it.id
-		if moving[id] {
-			id = order[k]
-			k++
-		}
-		if _, err := tx.Exec("INSERT INTO user_filial_task_order (user_id, filial_id, template_id, position) VALUES (?, ?, ?, ?)",
-			userID, filialID, id, i+1); err != nil {
-			return err
-		}
-	}
-	return nil
 }
 
 // applyGlobalTemplateOrder - berilgan shablonlarni umumiy tartibda o'zlari
@@ -4863,8 +4692,10 @@ func applyGlobalTemplateOrder(tx *sql.Tx, order []int) error {
 	return nil
 }
 
-// setTaskOrder - joriy foydalanuvchining filialdagi shaxsiy tartibi
-// (template ID lar ketma-ketligi). Super admin tartibi - umumiy tartib.
+// setTaskOrder - filialdagi vazifalar tartibi (template ID lar ketma-ketligi).
+// Tartib hamma uchun bitta: kim sudrasa (super admin yoki filialga kirish
+// huquqi bor foydalanuvchi) - shu filialni ko'radigan hammada o'zgaradi va
+// WS orqali darhol yangilanadi.
 func setTaskOrder(w http.ResponseWriter, r *http.Request) {
 	userID, _ := strconv.Atoi(r.Header.Get("UserID"))
 	var req struct {
@@ -4879,40 +4710,56 @@ func setTaskOrder(w http.ResponseWriter, r *http.Request) {
 
 	mainDB, _ := getMainDB()
 	defer mainDB.Close()
-	prefs := loadUserTaskPrefs(mainDB, userID)
+
+	// Super admin bo'lmasa - faqat o'z filiallaridagi vazifalar
+	if r.Header.Get("Role") != RoleSuperAdmin {
+		own := userFilialIDs(mainDB, userID)
+		allowed := map[int]bool{}
+		rows, err := mainDB.Query("SELECT id, filial_ids FROM task_templates")
+		if err == nil {
+			for rows.Next() {
+				var id int
+				var filialIDs string
+				if rows.Scan(&id, &filialIDs) != nil {
+					continue
+				}
+				for _, fid := range parseFilialIDs(filialIDs) {
+					if containsInt(own, fid) {
+						allowed[id] = true
+					}
+				}
+			}
+			rows.Close()
+		}
+		filtered := []int{}
+		for _, id := range order {
+			if allowed[id] {
+				filtered = append(filtered, id)
+			}
+		}
+		order = filtered
+	}
+
 	tx, err := mainDB.Begin()
 	if err != nil {
 		respondJSON(w, http.StatusInternalServerError, map[string]interface{}{"success": false, "error": "Database xatosi"})
 		return
 	}
 	defer tx.Rollback()
-
-	fail := func() {
+	if err := applyGlobalTemplateOrder(tx, order); err != nil {
 		respondJSON(w, http.StatusInternalServerError, map[string]interface{}{"success": false, "error": "Server xatosi"})
+		return
 	}
-	switch {
-	case r.Header.Get("Role") == RoleSuperAdmin:
-		// Super admin sudrasa - hamma uchun asos bo'lgan umumiy tartib
-		// o'zgaradi; bosh sahifa ham, «Все задачи» ham shu tartibda.
-		if err := applyGlobalTemplateOrder(tx, order); err != nil {
-			fail()
-			return
-		}
-	case req.FilialID != 0:
-		if err := saveFilialOrder(tx, prefs, userID, req.FilialID, order); err != nil {
-			fail()
-			return
-		}
-	default:
-		// Eski ilova versiyasi (filialsiz) - avvalgidek
-		for i, tid := range order {
-			if _, err := tx.Exec(`INSERT INTO user_task_prefs (user_id, template_id, position) VALUES (?, ?, ?)
-				ON CONFLICT(user_id, template_id) DO UPDATE SET position = excluded.position`, userID, tid, i+1); err != nil {
-				fail()
-				return
-			}
-		}
+	if err := tx.Commit(); err != nil {
+		respondJSON(w, http.StatusInternalServerError, map[string]interface{}{"success": false, "error": "Server xatosi"})
+		return
 	}
-	tx.Commit()
+
+	// Hamma ochiq ilovalar ro'yxatni qayta oladi (sudragan o'zi bundan mustasno)
+	hub.broadcast("task_updated", map[string]interface{}{
+		"action":   "order_changed",
+		"filialId": req.FilialID,
+		"userId":   userID,
+	})
 	respondJSON(w, http.StatusOK, map[string]interface{}{"success": true})
 }
