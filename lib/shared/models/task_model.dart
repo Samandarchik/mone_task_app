@@ -30,6 +30,9 @@ class TaskModel {
   /// Worker bu vazifani biriktirgan sotrudniklar (faqat egasiga keladi)
   List<int> delegatedTo;
 
+  /// Namuna video — vazifa qanday bajarilishi kerak (super admin yuklaydi)
+  String? guideVideoUrl;
+
   TaskModel({
     required this.taskId,
     this.templateId = 0,
@@ -49,6 +52,7 @@ class TaskModel {
     this.notificationTime,
     this.days,
     this.delegatedTo = const [],
+    this.guideVideoUrl,
   });
 
   /// Yuborilgan barcha videolar (eski bitta videoUrl ham hisobga olinadi)
@@ -94,6 +98,9 @@ class TaskModel {
           ? DateTime.parse(json['submittedAt'])
           : null,
       date: json['date'],
+      guideVideoUrl: (json['guideVideoUrl'] as String?)?.isNotEmpty == true
+          ? json['guideVideoUrl']
+          : null,
     );
   }
 }

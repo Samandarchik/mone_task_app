@@ -24,6 +24,10 @@ class CircleVideoPlayer extends StatelessWidget {
   final void Function(int taskId)? onHalfWatched;
   final DateTime selectedDate;
 
+  /// Namuna video (ⓘ): faqat ko'rish — holat, ovozli izoh, ulashish va
+  /// oldinga/orqaga tugmalari yo'q, vaqt o'rnida «Образец»
+  final bool guide;
+
   const CircleVideoPlayer({
     required this.title,
     super.key,
@@ -31,12 +35,16 @@ class CircleVideoPlayer extends StatelessWidget {
     this.initialIndex = 0,
     this.onHalfWatched,
     required this.selectedDate,
+    this.guide = false,
   });
 
   @override
   Widget build(BuildContext context) {
     return ChangeNotifierProvider(
       create: (_) {
+        if (guide) {
+          return VideoPlayerProvider(videoUrls: videoUrls, tasks: title);
+        }
         final tasksProvider = context.read<AdminTasksProvider>();
         return VideoPlayerProvider(
           videoUrls: videoUrls,
@@ -50,14 +58,18 @@ class CircleVideoPlayer extends StatelessWidget {
           ),
         );
       },
-      child: _CircleVideoPlayerBody(selectedDate: selectedDate),
+      child: _CircleVideoPlayerBody(selectedDate: selectedDate, guide: guide),
     );
   }
 }
 
 class _CircleVideoPlayerBody extends StatefulWidget {
   final DateTime selectedDate;
-  const _CircleVideoPlayerBody({required this.selectedDate});
+  final bool guide;
+  const _CircleVideoPlayerBody({
+    required this.selectedDate,
+    this.guide = false,
+  });
 
   @override
   State<_CircleVideoPlayerBody> createState() => _CircleVideoPlayerBodyState();
@@ -456,47 +468,49 @@ class _CircleVideoPlayerBodyState extends State<_CircleVideoPlayerBody>
       body: Stack(
         children: [
           // ── Prev ──────────────────────────────────────────────────────
-          Positioned(
-            right: arcBoxSize * 0.25,
-            bottom: arcBoxSize * 0.25,
-            child: GestureDetector(
-              onTap: provider.hasPrev ? provider.goToPrev : null,
-              child: AnimatedOpacity(
-                opacity: provider.hasPrev ? 1.0 : 0.25,
-                duration: const Duration(milliseconds: 200),
-                child: CircleAvatar(
-                  radius: _bottomButtonRadius,
-                  backgroundColor: Colors.black.withOpacity(0.75),
-                  child: Icon(
-                    Icons.arrow_back_ios_new_rounded,
-                    color: Colors.white,
-                    size: _bottomIconSize,
+          if (!widget.guide)
+            Positioned(
+              right: arcBoxSize * 0.25,
+              bottom: arcBoxSize * 0.25,
+              child: GestureDetector(
+                onTap: provider.hasPrev ? provider.goToPrev : null,
+                child: AnimatedOpacity(
+                  opacity: provider.hasPrev ? 1.0 : 0.25,
+                  duration: const Duration(milliseconds: 200),
+                  child: CircleAvatar(
+                    radius: _bottomButtonRadius,
+                    backgroundColor: Colors.black.withOpacity(0.75),
+                    child: Icon(
+                      Icons.arrow_back_ios_new_rounded,
+                      color: Colors.white,
+                      size: _bottomIconSize,
+                    ),
                   ),
                 ),
               ),
             ),
-          ),
           // ── Next ──────────────────────────────────────────────────────
-          Positioned(
-            right: arcBoxSize * 0.05,
-            bottom: arcBoxSize * 0.25,
-            child: GestureDetector(
-              onTap: provider.hasNext ? provider.goToNext : null,
-              child: AnimatedOpacity(
-                opacity: provider.hasNext ? 1.0 : 0.25,
-                duration: const Duration(milliseconds: 200),
-                child: CircleAvatar(
-                  radius: _bottomButtonRadius,
-                  backgroundColor: Colors.black.withOpacity(0.75),
-                  child: Icon(
-                    Icons.arrow_forward_ios_rounded,
-                    color: Colors.white,
-                    size: _bottomIconSize,
+          if (!widget.guide)
+            Positioned(
+              right: arcBoxSize * 0.05,
+              bottom: arcBoxSize * 0.25,
+              child: GestureDetector(
+                onTap: provider.hasNext ? provider.goToNext : null,
+                child: AnimatedOpacity(
+                  opacity: provider.hasNext ? 1.0 : 0.25,
+                  duration: const Duration(milliseconds: 200),
+                  child: CircleAvatar(
+                    radius: _bottomButtonRadius,
+                    backgroundColor: Colors.black.withOpacity(0.75),
+                    child: Icon(
+                      Icons.arrow_forward_ios_rounded,
+                      color: Colors.white,
+                      size: _bottomIconSize,
+                    ),
                   ),
                 ),
               ),
             ),
-          ),
 
           // ── Markaziy kontent ──────────────────────────────────────────
           Center(
@@ -542,7 +556,7 @@ class _CircleVideoPlayerBodyState extends State<_CircleVideoPlayerBody>
           ),
 
           // ── Boshqaruv paneli (audio + status) — video ustida ──────────
-          if (provider.isInitialized && !provider.hasError)
+          if (provider.isInitialized && !provider.hasError && !widget.guide)
             Positioned(
               right: 20,
               top: 200,
@@ -590,23 +604,25 @@ class _CircleVideoPlayerBodyState extends State<_CircleVideoPlayerBody>
                   ),
                 ],
                 const Spacer(),
-                GestureDetector(
-                  key: _shareButtonKey,
-                  onTap: () =>
-                      _shareTaskLink(context, provider, provider.currentTask),
-                  child: CircleAvatar(
-                    radius: _bottomButtonRadius,
-                    backgroundColor: Colors.black54,
-                    child: Icon(
-                      Platform.isWindows
-                          ? Icons.copy_rounded
-                          : Icons.share_rounded,
-                      color: Colors.white,
-                      size: _bottomIconSize,
+                if (!widget.guide) ...[
+                  GestureDetector(
+                    key: _shareButtonKey,
+                    onTap: () =>
+                        _shareTaskLink(context, provider, provider.currentTask),
+                    child: CircleAvatar(
+                      radius: _bottomButtonRadius,
+                      backgroundColor: Colors.black54,
+                      child: Icon(
+                        Platform.isWindows
+                            ? Icons.copy_rounded
+                            : Icons.share_rounded,
+                        color: Colors.white,
+                        size: _bottomIconSize,
+                      ),
                     ),
                   ),
-                ),
-                SizedBox(width: _isTablet ? 20 : 10),
+                  SizedBox(width: _isTablet ? 20 : 10),
+                ],
                 GestureDetector(
                   onTap: () => Navigator.pop(context),
                   child: CircleAvatar(
@@ -635,16 +651,26 @@ class _CircleVideoPlayerBodyState extends State<_CircleVideoPlayerBody>
     final task = provider.currentTask;
     return Row(
       children: [
-        Text(
-          '   ${task?.submittedAt?.toLocal().hour.toString().padLeft(2, '0') ?? '00'}:'
-          '${task?.submittedAt?.toLocal().minute.toString().padLeft(2, '0') ?? '00'}   '
-          '${task?.date ?? ''}',
-          style: TextStyle(
-            color: Colors.black,
-            fontSize: _timeFontSize,
-            fontWeight: FontWeight.bold,
+        if (widget.guide)
+          Text(
+            '   Образец   ',
+            style: TextStyle(
+              color: Colors.black,
+              fontSize: _timeFontSize,
+              fontWeight: FontWeight.bold,
+            ),
+          )
+        else
+          Text(
+            '   ${task?.submittedAt?.toLocal().hour.toString().padLeft(2, '0') ?? '00'}:'
+            '${task?.submittedAt?.toLocal().minute.toString().padLeft(2, '0') ?? '00'}   '
+            '${task?.date ?? ''}',
+            style: TextStyle(
+              color: Colors.black,
+              fontSize: _timeFontSize,
+              fontWeight: FontWeight.bold,
+            ),
           ),
-        ),
         if (provider.videoUrls.length > 1)
           Padding(
             padding: const EdgeInsets.only(right: 8),

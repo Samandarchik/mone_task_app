@@ -57,7 +57,9 @@ class VideoDownloadProvider extends ChangeNotifier {
         originalUrl.startsWith('https://')) {
       return originalUrl;
     }
-    return '${AppUrls.baseUrl}/$originalUrl';
+    // "/videos/..." — ikkita "/" bo'lmasin (server 301 bilan qaytaradi)
+    final path = originalUrl.startsWith('/') ? originalUrl : '/$originalUrl';
+    return '${AppUrls.baseUrl}$path';
   }
 
   /// Start sequential download for a list of tasks
@@ -130,7 +132,10 @@ class VideoDownloadProvider extends ChangeNotifier {
         await file.delete();
       }
 
-      final tempPath = '$localPath.tmp';
+      // Har bir yuklash o'z vaqtinchalik fayliga yozadi: kartadagi video
+      // ham shu videoni bir vaqtda keshlashi mumkin (task_video_strip.dart)
+      final tempPath =
+          '$localPath.${DateTime.now().microsecondsSinceEpoch}.tmp';
       final dio = Dio();
 
       await dio.download(
@@ -151,9 +156,16 @@ class VideoDownloadProvider extends ChangeNotifier {
 
       final tempFile = File(tempPath);
       if (await tempFile.exists() && await tempFile.length() > 0) {
-        // Windowsda mavjud faylga rename xato berishi mumkin
-        if (await file.exists()) await file.delete();
-        await tempFile.rename(localPath);
+        try {
+          // Windowsda mavjud faylga rename xato berishi mumkin
+          if (await file.exists()) await file.delete();
+          await tempFile.rename(localPath);
+        } on FileSystemException {
+          // Fayl band (o'ynayapti) yoki boshqa yuklash allaqachon qo'ygan —
+          // tayyor fayl bo'lsa shuni ishlatamiz
+          if (await tempFile.exists()) await tempFile.delete();
+          if (!(await file.exists() && await file.length() > 0)) rethrow;
+        }
         _updateState(
           videoUrl,
           VideoDownloadState(
@@ -171,10 +183,21 @@ class VideoDownloadProvider extends ChangeNotifier {
       }
     } catch (e) {
       debugPrint('Video yuklab bo\'lmadi ($videoUrl): $e');
+      // Shu orada video boshqa yo'l bilan to'liq yuklangan bo'lishi mumkin
       try {
         final localPath = await _getLocalFilePath(videoUrl);
-        final tempFile = File('$localPath.tmp');
-        if (await tempFile.exists()) await tempFile.delete();
+        final file = File(localPath);
+        if (await file.exists() && await file.length() > 0) {
+          _updateState(
+            videoUrl,
+            VideoDownloadState(
+              status: VideoStatus.cached,
+              progress: 1.0,
+              localPath: localPath,
+            ),
+          );
+          return;
+        }
       } catch (_) {}
 
       _updateState(
@@ -243,6 +266,13 @@ class VideoDownloadProvider extends ChangeNotifier {
           return resolvedPath(fullUrl);
         })
         .toList();
+  }
+
+  /// «Ошибка» bosilganda — videoni qayta yuklab ko'rish
+  Future<void> retry(String url) async {
+    if (getState(url).status == VideoStatus.downloading) return;
+    _states.remove(url);
+    await _downloadVideo(url);
   }
 
   /// Clear all cached states (not files)

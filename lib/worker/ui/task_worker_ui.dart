@@ -28,11 +28,11 @@ import 'package:mone_task_app/worker/model/response_task_model.dart';
 import 'package:mone_task_app/worker/model/user_model.dart';
 import 'package:mone_task_app/worker/service/log_out.dart';
 import 'package:mone_task_app/worker/service/task_worker_service.dart';
-import 'package:mone_task_app/worker/ui/my_employees_page.dart';
 import 'dart:async';
 
 import 'package:mone_task_app/core/network/ws_service.dart';
 import 'package:mone_task_app/worker/ui/telegram_style_video_recorder.dart';
+import 'package:mone_task_app/shared/widgets/guide_video_dialog.dart';
 
 class TaskWorkerUi extends StatefulWidget {
   const TaskWorkerUi({super.key});
@@ -54,9 +54,8 @@ class _TaskWorkerUiState extends State<TaskWorkerUi> {
   UserModel? user;
   StreamSubscription? _wsSub;
 
-  /// Worker o'z vazifalarini sotrudniklariga biriktira oladi
+  /// Ishchi (Ревизор) — vazifaga namuna video yuklay oladi
   bool get _isOwner => user?.role == 'worker';
-  bool get _isEmployee => user?.role == 'sotrudnik';
 
   @override
   void initState() {
@@ -155,14 +154,6 @@ class _TaskWorkerUiState extends State<TaskWorkerUi> {
   }
 
   void _refresh() => _fetchTasks(showLoading: false);
-
-  Future<void> _openEmployees() async {
-    await Navigator.push(
-      context,
-      MaterialPageRoute(builder: (_) => const MyEmployeesPage()),
-    );
-    if (mounted) _refresh();
-  }
 
   Future<void> _openTaskManager() async {
     await Navigator.push(
@@ -449,24 +440,14 @@ class _TaskWorkerUiState extends State<TaskWorkerUi> {
                 leading: const Icon(CupertinoIcons.videocam_fill),
                 title: const Text("Все задачи"),
               ),
-              if (_isOwner)
-                ListTile(
-                  onTap: () {
-                    context.pop;
-                    _openEmployees();
-                  },
-                  leading: const Icon(Icons.groups_2_rounded),
-                  title: const Text("Мои сотрудники"),
-                ),
-              if (!_isEmployee)
-                ListTile(
-                  onTap: () {
-                    context.pop;
-                    context.push(ExcelReportPage(filialIds: user?.filialIds));
-                  },
-                  leading: const Icon(CupertinoIcons.doc_plaintext),
-                  title: const Text("Отчеты"),
-                ),
+              ListTile(
+                onTap: () {
+                  context.pop;
+                  context.push(ExcelReportPage(filialIds: user?.filialIds));
+                },
+                leading: const Icon(CupertinoIcons.doc_plaintext),
+                title: const Text("Отчеты"),
+              ),
               ListTile(
                 onTap: _handleLogout,
                 leading: const Icon(Icons.logout, color: Colors.red),
@@ -520,12 +501,6 @@ class _TaskWorkerUiState extends State<TaskWorkerUi> {
               onPressed: _openTaskManager,
               icon: const Icon(Icons.edit_note_rounded),
               tooltip: 'Управление задачами',
-            ),
-          if (_isOwner)
-            IconButton(
-              onPressed: _openEmployees,
-              icon: const Icon(Icons.groups_2_rounded),
-              tooltip: 'Мои сотрудники',
             ),
           if (_canSwitchFilial)
             IconButton(
@@ -760,7 +735,12 @@ class _TaskWorkerUiState extends State<TaskWorkerUi> {
                     ],
                   ),
                 ),
-                const SizedBox(width: 8),
+                // ⓘ — vazifa qanday bajarilishi kerakligi (namuna video)
+                GuideInfoButton(
+                  task: task,
+                  canUpload: _isOwner,
+                  onUploaded: _refresh,
+                ),
                 _buildReadonlyStatus(
                   taskStatus: task.status == 0 ? null : task.status,
                   // Barcha videolar yuklanmaguncha vazifa tugallanmagan

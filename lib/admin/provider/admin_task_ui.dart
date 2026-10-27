@@ -741,8 +741,8 @@ class _AdminTaskUiState extends State<AdminTaskUi>
                   },
                 ),
               ),
-              // Davomat (Workly): kim ishga kelgan — faqat super_admin.
-              if (_user?.role == 'super_admin')
+              // Davomat (Workly): kim ishga kelgan — super_admin va checker.
+              if (_user?.role == 'super_admin' || _user?.role == 'checker')
                 IconButton(
                   onPressed: () =>
                       context.push(AttendancePage(filials: allFilials)),

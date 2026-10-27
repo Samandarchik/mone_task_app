@@ -95,9 +95,9 @@ func fetchWorklyAttendance(date string) ([]worklyAttendance, error) {
 	return body.Items, nil
 }
 
-// GET /api/attendance?date=YYYY-MM-DD — faqat super_admin.
+// GET /api/attendance?date=YYYY-MM-DD — super_admin va checker.
 func getAttendance(w http.ResponseWriter, r *http.Request) {
-	if r.Header.Get("Role") != RoleSuperAdmin {
+	if role := r.Header.Get("Role"); role != RoleSuperAdmin && role != RoleChecker {
 		respondJSON(w, http.StatusForbidden, map[string]interface{}{
 			"success": false,
 			"error":   "Ruxsat yo'q",

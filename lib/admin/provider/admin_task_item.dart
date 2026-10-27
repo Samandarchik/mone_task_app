@@ -9,6 +9,7 @@ import 'package:mone_task_app/admin/provider/video_download_provider.dart';
 import 'package:mone_task_app/admin/ui/audio_task_row.dart';
 import 'package:mone_task_app/checker/model/checker_check_task_model.dart';
 import 'package:mone_task_app/checker/service/task_worker_service.dart';
+import 'package:mone_task_app/shared/widgets/guide_video_dialog.dart';
 import 'package:mone_task_app/shared/widgets/status_permission.dart';
 import 'package:mone_task_app/shared/widgets/task_video_strip.dart';
 import 'package:mone_task_app/utils/get_color.dart';
@@ -186,7 +187,13 @@ class AdminTaskListItem extends StatelessWidget {
             ),
           ),
         ),
-        const SizedBox(width: 8),
+        // ⓘ — namuna video; yo'q bo'lsa super admin yuklay oladi
+        GuideInfoButton(
+          task: task,
+          canUpload: role == 'super_admin',
+          onUploaded: onRefresh,
+          adminStyle: true,
+        ),
         _StatusButtons(
           task: task,
           selectedDate: selectedDate,
@@ -296,7 +303,18 @@ class AdminTaskListItem extends StatelessWidget {
           color: const Color(0xFF2563EB),
         );
       case VideoStatus.error:
-        return _chip(Icons.error_outline, 'Ошибка', color: Colors.red);
+        // Bosilsa — qayta yuklab ko'radi
+        return Builder(
+          builder: (context) => GestureDetector(
+            onTap: () {
+              final url = task.videoUrl;
+              if (url == null || url.isEmpty) return;
+              final provider = context.read<VideoDownloadProvider>();
+              provider.retry(provider.getFullUrl(url));
+            },
+            child: _chip(Icons.refresh_rounded, 'Ошибка', color: Colors.red),
+          ),
+        );
       case VideoStatus.notStarted:
         return _chip(
           Icons.cloud_download_outlined,

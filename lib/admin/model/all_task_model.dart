@@ -12,6 +12,9 @@ class TemplateTaskModel {
   final bool multiVideo;
   final int videoCount;
 
+  /// Namuna video — vazifa qanday bajarilishi kerak (bo'lmasa null)
+  final String? guideVideoUrl;
+
   TemplateTaskModel({
     required this.templateId,
     required this.task,
@@ -24,6 +27,7 @@ class TemplateTaskModel {
     required this.category,
     this.multiVideo = false,
     this.videoCount = 1,
+    this.guideVideoUrl,
   });
 
   factory TemplateTaskModel.fromJson(Map<String, dynamic> json) {
@@ -39,6 +43,9 @@ class TemplateTaskModel {
       notificationTime: json['notificationTime'],
       multiVideo: json['multiVideo'] ?? false,
       videoCount: json['videoCount'] ?? 1,
+      guideVideoUrl: (json['guideVideoUrl'] as String?)?.isNotEmpty == true
+          ? json['guideVideoUrl']
+          : null,
     );
   }
 

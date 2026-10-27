@@ -3,7 +3,7 @@ import 'dart:io';
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:mone_task_app/core/constants/urls.dart';
-import 'package:path_provider/path_provider.dart';
+import 'package:mone_task_app/core/utils/video_cache_dir.dart';
 import 'package:video_player/video_player.dart';
 
 /// Video URL (to'liq yoki nisbiy) → to'liq URL.
@@ -19,14 +19,15 @@ String videoThumbUrl(String url) {
   return '${AppUrls.baseUrl}/thumbs$path';
 }
 
-/// Katta player ishlatadigan xotiradagi joy — `Documents/videos/<fayl nomi>`.
-Future<File> _cacheFileFor(String fullUrl) async {
-  final directory = await getApplicationDocumentsDirectory();
+/// Katta player ishlatadigan xotiradagi joy — VideoDownloadProvider bilan
+/// bitta papka (Windowsda AppData, boshqa joyda Documents/videos).
+Future<File> videoCacheFile(String fullUrl) async {
+  final directory = await getVideoCacheDir();
   final fileName = fullUrl
       .split('/')
       .last
       .replaceAll(RegExp(r'[^\w\s\-\.]'), '_');
-  return File('${directory.path}/videos/$fileName');
+  return File('${directory.path}/$fileName');
 }
 
 /// Hozir fonda yuklanayotgan videolar (bir videoni ikki marta yuklamaslik uchun)
@@ -34,13 +35,20 @@ final Set<String> _downloading = {};
 
 /// Videoni xotiraga yuklab qo'yadi — keyingi safar internetdan emas,
 /// shu fayldan ochiladi. Yarim yuklangan fayl `.tmp` bo'lib qoladi.
-Future<void> _cacheInBackground(String fullUrl, File file) async {
+Future<void> cacheVideoInBackground(String fullUrl, File file) async {
   if (!_downloading.add(fullUrl)) return;
-  final temp = File('${file.path}.tmp');
+  // O'z vaqtinchalik fayli — VideoDownloadProvider ham bir vaqtda yuklashi mumkin
+  final temp = File(
+    '${file.path}.${DateTime.now().microsecondsSinceEpoch}.tmp',
+  );
   try {
     await file.parent.create(recursive: true);
     await Dio().download(fullUrl, temp.path);
-    if (await temp.length() > 0) await temp.rename(file.path);
+    if (await file.exists() && await file.length() > 0) {
+      await temp.delete();
+    } else if (await temp.length() > 0) {
+      await temp.rename(file.path);
+    }
   } catch (_) {
     if (await temp.exists()) await temp.delete();
   } finally {
@@ -235,14 +243,14 @@ class _VideoThumbState extends State<_VideoThumb> {
     // Avval yuklab olingan bo'lsa — xotiradan, aks holda internetdan
     // o'ynaymiz va keyingi safar uchun fonda xotiraga yuklab qo'yamiz.
     final fullUrl = fullVideoUrl(widget.url);
-    final file = await _cacheFileFor(fullUrl);
+    final file = await videoCacheFile(fullUrl);
     if (!mounted || _VideoThumb.playing.value != widget.url) return;
     final VideoPlayerController controller;
     if (await file.exists() && await file.length() > 0) {
       controller = VideoPlayerController.file(file);
     } else {
       controller = VideoPlayerController.networkUrl(Uri.parse(fullUrl));
-      _cacheInBackground(fullUrl, file);
+      cacheVideoInBackground(fullUrl, file);
     }
     if (!mounted || !_active || _controller != null) {
       controller.dispose();

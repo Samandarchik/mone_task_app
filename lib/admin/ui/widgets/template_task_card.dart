@@ -1,3 +1,4 @@
+import 'package:dio/dio.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:mone_task_app/admin/model/all_task_model.dart';
@@ -5,6 +6,8 @@ import 'package:mone_task_app/admin/model/category_model.dart';
 import 'package:mone_task_app/admin/model/edit_task_ui_model.dart';
 import 'package:mone_task_app/admin/service/task_worker_service.dart';
 import 'package:mone_task_app/admin/ui/widgets/category_manager_dialog.dart';
+import 'package:mone_task_app/shared/models/task_model.dart';
+import 'package:mone_task_app/shared/widgets/guide_video_dialog.dart';
 import 'package:mone_task_app/utils/get_color.dart';
 
 const _blue = Color(0xFF2563EB);
@@ -61,6 +64,12 @@ class _TemplateTaskCardState extends State<TemplateTaskCard> {
   int? _minute;
   late int _videoCount;
 
+  /// Namuna video (darhol saqlanadi, «Сохранить» kerak emas)
+  String? _guideUrl;
+
+  /// Namuna video yuklanmoqda: 0..1, yuklanmayotgan bo'lsa null
+  double? _guideProgress;
+
   bool _editingText = false;
   bool _showDays = false;
   bool _showTime = false;
@@ -92,6 +101,7 @@ class _TemplateTaskCardState extends State<TemplateTaskCard> {
     _days = List<int>.from(t.days ?? const []);
     _category = t.category;
     _videoCount = t.videoCount;
+    _guideUrl = t.guideVideoUrl;
     _hour = null;
     _minute = null;
     final time = t.notificationTime;
@@ -180,6 +190,7 @@ class _TemplateTaskCardState extends State<TemplateTaskCard> {
         category: _category,
         multiVideo: model.multiVideo,
         videoCount: _videoCount,
+        guideVideoUrl: _guideUrl,
       ),
     );
   }
@@ -318,7 +329,11 @@ class _TemplateTaskCardState extends State<TemplateTaskCard> {
               spacing: 8,
               runSpacing: 8,
               crossAxisAlignment: WrapCrossAlignment.center,
-              children: [_buildCategoryChip(), _buildTimeChip()],
+              children: [
+                _buildCategoryChip(),
+                _buildTimeChip(),
+                _buildGuideChip(),
+              ],
             ),
             if (_showTime) ...[const SizedBox(height: 8), _buildTimePicker()],
             if (_changed) ...[const SizedBox(height: 10), _buildSaveBar()],
@@ -715,6 +730,163 @@ class _TemplateTaskCardState extends State<TemplateTaskCard> {
           _markChanged();
         }
       }),
+    );
+  }
+
+  /// Namuna video — ishchi vazifa kartasidagi ⓘ ni bossa shu video ochiladi
+  Widget _buildGuideChip() {
+    final progress = _guideProgress;
+    if (progress != null) {
+      return _chip(
+        icon: Icons.cloud_upload_outlined,
+        label: 'Загрузка ${(progress * 100).round()}%',
+        color: _blue,
+      );
+    }
+    if (_guideUrl == null) {
+      return _chip(
+        icon: Icons.add_circle_outline,
+        label: 'Образец видео',
+        color: _grey,
+        onTap: _pickGuideVideo,
+      );
+    }
+    return PopupMenuButton<String>(
+      tooltip: 'Образец видео',
+      position: PopupMenuPosition.under,
+      onSelected: (action) {
+        switch (action) {
+          case 'view':
+            showGuideVideo(
+              context,
+              adminStyle: true,
+              task: TaskModel(
+                taskId: 0,
+                templateId: widget.template.templateId,
+                task: _task,
+                type: _type,
+                guideVideoUrl: _guideUrl,
+              ),
+            );
+          case 'replace':
+            _pickGuideVideo();
+          case 'delete':
+            _deleteGuideVideo();
+        }
+      },
+      itemBuilder: (_) => const [
+        PopupMenuItem(
+          value: 'view',
+          child: Row(
+            children: [
+              Icon(Icons.play_circle_outline, size: 18, color: _blue),
+              SizedBox(width: 8),
+              Text('Смотреть'),
+            ],
+          ),
+        ),
+        PopupMenuItem(
+          value: 'replace',
+          child: Row(
+            children: [
+              Icon(Icons.swap_horiz, size: 18, color: _grey),
+              SizedBox(width: 8),
+              Text('Заменить'),
+            ],
+          ),
+        ),
+        PopupMenuItem(
+          value: 'delete',
+          child: Row(
+            children: [
+              Icon(Icons.delete_outline, size: 18, color: Colors.red),
+              SizedBox(width: 8),
+              Text('Удалить', style: TextStyle(color: Colors.red)),
+            ],
+          ),
+        ),
+      ],
+      child: _chip(
+        icon: Icons.verified_outlined,
+        label: 'Образец видео',
+        color: const Color(0xFF059669),
+        trailing: Icons.expand_more,
+      ),
+    );
+  }
+
+  Future<void> _pickGuideVideo() async {
+    final List<String>? paths;
+    try {
+      paths = await recordGuideVideo(context, widget.template.templateId);
+    } catch (e) {
+      _snack('Не удалось открыть камеру');
+      return;
+    }
+    if (paths == null || !mounted) return;
+
+    setState(() => _guideProgress = 0);
+    try {
+      final url = await _service.uploadGuideVideo(
+        widget.template.templateId,
+        paths,
+        onProgress: (sent, total) {
+          if (mounted && total > 0) {
+            setState(() => _guideProgress = sent / total);
+          }
+        },
+      );
+      if (!mounted) return;
+      setState(() {
+        _guideProgress = null;
+        _guideUrl = url;
+      });
+      if (url == null) {
+        _snack('Не удалось загрузить видео');
+      } else {
+        // Namuna shu vazifaning boshqa filiallardagi nusxalariga ham qo'yildi
+        widget.onTemplatesStale?.call();
+      }
+    } on DioException {
+      if (!mounted) return;
+      setState(() => _guideProgress = null);
+      _snack('Не удалось загрузить видео');
+    }
+  }
+
+  Future<void> _deleteGuideVideo() async {
+    final ok = await showCupertinoDialog<bool>(
+      context: context,
+      builder: (ctx) => CupertinoAlertDialog(
+        title: const Text('Удалить образец видео?'),
+        content: const Text('Сотрудники больше не увидят этот образец'),
+        actions: [
+          CupertinoDialogAction(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Отмена'),
+          ),
+          CupertinoDialogAction(
+            isDestructiveAction: true,
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Удалить'),
+          ),
+        ],
+      ),
+    );
+    if (ok != true || !mounted) return;
+    if (await _service.deleteGuideVideo(widget.template.templateId)) {
+      if (!mounted) return;
+      setState(() => _guideUrl = null);
+      widget.onTemplatesStale?.call();
+    } else {
+      _snack('Не удалось удалить видео');
+    }
+  }
+
+  void _snack(String message) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(message), backgroundColor: Colors.red),
     );
   }
 

@@ -68,6 +68,8 @@ class _TelegramStyleVideoRecorderState
   double _dragStartX = 0;
   double _dragStartZoom = 1.0;
 
+  static bool get _isWindows => Platform.isWindows;
+
   @override
   void initState() {
     super.initState();
@@ -247,6 +249,8 @@ class _TelegramStyleVideoRecorderState
       enableAudio: true,
     );
     await _controller!.initialize();
+    // Windows kamerasi (camera_windows) zoom va pauzani qo'llamaydi
+    if (_isWindows) return;
     _minZoom = await _controller!.getMinZoomLevel();
     final deviceMax = await _controller!.getMaxZoomLevel();
     _maxZoom = deviceMax.clamp(_minZoom, 16.0);
@@ -329,6 +333,7 @@ class _TelegramStyleVideoRecorderState
   }
 
   void _setZoom(double zoom) {
+    if (_isWindows) return;
     if (_controller == null || !_controller!.value.isInitialized) return;
     final clamped = zoom.clamp(_minZoom, _maxZoom);
     _currentZoom = clamped;
@@ -351,7 +356,7 @@ class _TelegramStyleVideoRecorderState
 
   void _handlePointerMove(PointerMoveEvent e) {
     _pointers[e.pointer] = e.localPosition;
-    if (_pointers.length < 2) return;
+    if (_pointers.length < 2 || _isWindows) return;
     if (_controller == null || !_controller!.value.isInitialized) return;
     final offsets = _pointers.values.toList();
     final currentDist = (offsets[0] - offsets[1]).distance;
@@ -689,7 +694,7 @@ class _TelegramStyleVideoRecorderState
                   _isRecording ? _recordTimerPill() : _minDurationHint(),
 
                   // ✅ ZOOM BUTTON — qizil tugmadan tepada
-                  if (!_isFrontCamera)
+                  if (!_isFrontCamera && !_isWindows)
                     Padding(
                       padding: const EdgeInsets.only(bottom: 16),
                       child: GestureDetector(
@@ -741,6 +746,8 @@ class _TelegramStyleVideoRecorderState
                             ),
                           ),
                         )
+                      else if (_isWindows)
+                        const SizedBox(width: 60)
                       else
                         GestureDetector(
                           onTap: _togglePauseResume,
@@ -786,7 +793,7 @@ class _TelegramStyleVideoRecorderState
                         ),
                       ),
                       const SizedBox(width: 20),
-                      if (_cameras.length > 1)
+                      if (_cameras.length > 1 && !(_isWindows && _isRecording))
                         GestureDetector(
                           onTap: _isSwitchingCamera ? null : _toggleCamera,
                           child: _circleButton(

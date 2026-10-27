@@ -263,4 +263,43 @@ class TemplateService {
       return false;
     }
   }
+
+  /// Namuna video yuklash — bir xil matnli vazifaning barcha filiallardagi
+  /// shablonlariga qo'yiladi. [paths] — bitta fayl yoki pauza bilan olingan
+  /// bo'laklar (serverda birlashtiriladi). Muvaffaqiyatli bo'lsa video URL.
+  Future<String?> uploadGuideVideo(
+    int templateId,
+    List<String> paths, {
+    ProgressCallback? onProgress,
+  }) async {
+    final fields = <String, dynamic>{
+      if (paths.length > 1) "segment_count": paths.length,
+    };
+    for (var i = 0; i < paths.length; i++) {
+      fields[paths.length > 1
+          ? "video_$i"
+          : "video"] = await MultipartFile.fromFile(
+        paths[i],
+        filename: paths[i].split(RegExp(r'[/\\]')).last,
+      );
+    }
+    final response = await _dio.post(
+      "${AppUrls.baseUrl}/api/templates/$templateId/guide-video",
+      data: FormData.fromMap(fields),
+      onSendProgress: onProgress,
+    );
+    if (response.statusCode != 200) return null;
+    return response.data['guideVideoUrl'] as String?;
+  }
+
+  Future<bool> deleteGuideVideo(int templateId) async {
+    try {
+      final response = await _dio.delete(
+        "${AppUrls.baseUrl}/api/templates/$templateId/guide-video",
+      );
+      return response.statusCode == 200;
+    } catch (e) {
+      return false;
+    }
+  }
 }

@@ -232,8 +232,9 @@ func parseVideoURLs(raw *string) ([]string, *string) {
 
 // videoConfig - template bo'yicha video sozlamasi
 type videoConfig struct {
-	Count int  // super admin belgilagan videolar soni (kamida 1)
-	Multi bool // bir nechta video saqlanadimi
+	Count int    // super admin belgilagan videolar soni (kamida 1)
+	Multi bool   // bir nechta video saqlanadimi
+	Guide string // namuna video URL (bo'lmasa "")
 }
 
 // getTemplateVideoConfigs - har bir template uchun videolar soni.
@@ -245,7 +246,7 @@ func getTemplateVideoConfigs() map[int]videoConfig {
 		return result
 	}
 	defer mainDB.Close()
-	rows, err := mainDB.Query("SELECT id, COALESCE(video_count, 1), COALESCE(multi_video, 0) FROM task_templates")
+	rows, err := mainDB.Query("SELECT id, COALESCE(video_count, 1), COALESCE(multi_video, 0), COALESCE(guide_video, '') FROM task_templates")
 	if err != nil {
 		return result
 	}
@@ -253,11 +254,12 @@ func getTemplateVideoConfigs() map[int]videoConfig {
 	for rows.Next() {
 		var id, count int
 		var multi bool
-		rows.Scan(&id, &count, &multi)
+		var guide string
+		rows.Scan(&id, &count, &multi, &guide)
 		if count < 1 {
 			count = 1
 		}
-		result[id] = videoConfig{Count: count, Multi: multi || count > 1}
+		result[id] = videoConfig{Count: count, Multi: multi || count > 1, Guide: guide}
 	}
 	return result
 }
@@ -371,6 +373,8 @@ type Task struct {
 	Category         string   `json:"category"`
 	NotificationTime string   `json:"notificationTime,omitempty"`
 	OrderIndex       int      `json:"orderIndex"`
+	// GuideVideoURL — vazifa qanday bajarilishi kerakligini ko'rsatuvchi namuna
+	GuideVideoURL string `json:"guideVideoUrl,omitempty"`
 	// DelegatedTo — worker bu vazifani biriktirgan sotrudniklar (faqat egasiga)
 	DelegatedTo []int `json:"delegatedTo,omitempty"`
 }
@@ -386,6 +390,7 @@ type TaskTemplate struct {
 	OrderIndex       int    `json:"orderIndex"`
 	MultiVideo       bool   `json:"multiVideo"`
 	VideoCount       int    `json:"videoCount"`
+	GuideVideoURL    string `json:"guideVideoUrl,omitempty"`
 	CreatedAt        string `json:"createdAt"`
 }
 
@@ -444,6 +449,8 @@ func main() {
 
 	// Templates
 	r.HandleFunc("/api/templates/{id}", authMiddleware(getTemplate)).Methods("GET")
+	r.HandleFunc("/api/templates/{id}/guide-video", authMiddleware(uploadGuideVideo)).Methods("POST")
+	r.HandleFunc("/api/templates/{id}/guide-video", authMiddleware(deleteGuideVideo)).Methods("DELETE")
 
 	// Filials
 	r.HandleFunc("/api/filials", authMiddleware(getFilials)).Methods("GET")
@@ -477,16 +484,10 @@ func main() {
 	r.HandleFunc("/api/users/{id}", authMiddleware(updateUser)).Methods("PUT")
 	r.HandleFunc("/api/users/{id}", authMiddleware(deleteUser)).Methods("DELETE")
 
-	// Сотрудники — worker o'z yordamchilarini qo'shadi va vazifalarini biriktiradi
-	// Davomat (Workly): bugun kim ishga kelgan — faqat super_admin.
+	// Davomat (Workly): bugun kim ishga kelgan — super_admin va checker.
 	r.HandleFunc("/api/attendance", authMiddleware(getAttendance)).Methods("GET")
 
-	r.HandleFunc("/api/my/employees", authMiddleware(getMyEmployees)).Methods("GET")
-	r.HandleFunc("/api/my/employees", authMiddleware(createMyEmployee)).Methods("POST")
-	r.HandleFunc("/api/my/employees/{id}", authMiddleware(updateMyEmployee)).Methods("PUT")
-	r.HandleFunc("/api/my/employees/{id}", authMiddleware(deleteMyEmployee)).Methods("DELETE")
 	r.HandleFunc("/api/my/demands", authMiddleware(getMyDemands)).Methods("GET")
-	r.HandleFunc("/api/my/delegations/{templateId}", authMiddleware(setTaskDelegation)).Methods("PUT")
 
 	// Debug
 	r.HandleFunc("/api/debug/info", authMiddleware(getDebugInfo)).Methods("GET")
@@ -634,6 +635,8 @@ func createMainDB() {
 	db.Exec("ALTER TABLE task_templates ADD COLUMN order_index INTEGER DEFAULT 0")
 	db.Exec("ALTER TABLE task_templates ADD COLUMN multi_video INTEGER DEFAULT 0")
 	db.Exec("ALTER TABLE task_templates ADD COLUMN video_count INTEGER DEFAULT 1")
+	// Namuna video - vazifa qanday bajarilishi kerakligi (guide_video.go)
+	db.Exec("ALTER TABLE task_templates ADD COLUMN guide_video TEXT DEFAULT ''")
 	// Filiallar tartibi — barcha ekranlarda shu tartibda ko'rsatiladi
 	db.Exec("ALTER TABLE filials ADD COLUMN sort_order INTEGER DEFAULT 0")
 	migrateCategoryOrder(db)
@@ -1001,6 +1004,15 @@ func login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Сотрудник rolidan voz kechildi - eski akkauntlar kira olmaydi
+	if user.Role == RoleEmployee {
+		respondJSON(w, http.StatusForbidden, map[string]interface{}{
+			"success": false,
+			"error":   "Этот аккаунт больше не используется",
+		})
+		return
+	}
+
 	if categoriesStr.Valid && categoriesStr.String != "" {
 		json.Unmarshal([]byte(categoriesStr.String), &user.Categories)
 	}
@@ -1274,6 +1286,7 @@ func getTasks(w http.ResponseWriter, r *http.Request) {
 		t.CheckerAudioURLs = fullAudioURLs(parseCheckerAudioURLs(checkerAudioRaw))
 		t.VideoURLs, t.VideoURL = parseVideoURLs(videoRaw)
 		t.MultiVideo, t.VideoCount = taskVideoConfig(videoConfigs, templateID)
+		t.GuideVideoURL = videoConfigs[int(templateID.Int64)].Guide
 		t.TemplateID = int(templateID.Int64)
 
 		if daysStr.Valid && daysStr.String != "" {
@@ -1385,7 +1398,7 @@ func getAllTasks(w http.ResponseWriter, r *http.Request) {
 	}
 	defer mainDB.Close()
 
-	rows, err := mainDB.Query("SELECT id, task, type, filial_ids, days, category, notification_time, order_index, COALESCE(multi_video, 0), COALESCE(video_count, 1), created_at FROM task_templates ORDER BY order_index ASC, id ASC")
+	rows, err := mainDB.Query("SELECT id, task, type, filial_ids, days, category, notification_time, order_index, COALESCE(multi_video, 0), COALESCE(video_count, 1), COALESCE(guide_video, ''), created_at FROM task_templates ORDER BY order_index ASC, id ASC")
 	if err != nil {
 		respondJSON(w, http.StatusInternalServerError, map[string]interface{}{
 			"success": false,
@@ -1400,7 +1413,7 @@ func getAllTasks(w http.ResponseWriter, r *http.Request) {
 		var t TaskTemplate
 		var filialIDsStr, daysStr, createdAt string
 		var notifTime sql.NullString
-		rows.Scan(&t.ID, &t.Task, &t.Type, &filialIDsStr, &daysStr, &t.Category, &notifTime, &t.OrderIndex, &t.MultiVideo, &t.VideoCount, &createdAt)
+		rows.Scan(&t.ID, &t.Task, &t.Type, &filialIDsStr, &daysStr, &t.Category, &notifTime, &t.OrderIndex, &t.MultiVideo, &t.VideoCount, &t.GuideVideoURL, &createdAt)
 
 		t.FilialIDs = parseFilialIDs(filialIDsStr)
 
@@ -1595,8 +1608,8 @@ func getTemplate(w http.ResponseWriter, r *http.Request) {
 	var filialIDsStr, daysStr, createdAt string
 	var notifTime sql.NullString
 
-	err := mainDB.QueryRow("SELECT id, task, type, filial_ids, days, category, notification_time, order_index, COALESCE(multi_video, 0), COALESCE(video_count, 1), created_at FROM task_templates WHERE id = ?", id).
-		Scan(&template.ID, &template.Task, &template.Type, &filialIDsStr, &daysStr, &template.Category, &notifTime, &template.OrderIndex, &template.MultiVideo, &template.VideoCount, &createdAt)
+	err := mainDB.QueryRow("SELECT id, task, type, filial_ids, days, category, notification_time, order_index, COALESCE(multi_video, 0), COALESCE(video_count, 1), COALESCE(guide_video, ''), created_at FROM task_templates WHERE id = ?", id).
+		Scan(&template.ID, &template.Task, &template.Type, &filialIDsStr, &daysStr, &template.Category, &notifTime, &template.OrderIndex, &template.MultiVideo, &template.VideoCount, &template.GuideVideoURL, &createdAt)
 
 	if err != nil {
 		respondJSON(w, http.StatusNotFound, map[string]interface{}{
@@ -1662,7 +1675,9 @@ func getTask(w http.ResponseWriter, r *http.Request) {
 	}
 	task.CheckerAudioURLs = fullAudioURLs(parseCheckerAudioURLs(checkerAudioRaw))
 	task.VideoURLs, task.VideoURL = parseVideoURLs(videoRaw)
-	task.MultiVideo, task.VideoCount = taskVideoConfig(getTemplateVideoConfigs(), templateID)
+	videoConfigs := getTemplateVideoConfigs()
+	task.MultiVideo, task.VideoCount = taskVideoConfig(videoConfigs, templateID)
+	task.GuideVideoURL = videoConfigs[int(templateID.Int64)].Guide
 	task.TemplateID = int(templateID.Int64)
 
 	if daysStr.Valid && daysStr.String != "" {
