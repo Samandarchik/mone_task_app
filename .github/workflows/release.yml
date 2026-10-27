@@ -1,0 +1,140 @@
+# Mone Task App relizi — GitHub serverlarida yig'iladi, kompyuter kerak emas.
+#   Windows: build -> zip -> shu repo Releases (ilovalar o'zi yangilanadi,
+#            lib/core/update/windows_updater.dart)
+#   iOS:     build -> App Store Connect -> TestFlight (deploy_ios.command,
+#            cloud signing)
+#
+# Qachon ishlaydi:
+#   - pubspec.yaml dagi `version:` o'zgarib main ga push qilinganda
+#     (eng oson yo'li — ./release.command) — Windows + iOS
+#   - qo'lda: GitHub -> Actions -> "Reliz (Windows + iOS)" -> Run workflow
+#
+# iOS uchun Secrets (Settings -> Secrets and variables -> Actions):
+#   ASC_KEY_ID, ASC_ISSUER_ID, ASC_KEY_P8 — App Store Connect API kaliti
+#   (.p8 fayl matni)
+name: Reliz (Windows + iOS)
+
+on:
+  push:
+    branches: [main]
+    paths: [pubspec.yaml]
+  workflow_dispatch:
+    inputs:
+      windows:
+        description: Windows relizi
+        type: boolean
+        default: true
+      ios:
+        description: iOS (TestFlight) relizi
+        type: boolean
+        default: true
+
+permissions:
+  contents: write
+
+env:
+  FLUTTER_VERSION: 3.47.8
+
+jobs:
+  # Versiyani o'qiydi; push bo'lsa — versiya qatori o'zgarganmi
+  version:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.v.outputs.version }}
+      build: ${{ steps.v.outputs.build }}
+      changed: ${{ steps.v.outputs.changed }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - id: v
+        run: |
+          full=$(sed -n 's/^version: *//p' pubspec.yaml | head -1 | tr -d '\r')
+          echo "version=${full%%+*}" >> "$GITHUB_OUTPUT"
+          echo "build=${full##*+}" >> "$GITHUB_OUTPUT"
+          changed=true
+          if [ "${{ github.event_name }}" = "push" ]; then
+            git diff "${{ github.event.before }}" "${{ github.sha }}" -- pubspec.yaml \
+              | grep -q '^+version:' || changed=false
+          fi
+          echo "changed=$changed" >> "$GITHUB_OUTPUT"
+          echo "Versiya: $full (o'zgargan: $changed)"
+
+  windows:
+    needs: version
+    if: ${{ needs.version.outputs.changed == 'true' && (github.event_name == 'push' || inputs.windows) }}
+    runs-on: windows-latest
+    timeout-minutes: 60
+    env:
+      GH_TOKEN: ${{ github.token }}
+      TAG: windows-${{ needs.version.outputs.version }}-${{ needs.version.outputs.build }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Shu versiya chiqarilganmi
+        id: exists
+        shell: bash
+        run: |
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "skip=true" >> "$GITHUB_OUTPUT"; echo "$TAG allaqachon bor"
+          else
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: subosito/flutter-action@v2
+        if: steps.exists.outputs.skip == 'false'
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+
+      - name: Build
+        if: steps.exists.outputs.skip == 'false'
+        run: flutter build windows --release
+
+      - name: VC++ runtime DLL lari va zip
+        if: steps.exists.outputs.skip == 'false'
+        shell: pwsh
+        run: |
+          $rel = 'build\windows\x64\runner\Release'
+          foreach ($d in 'msvcp140.dll','msvcp140_1.dll','msvcp140_2.dll','vcruntime140.dll','vcruntime140_1.dll') {
+            if (-not (Test-Path "$rel\$d") -and (Test-Path "$env:SystemRoot\System32\$d")) { Copy-Item "$env:SystemRoot\System32\$d" $rel }
+          }
+          Compress-Archive -Path "$rel\*" -DestinationPath mone_task_app_windows.zip -Force
+
+      - name: GitHub Releases'ga chiqarish
+        if: steps.exists.outputs.skip == 'false'
+        shell: bash
+        run: |
+          gh release create "$TAG" mone_task_app_windows.zip \
+            --title "Windows ${{ needs.version.outputs.version }}" \
+            --notes "Windows ilovasi ${{ needs.version.outputs.version }} (${{ needs.version.outputs.build }}). Ilova o'zi yangilanadi; birinchi marta — zipni ochib, mone_task_app.exe ni ishga tushiring."
+
+  ios:
+    needs: version
+    if: ${{ needs.version.outputs.changed == 'true' && (github.event_name == 'push' || inputs.ios) }}
+    runs-on: macos-15
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+
+      - name: App Store Connect kaliti
+        env:
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+          ASC_KEY_P8: ${{ secrets.ASC_KEY_P8 }}
+        run: |
+          [ -n "$ASC_KEY_ID" ] && [ -n "$ASC_ISSUER_ID" ] && [ -n "$ASC_KEY_P8" ] || { echo "ASC_* secretlar qo'shilmagan"; exit 1; }
+          mkdir -p ~/.appstoreconnect/private_keys
+          printf '%s\n' "$ASC_KEY_P8" > ~/.appstoreconnect/private_keys/AuthKey_${ASC_KEY_ID}.p8
+          printf 'ASC_KEY_ID=%s\nASC_ISSUER_ID=%s\n' "$ASC_KEY_ID" "$ASC_ISSUER_ID" > ~/.mone_appstore.env
+          chmod 600 ~/.mone_appstore.env ~/.appstoreconnect/private_keys/*.p8
+          python3 -m pip install --quiet --break-system-packages cryptography || python3 -m pip install --quiet cryptography
+
+      - name: Build, TestFlight'ga yuklash va tarqatish
+        run: ./deploy_ios.command --no-bump
