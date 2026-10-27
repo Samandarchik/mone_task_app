@@ -1,0 +1,63 @@
+# Windows avto-yangilanish: pubspec.yaml dagi versiya ko'tarilib main ga
+# push qilinganda Windows build'ni yig'ib, `windows-<versiya>-<build>`
+# tegli Release'ga zip qilib qo'yadi. Windows ilovalari buni o'zi topib
+# yangilanadi (lib/core/update/windows_updater.dart).
+name: Windows release
+
+on:
+  push:
+    branches: [main]
+    paths: [pubspec.yaml]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Versiya
+        id: ver
+        shell: bash
+        run: |
+          full=$(grep -m1 '^version:' pubspec.yaml | sed 's/version: *//; s/\r//')
+          version=${full%%+*}
+          build=${full##*+}
+          tag="windows-$version-$build"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          # Shu versiya allaqachon chiqarilgan bo'lsa — qayta yig'ilmaydi
+          if gh release view "$tag" >/dev/null 2>&1; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: subosito/flutter-action@v2
+        if: steps.ver.outputs.exists == 'false'
+        with:
+          channel: stable
+          flutter-version: 3.47.8
+          cache: true
+
+      - name: Build
+        if: steps.ver.outputs.exists == 'false'
+        run: flutter build windows --release
+
+      - name: Zip
+        if: steps.ver.outputs.exists == 'false'
+        shell: pwsh
+        run: Compress-Archive -Path build/windows/x64/runner/Release/* -DestinationPath mone_task_app_windows.zip
+
+      - name: Release
+        if: steps.ver.outputs.exists == 'false'
+        shell: bash
+        run: |
+          gh release create "${{ steps.ver.outputs.tag }}" mone_task_app_windows.zip \
+            --title "Windows ${{ steps.ver.outputs.version }}" \
+            --notes "Windows ilovasi ${{ steps.ver.outputs.version }}. Ilova o'zi yangilanadi; birinchi marta — zipni ochib, mone_task_app.exe ni ishga tushiring."

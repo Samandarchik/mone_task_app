@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:mone_task_app/core/update/windows_updater.dart';
 import 'package:app_links/app_links.dart';
 import 'package:flutter/material.dart';
 import 'package:media_kit/media_kit.dart';
@@ -52,6 +53,8 @@ class _MyAppState extends State<MyApp> {
       MyApp.initialLinkChecked = Completer<void>();
     }
     _initDeepLinks();
+    // Windows: GitHub Releases orqali avto-yangilanish
+    WindowsUpdater.start(navigatorKey);
   }
 
   Future<void> _initDeepLinks() async {
@@ -86,9 +89,7 @@ class _MyAppState extends State<MyApp> {
       final nav = navigatorKey.currentState;
       if (nav != null) {
         // Ustiga push qilamiz (remove emas) — ilova holatini buzmaydi
-        nav.push(
-          MaterialPageRoute(builder: (_) => DeepLinkPage(data: data)),
-        );
+        nav.push(MaterialPageRoute(builder: (_) => DeepLinkPage(data: data)));
       }
     });
   }
@@ -157,9 +158,7 @@ class _MyAppState extends State<MyApp> {
             ),
           ),
         ),
-        routes: {
-          "/login": (context) => LoginPage(),
-        },
+        routes: {"/login": (context) => LoginPage()},
         navigatorKey: navigatorKey,
         debugShowCheckedModeBanner: false,
         home: SpleshScreen(),
