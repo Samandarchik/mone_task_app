@@ -1,5 +1,3 @@
-import 'dart:io';
-
 import 'package:flutter/material.dart';
 import 'package:mone_task_app/core/context_extension.dart';
 import 'package:mone_task_app/core/data/local/token_storage.dart';
@@ -9,7 +7,6 @@ import 'package:mone_task_app/home/service/check_version.dart';
 import 'package:mone_task_app/home/service/login_service.dart';
 import 'package:mone_task_app/home/ui/role_home.dart';
 import 'package:mone_task_app/main.dart';
-import 'package:mone_task_app/shared/services/windows_update_service.dart';
 import 'package:mone_task_app/worker/model/user_model.dart';
 
 class SpleshScreen extends StatefulWidget {
@@ -27,16 +24,7 @@ class SpleshScreenState extends State<SpleshScreen> {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) async {
-      // Windows avto-yangilanish: yangi release bo'lsa yopib bo'lmaydigan
-      // oyna o'zi yuklab o'rnatadi va ilovani qayta ishga tushiradi —
-      // navigatsiyani to'xtatamiz. Windows'da telefon do'konlari tekshiruvi
-      // (VersionChecker) kerak emas.
-      if (Platform.isWindows) {
-        if (await WindowsUpdateService.checkForUpdate()) return;
-      }
-      if (!mounted) return;
-      bool needsUpdate =
-          !Platform.isWindows && await VersionChecker.checkVersion(context);
+      bool needsUpdate = await VersionChecker.checkVersion(context);
       token = await tokenStorage.getToken();
       userModel = tokenStorage.getUserData();
 
