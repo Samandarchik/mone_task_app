@@ -1,40 +1,49 @@
 import 'dart:async';
-import 'dart:convert';
 import 'dart:io';
 
-import 'package:archive/archive_io.dart';
+import 'package:archive/archive.dart';
 import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 
-/// Windows ilovasini avtomatik yangilash.
+/// Windows ilovasini to'liq avtomatik yangilash (HR ilovasidagidek).
 ///
-/// Versiya ko'tarilib `main` ga push qilinganda GitHub Actions
-/// (.github/workflows/windows-release.yml) Windows build'ni yig'ib,
-/// `windows-<versiya>-<build>` tegli Release'ga zip qilib qo'yadi.
-/// Ilova ochilganda va har [_checkEvery] da shu Release'larni tekshiradi:
-/// yangisi bo'lsa so'raydi, yuklab oladi, o'zini almashtirib qayta ochiladi.
+/// Manba — shu repo'ning GitHub Releases'i. Versiya ko'tarilib `main` ga
+/// push qilinganda `.github/workflows/release.yml` Windows build'ni
+/// `windows-<versiya>-<build>` tegli release'ga [assetName] qilib qo'yadi.
+///
+/// Oqim: yangi versiya topilsa yopib bo'lmaydigan oyna chiqadi va DARHOL
+/// o'zi yuklab boshlaydi -> zip %TEMP% ga tushadi -> ilova O'ZI zip'ni o'z
+/// papkasi ustiga ochadi. Windows'da ishlab turgan exe/dll'ni o'chirib
+/// bo'lmaydi, lekin RENAME qilish mumkin — band fayllar `.old_upd` nomiga
+/// ko'chirilib o'rniga yangisi yoziladi. So'ng yangi exe ishga tushiriladi va
+/// eski jarayon yopiladi; `.old_upd` fayllar keyingi ochilishda tozalanadi.
 class WindowsUpdater {
-  static const _releasesUrl =
-      'https://api.github.com/repos/Samandarchik/mone_task_app/releases?per_page=20';
+  static const _repo = 'Samandarchik/mone_task_app';
   static const tagPrefix = 'windows-';
   static const assetName = 'mone_task_app_windows.zip';
-  static const _exeName = 'mone_task_app.exe';
-  static const _checkEvery = Duration(hours: 6);
 
   static GlobalKey<NavigatorState>? _navigatorKey;
-  static Timer? _timer;
-  static bool _busy = false;
+  static Timer? _periodicTimer;
+  static bool _dialogShowing = false;
+  static bool _installing = false;
+  static Future<void>? _inflight;
 
-  /// «Позже» bosilgan build — shu ishga tushirishda qayta so'ralmaydi
-  static int? _postponedBuild;
-
+  /// Ochilishda va har 30 daqiqada tekshiradi — kompyuterlarda dastur kun
+  /// bo'yi yopilmaydi. So'rov github.com redirect orqali (limitsiz).
   static void start(GlobalKey<NavigatorState> navigatorKey) {
-    if (!Platform.isWindows || _timer != null) return;
+    // flutter run / debug'da o'zini yangilashga urinmasin
+    if (!Platform.isWindows || !kReleaseMode) return;
+    if (_periodicTimer != null) return;
     _navigatorKey = navigatorKey;
+    _cleanupLeftovers();
     // Ilova to'liq ochilib olsin
-    Future.delayed(const Duration(seconds: 10), check);
-    _timer = Timer.periodic(_checkEvery, (_) => check());
+    Future.delayed(const Duration(seconds: 5), check);
+    _periodicTimer = Timer.periodic(
+      const Duration(minutes: 30),
+      (_) => check(),
+    );
   }
 
   /// Tegdan build raqami: `windows-0.3.8-308` → 308
@@ -49,202 +58,296 @@ class WindowsUpdater {
     return parts.length > 1 ? parts.first : tag;
   }
 
-  static Future<void> check() async {
-    if (_busy) return;
-    _busy = true;
+  /// Bir vaqtda faqat bitta tekshiruv yuradi
+  static Future<void> check() =>
+      _inflight ??= _check().whenComplete(() => _inflight = null);
+
+  static Future<void> _check() async {
+    if (_dialogShowing || _installing) return;
     try {
+      final tag = await _latestTag();
+      if (tag == null) return;
+      final latestBuild = buildFromTag(tag);
+      if (latestBuild == null) return;
+
       final info = await PackageInfo.fromPlatform();
-      final current = int.tryParse(info.buildNumber) ?? 0;
+      final currentBuild = int.tryParse(info.buildNumber) ?? 0;
+      if (latestBuild <= currentBuild) return;
 
-      final response = await Dio().get<List<dynamic>>(
-        _releasesUrl,
-        options: Options(
-          headers: {'Accept': 'application/vnd.github+json'},
-          receiveTimeout: const Duration(seconds: 20),
-        ),
-      );
-
-      // Eng katta build raqamli Windows release
-      Map<String, dynamic>? latest;
-      int latestBuild = 0;
-      String? zipUrl;
-      for (final r in response.data ?? const []) {
-        if (r is! Map<String, dynamic>) continue;
-        if (r['draft'] == true || r['prerelease'] == true) continue;
-        final build = buildFromTag('${r['tag_name']}');
-        if (build == null || build <= latestBuild) continue;
-        final asset = (r['assets'] as List? ?? const [])
-            .whereType<Map<String, dynamic>>()
-            .where((a) => a['name'] == assetName)
-            .firstOrNull;
-        if (asset == null) continue;
-        latest = r;
-        latestBuild = build;
-        zipUrl = '${asset['browser_download_url']}';
-      }
-
-      if (latest == null || zipUrl == null) return;
-      if (latestBuild <= current || latestBuild == _postponedBuild) return;
-
-      final version = versionFromTag('${latest['tag_name']}');
       final context = _navigatorKey?.currentContext;
-      if (context == null || !context.mounted) return;
+      if (context == null || !context.mounted || _dialogShowing) return;
 
-      final ok = await showDialog<bool>(
+      _dialogShowing = true;
+      showDialog(
         context: context,
-        builder: (ctx) => AlertDialog(
-          icon: const Icon(
-            Icons.system_update_alt_rounded,
-            color: Color(0xFF2563EB),
-            size: 36,
-          ),
-          title: Text("Новая версия $version"),
-          content: Text(
-            "Сейчас установлена ${info.version}. "
-            "Обновить? Программа перезапустится сама.",
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(ctx, false),
-              child: const Text("Позже"),
-            ),
-            FilledButton(
-              onPressed: () => Navigator.pop(ctx, true),
-              child: const Text("Обновить"),
-            ),
-          ],
+        barrierDismissible: false,
+        builder: (_) => _AutoUpdateDialog(
+          currentVersion: info.version.split('+').first,
+          newVersion: versionFromTag(tag),
+          zipUrl: 'https://github.com/$_repo/releases/download/$tag/$assetName',
         ),
-      );
-      if (ok != true) {
-        _postponedBuild = latestBuild;
-        return;
-      }
-      if (context.mounted) await _install(context, zipUrl, latestBuild);
+      ).whenComplete(() => _dialogShowing = false);
     } catch (e) {
-      // Internet yo'q yoki GitHub javob bermadi — keyingi tekshiruvda
       debugPrint('Windows yangilanishini tekshirib bo\'lmadi: $e');
-    } finally {
-      _busy = false;
     }
   }
 
-  static Future<void> _install(
-    BuildContext context,
-    String zipUrl,
-    int build,
-  ) async {
-    final installDir = File(Platform.resolvedExecutable).parent;
-
-    // Dastur papkasiga yozib bo'ladimi (Program Files bo'lsa — yo'q)
-    try {
-      final probe = File('${installDir.path}\\.update_probe');
-      await probe.writeAsString('ok');
-      await probe.delete();
-    } catch (_) {
-      if (context.mounted) {
-        _error(
-          context,
-          "Нет прав на запись в папку программы:\n${installDir.path}\n"
-          "Перенесите программу в другую папку или обновите вручную.",
+  /// Eng so'nggi release tegi.
+  ///
+  /// ATAYIN api.github.com ishlatilmaydi: autentifikatsiyasiz soatiga 60
+  /// so'rov / IP — bitta ofisdagi barcha kompyuterlar bir IP orqali chiqsa
+  /// limit tez tugaydi. `github.com/<repo>/releases/latest` ning redirect
+  /// manzilidan (…/releases/tag/windows-0.3.9-309) teg o'qiladi — limitsiz.
+  static Future<String?> _latestTag() async {
+    final response =
+        await Dio(
+          BaseOptions(
+            connectTimeout: const Duration(seconds: 10),
+            receiveTimeout: const Duration(seconds: 10),
+          ),
+        ).get(
+          'https://github.com/$_repo/releases/latest',
+          options: Options(followRedirects: false, validateStatus: (_) => true),
         );
+    final location = response.headers.value('location') ?? '';
+    return RegExp(r'/releases/tag/([^/?#]+)').firstMatch(location)?.group(1);
+  }
+
+  /// Zip'ni ilova papkasi ustiga ochadi va ilovani qayta ishga tushiradi —
+  /// hammasi shu jarayonning o'zida, tashqi skriptsiz.
+  static Future<void> installAndRestart(String zipPath) async {
+    if (_installing) return;
+    _installing = true;
+    try {
+      await _doInstallAndRestart(zipPath);
+    } catch (_) {
+      // Xato — oyna «Повторить» ko'rsatadi, keyingi urinish yursin
+      _installing = false;
+      rethrow;
+    }
+  }
+
+  static Future<void> _doInstallAndRestart(String zipPath) async {
+    final exePath = Platform.resolvedExecutable;
+    final appDir = File(exePath).parent.path;
+    final sep = Platform.pathSeparator;
+
+    final archive = ZipDecoder().decodeBytes(await File(zipPath).readAsBytes());
+    for (final entry in archive) {
+      // Compress-Archive zip'larida yo'llar '\' bilan bo'lishi mumkin
+      final rel = entry.name.replaceAll('\\', '/');
+      if (rel.isEmpty || rel.contains('..')) continue;
+
+      final targetPath = '$appDir$sep${rel.replaceAll('/', sep)}';
+      if (!entry.isFile) {
+        Directory(targetPath).createSync(recursive: true);
+        continue;
       }
-      return;
+      final target = File(targetPath);
+      target.parent.createSync(recursive: true);
+      final data = entry.readBytes();
+      if (data == null) continue;
+
+      try {
+        target.writeAsBytesSync(data, flush: true);
+      } on FileSystemException {
+        // Fayl band (ishlab turgan exe/dll) — eskisini chetga rename qilib
+        // o'rniga yangisini yozamiz. `.old_upd` ham band bo'lishi mumkin
+        // (ilovaning ikkinchi oynasi ochiq) — bo'sh nom topiladi.
+        var old = File('$targetPath.old_upd');
+        try {
+          if (old.existsSync()) old.deleteSync();
+        } catch (_) {}
+        for (var n = 1; old.existsSync() && n < 50; n++) {
+          old = File('$targetPath.old_upd$n');
+          try {
+            if (old.existsSync()) old.deleteSync();
+          } catch (_) {}
+        }
+        target.renameSync(old.path);
+        target.writeAsBytesSync(data, flush: true);
+      }
     }
 
-    if (!context.mounted) return;
-    final progress = ValueNotifier<double>(0);
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (_) => PopScope(
-        canPop: false,
-        child: AlertDialog(
-          title: const Text("Загрузка обновления"),
-          content: ValueListenableBuilder<double>(
-            valueListenable: progress,
-            builder: (_, value, _) => Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                LinearProgressIndicator(value: value),
-                const SizedBox(height: 8),
-                Text("${(value * 100).round()}%"),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-
     try {
-      final workDir = Directory(
-        '${Directory.systemTemp.path}\\mone_task_update_$build',
-      );
-      if (await workDir.exists()) await workDir.delete(recursive: true);
-      await workDir.create(recursive: true);
+      await File(zipPath).delete();
+    } catch (_) {}
 
-      final zipPath = '${workDir.path}\\$assetName';
+    // Yangi exe'ni ishga tushirib, eski jarayonni yopamiz
+    await Process.start(
+      exePath,
+      const [],
+      workingDirectory: appDir,
+      mode: ProcessStartMode.detached,
+    );
+    exit(0);
+  }
+
+  /// Oldingi yangilanishdan qolgan `.old_upd` fayllar va zip'lar
+  static void _cleanupLeftovers() {
+    try {
+      final appDir = File(Platform.resolvedExecutable).parent;
+      for (final e in appDir.listSync(recursive: true)) {
+        if (e is File && RegExp(r'\.old_upd\d*$').hasMatch(e.path)) {
+          try {
+            e.deleteSync();
+          } catch (_) {}
+        }
+      }
+    } catch (_) {}
+    try {
+      for (final e in Directory.systemTemp.listSync()) {
+        final name = e.path.split(Platform.pathSeparator).last;
+        if (name.startsWith('mone_task_app_update')) {
+          try {
+            e.deleteSync();
+          } catch (_) {}
+        }
+      }
+    } catch (_) {}
+  }
+}
+
+/// Yopib bo'lmaydigan avto-yangilash oynasi: ochilishi bilan o'zi yuklab
+/// boshlaydi, tugagach o'zi o'rnatib qayta ishga tushiradi. Xato bo'lsa
+/// 30 soniyadan keyin o'zi qayta urinadi (kompyuterda hech kim bosmasligi
+/// mumkin).
+class _AutoUpdateDialog extends StatefulWidget {
+  final String currentVersion;
+  final String newVersion;
+  final String zipUrl;
+
+  const _AutoUpdateDialog({
+    required this.currentVersion,
+    required this.newVersion,
+    required this.zipUrl,
+  });
+
+  @override
+  State<_AutoUpdateDialog> createState() => _AutoUpdateDialogState();
+}
+
+class _AutoUpdateDialogState extends State<_AutoUpdateDialog> {
+  double _progress = 0;
+  bool _installing = false;
+  String? _error;
+  CancelToken? _cancelToken;
+  Timer? _retryTimer;
+
+  @override
+  void initState() {
+    super.initState();
+    _startDownload();
+  }
+
+  @override
+  void dispose() {
+    _cancelToken?.cancel();
+    _retryTimer?.cancel();
+    super.dispose();
+  }
+
+  Future<void> _startDownload() async {
+    _retryTimer?.cancel();
+    setState(() {
+      _installing = false;
+      _error = null;
+      _progress = 0;
+    });
+
+    final zipPath =
+        '${Directory.systemTemp.path}${Platform.pathSeparator}'
+        'mone_task_app_update_${widget.newVersion}.zip';
+    var downloaded = false;
+    try {
+      _cancelToken = CancelToken();
       await Dio().download(
-        zipUrl,
+        widget.zipUrl,
         zipPath,
+        cancelToken: _cancelToken,
+        options: Options(receiveTimeout: const Duration(minutes: 10)),
         onReceiveProgress: (received, total) {
-          if (total > 0) progress.value = received / total;
+          if (total > 0 && mounted) {
+            setState(() => _progress = received / total);
+          }
         },
       );
-
-      final filesDir = Directory('${workDir.path}\\files');
-      await extractFileToDisk(zipPath, filesDir.path);
-
-      // Zip ichida exe turgan papka (ildizda yoki bitta ichki papkada)
-      final exe = await filesDir
-          .list(recursive: true)
-          .where((e) => e is File && e.path.toLowerCase().endsWith(_exeName))
-          .cast<File>()
-          .first;
-      final sourceDir = exe.parent.path;
-
-      // Ilova yopilgach fayllarni almashtirib, qayta ochadigan skript
-      final script = File('${workDir.path}\\update.bat');
-      await script.writeAsString(
-        [
-          '@echo off',
-          'chcp 65001 >nul',
-          ':wait',
-          'tasklist /FI "PID eq $pid" 2>nul | find "$pid" >nul',
-          'if not errorlevel 1 (timeout /t 1 /nobreak >nul & goto wait)',
-          'robocopy "$sourceDir" "${installDir.path}" /E /R:10 /W:1 '
-              '/NFL /NDL /NJH /NJS >nul',
-          'start "" "${installDir.path}\\$_exeName"',
-        ].join('\r\n'),
-        encoding: utf8,
-      );
-
-      await Process.start('cmd.exe', [
-        '/c',
-        script.path,
-      ], mode: ProcessStartMode.detached);
-      exit(0);
+      downloaded = true;
+      if (!mounted) return;
+      setState(() => _installing = true);
+      await Future.delayed(const Duration(milliseconds: 600));
+      await WindowsUpdater.installAndRestart(zipPath);
     } catch (e) {
-      debugPrint('Windows yangilanishi o\'rnatilmadi: $e');
-      if (context.mounted) {
-        Navigator.of(context, rootNavigator: true).pop();
-        _error(context, "Не удалось обновить. Попробуйте позже.");
-      }
-    } finally {
-      progress.dispose();
+      debugPrint('Yangilanishda xato (yuklandi: $downloaded): $e');
+      if (!mounted) return;
+      setState(() {
+        _installing = false;
+        _error = downloaded
+            ? "Обновление загружено, но не установилось.\n"
+                  "Закройте другие окна программы.\n"
+                  "Через 30 секунд попробуем снова."
+            : "Не удалось загрузить обновление.\n"
+                  "Проверьте интернет.\n"
+                  "Через 30 секунд попробуем снова.";
+      });
+      _retryTimer = Timer(const Duration(seconds: 30), () {
+        if (mounted && !_installing) _startDownload();
+      });
     }
   }
 
-  static void _error(BuildContext context, String message) {
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text("Обновление"),
-        content: Text(message),
+  @override
+  Widget build(BuildContext context) {
+    final percent = (_progress * 100).clamp(0, 100).toStringAsFixed(0);
+    return PopScope(
+      canPop: false,
+      child: AlertDialog(
+        title: const Text(
+          "Обновление программы",
+          style: TextStyle(fontWeight: FontWeight.bold),
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              "Текущая версия: ${widget.currentVersion}",
+              style: const TextStyle(fontSize: 13, color: Colors.grey),
+            ),
+            Text(
+              "Новая версия: ${widget.newVersion}",
+              style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+            ),
+            const SizedBox(height: 16),
+            if (_error != null)
+              Text(_error!, style: const TextStyle(color: Colors.red))
+            else if (_installing)
+              const Row(
+                children: [
+                  SizedBox(
+                    width: 18,
+                    height: 18,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  ),
+                  SizedBox(width: 10),
+                  Expanded(
+                    child: Text("Установка... программа перезапустится"),
+                  ),
+                ],
+              )
+            else ...[
+              Text("Загрузка... $percent%"),
+              const SizedBox(height: 8),
+              LinearProgressIndicator(value: _progress > 0 ? _progress : null),
+            ],
+          ],
+        ),
         actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text("OK"),
-          ),
+          if (_error != null)
+            TextButton(
+              onPressed: _startDownload,
+              child: const Text("Повторить"),
+            ),
         ],
       ),
     );
