@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:mone_task_app/shared/services/windows_update_service.dart';
 import 'package:app_links/app_links.dart';
 import 'package:flutter/material.dart';
 import 'package:media_kit/media_kit.dart';
@@ -19,6 +20,10 @@ Future<void> main() async {
   if (Platform.isWindows) {
     MediaKit.ensureInitialized();
   }
+  // Windows'da ochiq turgan ilova yangi release'ni o'tkazib yubormasligi
+  // uchun davriy (30 daqiqada) avto-yangilanish tekshiruvi.
+  WindowsUpdateService.navigatorKey = navigatorKey;
+  WindowsUpdateService.startPeriodicChecks();
   await setupInit();
   await ActiveFilial.load();
   runApp(const MyApp());
@@ -86,9 +91,7 @@ class _MyAppState extends State<MyApp> {
       final nav = navigatorKey.currentState;
       if (nav != null) {
         // Ustiga push qilamiz (remove emas) — ilova holatini buzmaydi
-        nav.push(
-          MaterialPageRoute(builder: (_) => DeepLinkPage(data: data)),
-        );
+        nav.push(MaterialPageRoute(builder: (_) => DeepLinkPage(data: data)));
       }
     });
   }
@@ -157,9 +160,7 @@ class _MyAppState extends State<MyApp> {
             ),
           ),
         ),
-        routes: {
-          "/login": (context) => LoginPage(),
-        },
+        routes: {"/login": (context) => LoginPage()},
         navigatorKey: navigatorKey,
         debugShowCheckedModeBanner: false,
         home: SpleshScreen(),

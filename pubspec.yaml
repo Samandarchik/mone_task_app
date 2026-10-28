@@ -46,6 +46,9 @@ dependencies:
   video_player: ^2.10.1
   permission_handler: ^12.0.1
   url_launcher: ^6.3.2
+  # Windows avto-yangilanish (lib/shared/services/windows_update_service.dart)
+  package_info_plus: ^9.0.0
+  archive: ^4.0.7
   chewie: ^1.13.0
   path_provider: ^2.1.5
   path: ^1.9.1

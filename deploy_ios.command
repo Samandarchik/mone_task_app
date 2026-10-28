@@ -1,15 +1,17 @@
 #!/usr/bin/env bash
 #
-# Mone Task App (uz.uzaidev.taskapp) — iOS build, App Store Connect'ga yuklash va TestFlight'ga
-# AVTOMAT tarqatish. Finder'da ikki marta bosib ham, terminaldan ham ishlatsa bo'ladi.
+# Mone Task App (uz.uzaidev.taskapp) — iOS build, App Store Connect'ga yuklash va
+# TestFlight'ga AVTOMAT tarqatish. Finder'da ikki marta bosib ham, terminaldan
+# ham ishlatsa bo'ladi.
 #
-#   ./deploy_ios.command                  versiyani oshiradi (0.2.4 -> 0.2.5+205)
-#   ./deploy_ios.command --minor          o'rta raqam  (0.2.4 -> 0.3.0+300)
-#   ./deploy_ios.command --major          bosh raqam   (0.2.4 -> 1.0.0+10000)
-#   ./deploy_ios.command --version 0.3.0  versiyani qo'lda belgilash
+#   ./deploy_ios.command                  versiyani oshiradi (0.3.9 -> 0.3.10)
+#   ./deploy_ios.command --minor          o'rta raqam  (0.3.9 -> 0.4.0)
+#   ./deploy_ios.command --major          bosh raqam   (0.3.9 -> 1.0.0)
+#   ./deploy_ios.command --version 0.4.0  versiyani qo'lda belgilash
 #   ./deploy_ios.command --build          versiyani o'zgartirmay faqat build +1
 #                                         (App Store shu build'ni allaqachon olgan bo'lsa)
 #   ./deploy_ios.command --no-bump        hech nimaga tegmaydi (aynan shu build'ni qayta yuklash)
+#   ./deploy_ios.command --no-git         pubspec versiyasini commit/push qilmaydi
 #   ./deploy_ios.command --groups "A,B"   faqat shu TestFlight guruhlariga
 #   ./deploy_ios.command --notes "matn"   "What to Test" izohi
 #   ./deploy_ios.command --no-wait        yuklab qo'yadi, TestFlight tarqatishni kutmaydi
@@ -24,24 +26,26 @@
 #   3. "What to Test" izohini yozadi
 #   4. build'ni TestFlight guruhlariga qo'shadi -> testerlarga xabar O'ZI boradi
 #      (tashqi/external guruh bo'lsa beta review'ga ham o'zi yuboradi)
+#   5. pubspec.yaml dagi versiya o'zgarishini commit qilib, origin'ga push qiladi
+#      (faqat pubspec.yaml — boshqa fayllaringizga tegmaydi; --no-git bilan o'chadi)
 #
-# BUILD RAQAMI QO'LDA YOZILMAYDI — u versiyadan hisoblanadi:
-#     build = major*10000 + minor*100 + patch
-#     0.2.5 -> 205       0.3.0 -> 300       1.0.0 -> 10000
-# (Eski `0.2.4+24` uslubidan bir martalik sakrash bo'ladi — raqam faqat o'sadi, muammo yo'q.)
-# Siz faqat versiya haqida o'ylaysiz, pubspec.yaml'dagi `+N` uning nusxasi.
+# BUILD RAQAMI QO'LDA YOZILMAYDI. U shunchaki o'suvchi hisoblagich:
+#     yangi build = max(pubspec'dagi +N, App Store Connect'dagi eng katta) + 1
+# Shuning uchun pubspec boshqa kompyuterda qolib ketgan bo'lsa ham raqam
+# pasaymaydi. Siz faqat versiya (X.Y.Z) haqida o'ylaysiz.
 #
 # `+N` ni butunlay olib tashlab bo'lmaydi: iOS'da Flutter uni versiyaning
 # o'zidan oladi (ishlaydi), lekin Android'da versionCode `1` ga tushib qoladi —
 # eski ilova ustiga o'rnatilmaydi (INSTALL_FAILED_VERSION_DOWNGRADE) va Play
-# Store rad etadi. Shuning uchun `+N` saqlanadi, ammo avtomatik hisoblanadi.
+# Store rad etadi.
 #
-# ⚠️ DIQQAT: skript pubspec.yaml dagi `version:` ni o'zgartiradi — APK build
-# (auto_build_with_version.command) ham shu versiyani oladi. pubspec
-# o'zgarishini commit qilishni unutmang.
+# ⚠️ Windows relizi bilan bog'liq: bu skript pubspec.yaml dagi `version:` ni
+# o'zgartiradi. build_windows.bat -> publish_release.ps1 ham shu versiyani
+# o'qiydi, ya'ni iOS deploy'dan keyin Windows relizi keyingi raqamdan boshlanadi.
+# Bu normal (Windows faqat X.Y.Z qismini oladi, `+N` ga qaramaydi).
 #
-# Konfiguratsiya: ~/.mone_appstore.env (bo'lmasa ~/.sadinov_appstore.env
-# ishlatiladi — ilovalar bitta Apple jamoasida: KC2VPYBYF5):
+# Konfiguratsiya: ~/.mone_appstore.env (bo'lmasa ~/.hr_appstore.env,
+# ~/.sadinov_appstore.env yoki ~/.workly_appstore.env ishlatiladi — ilovalar bitta Apple jamoasida: KC2VPYBYF5):
 #   ASC_KEY_ID=XXXXXXXXXX
 #   ASC_ISSUER_ID=xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
 # Kalit fayl: ~/.appstoreconnect/private_keys/AuthKey_<ASC_KEY_ID>.p8
@@ -84,6 +88,7 @@ VALIDATE=0
 CLEAN=0
 NO_WAIT=0
 ANALYZE=0
+GIT_PUSH=1
 NEW_VERSION=""
 # DIQQAT: `GROUPS` nomini ishlatib bo'lmaydi — u bash'ning maxsus o'zgaruvchisi
 # (foydalanuvchi guruh ID lari), unga yozib bo'lmaydi va "$GROUPS" -> 20 bo'lib ketadi.
@@ -98,6 +103,7 @@ while [ $# -gt 0 ]; do
         --patch)            BUMP=patch ;;
         --minor)            BUMP=minor ;;
         --major)            BUMP=major ;;
+        --no-git)   GIT_PUSH=0 ;;
         --no-wait)  NO_WAIT=1 ;;
         --validate) VALIDATE=1 ;;
         --clean)    CLEAN=1 ;;
@@ -115,9 +121,42 @@ done
 
 CONFIG="${ASC_CONFIG:-}"
 if [ -z "$CONFIG" ]; then
-    for c in "$HOME/.mone_appstore.env" "$HOME/.sadinov_appstore.env"; do
+    for c in "$HOME/.mone_appstore.env" "$HOME/.hr_appstore.env" "$HOME/.sadinov_appstore.env" "$HOME/.workly_appstore.env"; do
         [ -f "$c" ] && CONFIG="$c" && break
     done
+fi
+# Konfiguratsiya yo'q, lekin terminal interaktiv bo'lsa — bir martalik sozlash:
+# Key ID / Issuer ID so'raladi, .p8 fayl kerakli joyga nusxalanadi.
+if { [ -z "$CONFIG" ] || [ ! -f "$CONFIG" ]; } && [ -t 0 ]; then
+    echo "App Store Connect API kaliti hali sozlanmagan — bir martalik sozlash."
+    echo "(App Store Connect -> Users and Access -> Integrations -> App Store Connect API)"
+    echo
+    read -r -p "Key ID (10 belgi, masalan 2X9R4HXF34): " IN_KEY_ID
+    read -r -p "Issuer ID (xxxxxxxx-xxxx-...): " IN_ISSUER_ID
+    IN_KEY_ID="$(echo "$IN_KEY_ID" | tr -d '[:space:]')"
+    IN_ISSUER_ID="$(echo "$IN_ISSUER_ID" | tr -d '[:space:]')"
+    [[ "$IN_KEY_ID" =~ ^[A-Z0-9]{10}$ ]] || { echo "Key ID noto'g'ri: $IN_KEY_ID" >&2; exit 1; }
+    [[ "$IN_ISSUER_ID" =~ ^[0-9a-fA-F-]{36}$ ]] || { echo "Issuer ID noto'g'ri: $IN_ISSUER_ID" >&2; exit 1; }
+
+    DEST_KEY="$HOME/.appstoreconnect/private_keys/AuthKey_${IN_KEY_ID}.p8"
+    if [ ! -f "$DEST_KEY" ]; then
+        DEFAULT_P8="$HOME/Downloads/AuthKey_${IN_KEY_ID}.p8"
+        [ -f "$DEFAULT_P8" ] || DEFAULT_P8=""
+        read -r -p "AuthKey_${IN_KEY_ID}.p8 fayl yo'li (terminalga sudrab tashlang)${DEFAULT_P8:+ [$DEFAULT_P8]}: " IN_P8
+        IN_P8="${IN_P8:-$DEFAULT_P8}"
+        # Sudrab tashlanganda yo'l qo'shtirnoq yoki "\ " bilan keladi
+        IN_P8="$(echo "$IN_P8" | sed "s/^[\"']//; s/[\"'] *$//; s/\\\\ / /g; s/ *$//")"
+        [ -f "$IN_P8" ] || { echo "Fayl topilmadi: $IN_P8" >&2; exit 1; }
+        mkdir -p "$(dirname "$DEST_KEY")"
+        cp "$IN_P8" "$DEST_KEY"
+        chmod 600 "$DEST_KEY"
+    fi
+
+    CONFIG="$HOME/.mone_appstore.env"
+    printf 'ASC_KEY_ID=%s\nASC_ISSUER_ID=%s\n' "$IN_KEY_ID" "$IN_ISSUER_ID" > "$CONFIG"
+    chmod 600 "$CONFIG"
+    echo "Saqlandi: $CONFIG va $DEST_KEY"
+    echo
 fi
 if [ -z "$CONFIG" ] || [ ! -f "$CONFIG" ]; then
     cat >&2 <<EOF
@@ -374,9 +413,6 @@ version_line() {
     grep '^version:' pubspec.yaml | head -1 | sed 's/^version: *//; s/[[:space:]]*#.*//; s/[[:space:]]*$//'
 }
 
-# Build raqami (Android versionCode / iOS CFBundleVersion) versiyadan hisoblanadi
-build_code() { echo $(( $1 * 10000 + $2 * 100 + $3 )); }
-
 CURRENT="$(version_line)"
 SEMVER="${CURRENT%%+*}"
 case "$CURRENT" in
@@ -399,13 +435,13 @@ if [ "$ASC_RC" -ne 0 ]; then
 fi
 echo "  App Store Connect'dagi eng katta build: $ASC_MAX"
 
-# Yangi raqam shundan yuqori bo'lishi kerak (--no-bump uchun OLD_BUILD o'zgarmay qoladi)
+# Yangi build raqami shundan ham, pubspec'dagidan ham yuqori bo'lishi kerak
 FLOOR="$OLD_BUILD"
 [ "$ASC_MAX" -gt "$FLOOR" ] && FLOOR="$ASC_MAX"
 
 [[ "$SEMVER" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || {
     echo "pubspec.yaml versiyasi X.Y.Z ko'rinishida emas: $CURRENT" >&2
-    echo "Qo'lda bering: ./deploy_ios.command --version 0.2.5" >&2
+    echo "Qo'lda bering: ./deploy_ios.command --version 0.3.10" >&2
     exit 1
 }
 
@@ -429,34 +465,18 @@ if [ -z "$NEW_VERSION" ]; then
 fi
 
 SEMVER="$MAJ.$MIN.$PAT"
-BUILD_NUM="$(build_code "$MAJ" "$MIN" "$PAT")"
 
 case "$BUMP" in
     none)
         # Hech nimaga tegmaymiz — aynan pubspec'dagi qiymat bilan qayta yuklash
-        [ -n "$NEW_VERSION" ] || { SEMVER="${CURRENT%%+*}"; BUILD_NUM="$OLD_BUILD"; }
-        ;;
-    build)
-        # Versiya o'zgarmaydi, faqat build oshadi (App Store bu build'ni olgan bo'lsa).
-        # Keyingi oddiy ishga tushirish versiya <-> build muvofiqligini o'zi tiklaydi.
-        BUILD_NUM=$((FLOOR + 1))
+        # (odatda --validate bilan birga ishlatiladi).
+        [ -n "$NEW_VERSION" ] || SEMVER="${CURRENT%%+*}"
+        BUILD_NUM="$OLD_BUILD"
         ;;
     *)
-        # versionCode faqat o'sishi mumkin (Android talabi + App Store ham qaytarmaydi).
-        if [ "$BUILD_NUM" -le "$FLOOR" ]; then
-            if [ -n "$NEW_VERSION" ]; then
-                echo "$NEW_VERSION uchun build raqami $BUILD_NUM bo'ladi, mavjudi esa $FLOOR." >&2
-                echo "Build raqami pasaya olmaydi — kattaroq versiya bering." >&2
-                exit 1
-            fi
-            # Hisoblangan raqam mavjudidan katta bo'lguncha patch'ni oshiramiz
-            while [ "$BUILD_NUM" -le "$FLOOR" ]; do
-                PAT=$((PAT + 1))
-                SEMVER="$MAJ.$MIN.$PAT"
-                BUILD_NUM="$(build_code "$MAJ" "$MIN" "$PAT")"
-            done
-            echo "Build raqami mavjudidan ($FLOOR) oshishi uchun versiya $SEMVER ga surildi."
-        fi
+        # versionCode faqat o'sishi mumkin (Android talabi + App Store ham
+        # bir xil raqamni ikkinchi marta qabul qilmaydi).
+        BUILD_NUM=$((FLOOR + 1))
         ;;
 esac
 
@@ -569,7 +589,27 @@ if [ "$VALIDATE" -eq 1 ]; then
 fi
 echo "Yuklandi: $TARGET"
 
-# --- 5. TestFlight ---
+# --- 5. Versiyani git'ga yozib qo'yish ---
+# Faqat pubspec.yaml commit qilinadi — ish jarayonidagi boshqa fayllaringiz
+# tegilmaydi. Push muvaffaqiyatsiz bo'lsa (masalan remote oldinda) — reliz
+# baribir yuklangan, shuning uchun skript to'xtamaydi, ogohlantirish beradi.
+
+if [ "$GIT_PUSH" -eq 1 ] && [ "$TARGET" != "$CURRENT" ] \
+   && command -v git >/dev/null 2>&1 && git rev-parse --git-dir >/dev/null 2>&1; then
+    BRANCH="$(git rev-parse --abbrev-ref HEAD)"
+    echo "pubspec.yaml commit qilinmoqda ($BRANCH)..."
+    if git commit -q -m "mone_task_app: versiya $TARGET (iOS reliz)" -- pubspec.yaml; then
+        if git push -q origin "$BRANCH"; then
+            echo "  push qilindi: origin/$BRANCH"
+        else
+            echo "  [OGOHLANTIRISH] push o'tmadi — qo'lda: git pull --rebase && git push"
+        fi
+    else
+        echo "  [OGOHLANTIRISH] commit qilinmadi (o'zgarish yo'q yoki git rad etdi)."
+    fi
+fi
+
+# --- 6. TestFlight ---
 
 if [ "$NO_WAIT" -eq 1 ]; then
     echo "TestFlight tarqatish kutilmadi (--no-wait) — build App Store Connect'da 5-15"

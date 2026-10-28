@@ -1,0 +1,64 @@
+# mone_task_app Windows relizi — GitHub serverlarida yig'iladi, kompyuter kerak emas.
+#   build -> zip -> Samandarchik/mone_task_app_releases (ilovalar o'zi yangilanadi)
+#   (Windows kompyuterda build_windows.bat ham xuddi shuni qiladi.)
+# Ishga tushirish: GitHub -> Actions -> "Reliz (Windows)" -> Run workflow.
+# Versiya pubspec.yaml dan olinadi (X.Y.Z).
+#
+# Kerakli Secret (Settings -> Secrets and variables -> Actions):
+#   RELEASES_TOKEN — mone_task_app_releases ga yozish huquqi bor GitHub token
+name: Reliz (Windows)
+
+on:
+  workflow_dispatch:
+
+env:
+  FLUTTER_VERSION: 3.44.0
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    timeout-minutes: 60
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+
+      - name: Versiya
+        run: |
+          $v = (Select-String -Path pubspec.yaml -Pattern '^version:\s*([0-9.]+)').Matches[0].Groups[1].Value
+          "VERSION=$v" >> $env:GITHUB_ENV
+          Write-Host "Versiya: $v"
+
+      - name: Oyna sarlavhasiga versiya
+        run: |
+          $f = 'windows\runner\main.cpp'
+          (Get-Content $f -Raw) -replace 'L"mone_task_app"', "L`"mone_task_app v$env:VERSION`"" | Set-Content $f -Encoding UTF8
+
+      - run: flutter pub get
+      - run: flutter build windows --release
+
+      - name: VC++ runtime DLL lari va zip
+        run: |
+          $rel = 'build\windows\x64\runner\Release'
+          foreach ($d in 'msvcp140.dll','msvcp140_1.dll','msvcp140_2.dll','vcruntime140.dll','vcruntime140_1.dll') {
+            if (-not (Test-Path "$rel\$d") -and (Test-Path "$env:SystemRoot\System32\$d")) { Copy-Item "$env:SystemRoot\System32\$d" $rel }
+          }
+          foreach ($d in 'msvcp140.dll','vcruntime140.dll','vcruntime140_1.dll') {
+            if (-not (Test-Path "$rel\$d")) { throw "$d topilmadi" }
+          }
+          Compress-Archive -Path "$rel\*" -DestinationPath "mone_task_app_v$($env:VERSION)_windows.zip" -Force
+
+      - name: GitHub Releases'ga chiqarish
+        env:
+          RELEASES_TOKEN: ${{ secrets.RELEASES_TOKEN }}
+        run: |
+          if (-not $env:RELEASES_TOKEN) { throw "RELEASES_TOKEN secret qo'shilmagan" }
+          Set-Content -Path "$env:USERPROFILE\.github_release_token" -Value $env:RELEASES_TOKEN -NoNewline
+          ./publish_release.ps1 -Version $env:VERSION -Zip "mone_task_app_v$($env:VERSION)_windows.zip"
+
