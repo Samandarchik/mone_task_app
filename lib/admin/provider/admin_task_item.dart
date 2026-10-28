@@ -227,6 +227,13 @@ class AdminTaskListItem extends StatelessWidget {
                 Icons.repeat_rounded,
                 getTypeName(task.type).replaceAll(':', '').trim(),
               ),
+              // Vazifa kimga biriktirilgan (Эрталабги / Кечкурунгги Админ ...)
+              if (task.category.isNotEmpty)
+                _chip(
+                  _categoryIcon(task.category),
+                  task.category,
+                  color: _categoryColor(task.category),
+                ),
               if (slots > 1)
                 _chip(
                   Icons.videocam_outlined,
@@ -262,6 +269,20 @@ class AdminTaskListItem extends StatelessWidget {
           ),
       ],
     );
+  }
+
+  static IconData _categoryIcon(String category) {
+    final c = category.toLowerCase();
+    if (c.contains('эрталаб')) return Icons.wb_sunny_outlined;
+    if (c.contains('кеч')) return Icons.nightlight_outlined;
+    return Icons.badge_outlined;
+  }
+
+  static Color _categoryColor(String category) {
+    final c = category.toLowerCase();
+    if (c.contains('эрталаб')) return const Color(0xFFD97706);
+    if (c.contains('кеч')) return const Color(0xFF4F46E5);
+    return const Color(0xFF0D9488);
   }
 
   Widget _chip(IconData icon, String text, {Color? color}) {
