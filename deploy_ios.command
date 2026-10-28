@@ -223,12 +223,19 @@ echo "Ilova: $BUNDLE_ID"
 ASC_PY="$(mktemp -t mone_asc)"
 cat > "$ASC_PY" <<'PY'
 """App Store Connect API yordamchisi: build raqamini bilish va TestFlight'ga tarqatish."""
-import base64, json, os, sys, time, urllib.error, urllib.request
+import base64, json, os, ssl, sys, time, urllib.error, urllib.request
 
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import ec, utils as asym_utils
 
 BASE = "https://api.appstoreconnect.apple.com"
+# python.org'dan o'rnatilgan python macOS sertifikatlarini ko'rmaydi
+# (CERTIFICATE_VERIFY_FAILED) — certifi bo'lsa uning CA ro'yxatini olamiz.
+try:
+    import certifi
+    SSL_CTX = ssl.create_default_context(cafile=certifi.where())
+except ImportError:
+    SSL_CTX = None
 KEY_FILE  = os.environ["ASC_KEY_FILE"]
 KEY_ID    = os.environ["ASC_KEY_ID"]
 ISSUER_ID = os.environ["ASC_ISSUER_ID"]
@@ -266,7 +273,7 @@ def api(path, method="GET", body=None):
         "Content-Type": "application/json",
     })
     try:
-        with urllib.request.urlopen(req, timeout=60) as resp:
+        with urllib.request.urlopen(req, timeout=60, context=SSL_CTX) as resp:
             raw = resp.read()
             return json.loads(raw) if raw else {}
     except urllib.error.HTTPError as e:
