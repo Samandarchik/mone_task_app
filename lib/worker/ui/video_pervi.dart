@@ -185,6 +185,7 @@ class _VideoPreviewScreenState extends State<VideoPreviewScreen> {
     return Scaffold(
       backgroundColor: Colors.black,
       body: Stack(
+        fit: StackFit.expand,
         children: [
           // Video player — kadrning markaziy kvadrati, ya'ni serverga
           // saqlanadigan qismining o'zi
@@ -200,15 +201,15 @@ class _VideoPreviewScreenState extends State<VideoPreviewScreen> {
                           fit: BoxFit.cover,
                         )
                       : (_controller != null
-                          ? FittedBox(
-                              fit: BoxFit.cover,
-                              child: SizedBox(
-                                width: _controller!.value.size.width,
-                                height: _controller!.value.size.height,
-                                child: VideoPlayer(_controller!),
-                              ),
-                            )
-                          : const SizedBox.shrink()),
+                            ? FittedBox(
+                                fit: BoxFit.cover,
+                                child: SizedBox(
+                                  width: _controller!.value.size.width,
+                                  height: _controller!.value.size.height,
+                                  child: VideoPlayer(_controller!),
+                                ),
+                              )
+                            : const SizedBox.shrink()),
                 ),
               ),
             ),
@@ -276,41 +277,46 @@ class _VideoPreviewScreenState extends State<VideoPreviewScreen> {
             ),
 
           // Top bar
-          SafeArea(
-            child: Padding(
-              padding: const EdgeInsets.all(16.0),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  // Segment counter va progress
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      // Segment progress dots
-                      if (widget.videoSegments.length > 1)
-                        Padding(
-                          padding: const EdgeInsets.only(top: 8, left: 8),
-                          child: Row(
-                            children: List.generate(
-                              widget.videoSegments.length,
-                              (index) => Container(
-                                margin: const EdgeInsets.only(right: 4),
-                                width: 8,
-                                height: 8,
-                                decoration: BoxDecoration(
-                                  shape: BoxShape.circle,
-                                  color: index <= _currentSegmentIndex
-                                      ? Colors.white
-                                      : Colors.white.withOpacity(0.3),
+          Positioned(
+            top: 0,
+            left: 0,
+            right: 0,
+            child: SafeArea(
+              child: Padding(
+                padding: const EdgeInsets.all(16.0),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    // Segment counter va progress
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        // Segment progress dots
+                        if (widget.videoSegments.length > 1)
+                          Padding(
+                            padding: const EdgeInsets.only(top: 8, left: 8),
+                            child: Row(
+                              children: List.generate(
+                                widget.videoSegments.length,
+                                (index) => Container(
+                                  margin: const EdgeInsets.only(right: 4),
+                                  width: 8,
+                                  height: 8,
+                                  decoration: BoxDecoration(
+                                    shape: BoxShape.circle,
+                                    color: index <= _currentSegmentIndex
+                                        ? Colors.white
+                                        : Colors.white.withOpacity(0.3),
+                                  ),
                                 ),
                               ),
                             ),
                           ),
-                        ),
-                    ],
-                  ),
-                ],
+                      ],
+                    ),
+                  ],
+                ),
               ),
             ),
           ),

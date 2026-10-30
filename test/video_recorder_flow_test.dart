@@ -20,6 +20,7 @@ class FakeCamera extends CameraPlatform with MockPlatformInterfaceMixin {
   int startCalls = 0;
   int startsIgnored = 0;
   int stopCalls = 0;
+  int opened = 0;
   int lostRecordings = 0;
   int failNextStart = 0;
   int _nextId = 1;
@@ -44,7 +45,10 @@ class FakeCamera extends CameraPlatform with MockPlatformInterfaceMixin {
   Future<int> createCameraWithSettings(
     CameraDescription cameraDescription,
     MediaSettings? mediaSettings,
-  ) async => _nextId++;
+  ) async {
+    opened++;
+    return _nextId++;
+  }
 
   @override
   Future<int> createCamera(
@@ -412,6 +416,19 @@ void main() {
     await tester.pump(const Duration(milliseconds: 50));
     await tick(tester, 1);
     expect(camera.startCalls, 1);
+    await leave(tester);
+  });
+
+  testWidgets('yozuv boshlanayotganda kamera almashmaydi', (tester) async {
+    await open(tester);
+    final before = camera.opened;
+    await tester.tap(_record);
+    await tester.pump(const Duration(milliseconds: 50));
+    await tester.tap(find.byIcon(Icons.flip_camera_ios));
+    await tester.pump(const Duration(seconds: 1));
+    await tester.pump(const Duration(seconds: 1));
+    expect(camera.opened, before);
+    expect(camera.lostRecordings, 0);
     await leave(tester);
   });
 

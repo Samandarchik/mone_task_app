@@ -7,15 +7,11 @@ import 'package:camera/camera.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:video_player/video_player.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
-import 'package:mone_task_app/core/utils/android_video_bitrate.dart';
+import 'package:mone_task_app/worker/ui/recorder_camera.dart';
 import 'package:mone_task_app/worker/ui/video_pervi.dart';
 
 /// Video kamida shuncha soniya bo'lishi shart (kartada ham ko'rsatiladi)
 const int kMinVideoSeconds = 8;
-
-/// Aylana video uchun yetarli sifat: 40 soniyalik video taxminan 5 MB
-const int _kVideoBitrate = 900 * 1000;
-const int _kAudioBitrate = 64 * 1000;
 
 class TelegramStyleVideoRecorder extends StatefulWidget {
   final int taskId;
@@ -29,7 +25,7 @@ class TelegramStyleVideoRecorder extends StatefulWidget {
 
 class _TelegramStyleVideoRecorderState extends State<TelegramStyleVideoRecorder>
     with WidgetsBindingObserver {
-  CameraController? _controller;
+  RecorderCamera? _camera;
   List<CameraDescription> _cameras = [];
   bool _isRecording = false;
   bool _isPaused = false;
@@ -275,29 +271,21 @@ class _TelegramStyleVideoRecorderState extends State<TelegramStyleVideoRecorder>
   }
 
   Future<void> _openCamera(int cameraIndex) async {
-    await _controller?.dispose();
-    if (Platform.isAndroid) setAndroidVideoBitrate(_kVideoBitrate);
-    _controller = CameraController(
-      _cameras[cameraIndex],
-      ResolutionPreset.medium,
-      fps: 30,
-      videoBitrate: _kVideoBitrate,
-      audioBitrate: _kAudioBitrate,
-      enableAudio: true,
-    );
-    await _controller!.initialize();
+    await _camera?.dispose();
+    _camera = RecorderCamera(_cameras[cameraIndex]);
+    await _camera!.initialize();
     // Windows kamerasi (camera_windows) zoom va pauzani qo'llamaydi
     if (_isWindows) return;
-    _minZoom = await _controller!.getMinZoomLevel();
-    final deviceMax = await _controller!.getMaxZoomLevel();
+    _minZoom = await _camera!.minZoom();
+    final deviceMax = await _camera!.maxZoom();
     _maxZoom = deviceMax.clamp(_minZoom, 16.0);
     _currentZoom = (1.0).clamp(_minZoom, _maxZoom);
-    await _controller!.setZoomLevel(_currentZoom);
+    await _camera!.setZoom(_currentZoom);
   }
 
   Future<void> _toggleLens() async {
-    if (_isSwitchingCamera || _isStopping || _isPaused || _isFrontCamera)
-      return;
+    if (_isSwitchingCamera || _isStarting || _isStopping) return;
+    if (_isPaused || _isFrontCamera) return;
     if (_zoomSteps.length <= 1) return;
     int nextIndex = -1;
     for (int i = 0; i < _zoomSteps.length; i++) {
@@ -320,15 +308,15 @@ class _TelegramStyleVideoRecorderState extends State<TelegramStyleVideoRecorder>
     setState(() => _isSwitchingCamera = true);
     try {
       if (_isRecording && !_isPaused) {
-        await _controller!.pauseVideoRecording();
-        final seg = await _controller!.stopVideoRecording();
+        await _camera!.pause();
+        final seg = await _camera!.stop();
         _videoSegments.add(seg);
       }
       final cameraIdx = _findCameraIndexForLens(lensType);
       await _openCamera(cameraIdx);
       _currentBackLensIndex = backLensIndex;
       if (_isRecording && !_isPaused) {
-        await _controller!.startVideoRecording();
+        await _camera!.start();
       }
       if (mounted) setState(() => _isSwitchingCamera = false);
     } catch (e) {
@@ -339,14 +327,15 @@ class _TelegramStyleVideoRecorderState extends State<TelegramStyleVideoRecorder>
   }
 
   Future<void> _toggleCamera() async {
-    if (_cameras.length < 2 || _isSwitchingCamera || _isStopping) return;
+    if (_cameras.length < 2 || _isSwitchingCamera) return;
+    if (_isStarting || _isStopping) return;
     // Pauzadagi yozuv kamera yopilganda yo'qoladi
     if (_isPaused) return;
     setState(() => _isSwitchingCamera = true);
     try {
       if (_isRecording && !_isPaused) {
-        await _controller!.pauseVideoRecording();
-        final seg = await _controller!.stopVideoRecording();
+        await _camera!.pause();
+        final seg = await _camera!.stop();
         _videoSegments.add(seg);
       }
       int targetIdx;
@@ -364,7 +353,7 @@ class _TelegramStyleVideoRecorderState extends State<TelegramStyleVideoRecorder>
       }
       await _openCamera(targetIdx);
       if (_isRecording && !_isPaused) {
-        await _controller!.startVideoRecording();
+        await _camera!.start();
       }
       if (mounted) setState(() => _isSwitchingCamera = false);
     } catch (e) {
@@ -376,10 +365,10 @@ class _TelegramStyleVideoRecorderState extends State<TelegramStyleVideoRecorder>
 
   void _setZoom(double zoom) {
     if (_isWindows) return;
-    if (_controller == null || !_controller!.value.isInitialized) return;
+    if (_camera == null || !_camera!.isReady) return;
     final clamped = zoom.clamp(_minZoom, _maxZoom);
     _currentZoom = clamped;
-    _controller!.setZoomLevel(_currentZoom);
+    _camera!.setZoom(_currentZoom);
     setState(() {});
   }
 
@@ -399,7 +388,7 @@ class _TelegramStyleVideoRecorderState extends State<TelegramStyleVideoRecorder>
   void _handlePointerMove(PointerMoveEvent e) {
     _pointers[e.pointer] = e.localPosition;
     if (_pointers.length < 2 || _isWindows) return;
-    if (_controller == null || !_controller!.value.isInitialized) return;
+    if (_camera == null || !_camera!.isReady) return;
     final offsets = _pointers.values.toList();
     final currentDist = (offsets[0] - offsets[1]).distance;
     if (_initialPinchDistance == null) {
@@ -411,7 +400,7 @@ class _TelegramStyleVideoRecorderState extends State<TelegramStyleVideoRecorder>
     final newZoom = (_baseZoom * scale).clamp(_minZoom, _maxZoom);
     if ((newZoom - _currentZoom).abs() < 0.01) return;
     _currentZoom = newZoom;
-    _controller!.setZoomLevel(_currentZoom);
+    _camera!.setZoom(_currentZoom);
     _showZoomLabelTemporarily();
   }
 
@@ -453,11 +442,11 @@ class _TelegramStyleVideoRecorderState extends State<TelegramStyleVideoRecorder>
   }
 
   void _startRecording() async {
-    if (_controller == null || !_controller!.value.isInitialized) return;
+    if (_camera == null || !_camera!.isReady) return;
     if (_isRecording || _isStarting || _isSwitchingCamera) return;
     setState(() => _isStarting = true);
     try {
-      await _controller!.startVideoRecording();
+      await _camera!.start();
       await WakelockPlus.enable();
       if (!mounted) return;
       setState(() {
@@ -481,13 +470,13 @@ class _TelegramStyleVideoRecorderState extends State<TelegramStyleVideoRecorder>
 
   void _togglePauseResume() async {
     if (!_isRecording || _isStopping || _isSwitchingCamera) return;
-    if (!_controller!.value.isRecordingVideo) return;
+    if (!_camera!.isRecording) return;
     try {
       if (_isPaused) {
-        await _controller!.resumeVideoRecording();
+        await _camera!.resume();
         setState(() => _isPaused = false);
       } else {
-        await _controller!.pauseVideoRecording();
+        await _camera!.pause();
         setState(() => _isPaused = true);
       }
     } catch (e) {
@@ -512,9 +501,9 @@ class _TelegramStyleVideoRecorderState extends State<TelegramStyleVideoRecorder>
     setState(() => _isStopping = true);
     try {
       // Kamera almashishda xato bo'lsa yozuv yo'q — tayyor bo'laklar qoladi
-      if (_controller!.value.isRecordingVideo) {
-        if (_isPaused) await _controller!.resumeVideoRecording();
-        _videoSegments.add(await _controller!.stopVideoRecording());
+      if (_camera!.isRecording) {
+        if (_isPaused) await _camera!.resume();
+        _videoSegments.add(await _camera!.stop());
       }
       await WakelockPlus.disable();
       if (!mounted) return;
@@ -584,7 +573,7 @@ class _TelegramStyleVideoRecorderState extends State<TelegramStyleVideoRecorder>
     _warnTimer?.cancel();
     _zoomLabelTimer?.cancel();
     WakelockPlus.disable();
-    _controller?.dispose();
+    _camera?.dispose();
     super.dispose();
   }
 
@@ -615,9 +604,7 @@ class _TelegramStyleVideoRecorderState extends State<TelegramStyleVideoRecorder>
   @override
   Widget build(BuildContext context) {
     if (_cameraError != null) return _buildCameraUnavailable();
-    if (!_isInitialized ||
-        _controller == null ||
-        _controller!.value.previewSize == null) {
+    if (!_isInitialized || _camera == null) {
       return Material(
         color: Colors.black,
         child: Stack(
@@ -653,10 +640,6 @@ class _TelegramStyleVideoRecorderState extends State<TelegramStyleVideoRecorder>
     final double circleLeft = (size.width - circleDiameter) / 2;
     final double circleTop = topPadding;
 
-    final previewSize = _controller!.value.previewSize!;
-    final double cameraW = previewSize.height;
-    final double cameraH = previewSize.width;
-
     return PopScope(
       // Yozish paytida orqaga bosilsa video jimgina yo'qolardi
       canPop: (!_isRecording && !_isStarting) || _isStopping,
@@ -667,8 +650,7 @@ class _TelegramStyleVideoRecorderState extends State<TelegramStyleVideoRecorder>
           fit: StackFit.expand,
           children: [
             // ── 1. AYLANA ICHIDA KAMERA ──
-            // Serverda video markazdan kvadrat kesiladi, shu sabab bu yerda ham
-            // kadrning markaziy kvadrati ko'rsatiladi: aylanada nima ko'rinsa,
+            // Kadrning markaziy kvadrati ko'rsatiladi: aylanada nima ko'rinsa,
             // videoga ham o'sha tushadi. Pinch zoom butun ekranda ishlaydi.
             Positioned.fill(
               child: Listener(
@@ -683,20 +665,19 @@ class _TelegramStyleVideoRecorderState extends State<TelegramStyleVideoRecorder>
                       left: circleLeft,
                       width: circleDiameter,
                       height: circleDiameter,
-                      child: _isSwitchingCamera
-                          ? const Center(
+                      child: Stack(
+                        fit: StackFit.expand,
+                        children: [
+                          // Native preview almashishda ham turadi: kamera shu
+                          // ko'rinishga ulanadi va yozish darhol davom etadi
+                          if (_camera!.isReady)
+                            ClipOval(child: _camera!.buildPreview()),
+                          if (_isSwitchingCamera)
+                            const Center(
                               child: CircularProgressIndicator.adaptive(),
-                            )
-                          : ClipOval(
-                              child: FittedBox(
-                                fit: BoxFit.cover,
-                                child: SizedBox(
-                                  width: cameraW,
-                                  height: cameraH,
-                                  child: CameraPreview(_controller!),
-                                ),
-                              ),
                             ),
+                        ],
+                      ),
                     ),
                   ],
                 ),

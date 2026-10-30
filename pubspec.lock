@@ -146,7 +146,7 @@ packages:
     source: hosted
     version: "0.11.4"
   camera_android_camerax:
-    dependency: "direct main"
+    dependency: transitive
     description:
       name: camera_android_camerax
       sha256: "474d8355961658d43f1c976e2fa1ca715505bea1adbd56df34c581aaa70ec41f"

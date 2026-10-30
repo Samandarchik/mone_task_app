@@ -16,7 +16,7 @@ publish_to: 'none' # Remove this line if you wish to publish to pub.dev
 # https://developer.apple.com/library/archive/documentation/General/Reference/InfoPlistKeyReference/Articles/CoreFoundationKeys.html
 # In Windows, build-name is used as the major, minor, and patch parts
 # of the product and file versions while build-number is used as the build suffix.
-version: 0.3.13+313
+version: 0.3.14+314
 
 environment:
   sdk: ^3.9.2
@@ -41,9 +41,6 @@ dependencies:
   talker_dio_logger: ^5.1.5
   image_picker: ^1.2.1
   camera: ^0.11.4
-  # Android video bitrate (lib/core/utils/android_video_bitrate.dart) ichki
-  # API'ga ulangan — yangilashda o'sha faylni tekshirish kerak
-  camera_android_camerax: 0.6.26+2
   # Windows'da kamera (namuna videoni kompyuter kamerasidan olish)
   camera_windows: ^0.3.0+1
   video_player: ^2.10.1

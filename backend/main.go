@@ -2320,7 +2320,7 @@ func findFFmpeg() (string, error) {
 // -crf 26 + -maxrate - aylana video uchun yetarli sifat va cheklangan hajm
 // (-crf 18 telefondan kelgan videoni kichraytirish o'rniga kattalashtirardi)
 // -preset veryfast - server kam band bo'ladi
-// -c:a copy - audio o'zgarmaydi
+// -c:a aac - ba'zi Android telefonlar ovozni AMR'da yozadi, MP4 uni qabul qilmaydi
 var videoEncodeArgs = []string{
 	"-vf", "crop=min(iw\\,ih):min(iw\\,ih),scale=500:500",
 	"-c:v", "libx264",
@@ -2328,7 +2328,8 @@ var videoEncodeArgs = []string{
 	"-preset", "veryfast",
 	"-maxrate", "700k",
 	"-bufsize", "1400k",
-	"-c:a", "copy",
+	"-c:a", "aac",
+	"-b:a", "64k",
 	"-movflags", "+faststart",
 	"-y",
 }
@@ -2407,7 +2408,8 @@ func mergeVideos(listFilePath, outputPath string) error {
 	listFileName := filepath.Base(listFilePath)
 
 	// Avval segmentlarni birlashtirамиз (temp fayl)
-	tempOutput := filepath.Base(outputPath) + ".tmp.mp4"
+	// MKV: ovoz AMR bo'lsa ham -c copy xato bermaydi (keyin AAC'ga o'tkaziladi)
+	tempOutput := filepath.Base(outputPath) + ".tmp.mkv"
 
 	mergeCmd := exec.Command(ffmpegPath,
 		"-f", "concat",
@@ -2431,13 +2433,13 @@ func mergeVideos(listFilePath, outputPath string) error {
 	cropCmd.Dir = workDir
 
 	cropOut, err := cropCmd.CombinedOutput()
-	os.Remove(tempFullPath) // temp faylni har doim o'chiramiz
 	if err != nil {
 		log.Printf("FFmpeg crop error: %s\n", string(cropOut))
 		// Crop ishlamasa merge qilingan faylni crop qilmasdan saqlaymiz
 		os.Rename(tempFullPath, outputPath)
 		return nil
 	}
+	os.Remove(tempFullPath)
 
 	log.Printf("✅ Merge + 500x500 crop muvaffaqiyatli")
 	return nil

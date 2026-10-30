@@ -58,3 +58,14 @@ android {
 flutter {
     source = "../.."
 }
+
+dependencies {
+    // Native aylana kamera (CircleCamera.kt)
+    def cameraxVersion = "1.5.2"
+    implementation "androidx.camera:camera-core:$cameraxVersion"
+    implementation "androidx.camera:camera-camera2:$cameraxVersion"
+    implementation "androidx.camera:camera-lifecycle:$cameraxVersion"
+    implementation "androidx.camera:camera-video:$cameraxVersion"
+    implementation "androidx.camera:camera-view:$cameraxVersion"
+    implementation "com.google.guava:guava:33.4.8-android"
+}
