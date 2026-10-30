@@ -7,6 +7,7 @@ import 'package:mone_task_app/admin/model/filial_model.dart';
 import 'package:mone_task_app/admin/model/category_model.dart';
 import 'package:mone_task_app/core/constants/urls.dart';
 import 'package:mone_task_app/core/di/di.dart';
+import 'package:mone_task_app/core/network/dio_settings.dart';
 
 /// Admin template CRUD — task yaratish, tahrirlash, o'chirish, tartib.
 /// Filial va Category boshqaruvi ham shu yerda.
@@ -286,6 +287,7 @@ class TemplateService {
     final response = await _dio.post(
       "${AppUrls.baseUrl}/api/templates/$templateId/guide-video",
       data: FormData.fromMap(fields),
+      options: videoUploadOptions,
       onSendProgress: onProgress,
     );
     if (response.statusCode != 200) return null;

@@ -5,6 +5,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
 import 'package:mone_task_app/core/constants/urls.dart';
 import 'package:mone_task_app/core/di/di.dart';
+import 'package:mone_task_app/core/network/dio_settings.dart';
 import 'package:mone_task_app/worker/model/response_task_model.dart';
 import 'package:mone_task_app/worker/model/task_worker_model.dart';
 
@@ -40,7 +41,11 @@ class TaskWorkerService {
   }
 
   /// [slot] — ko'p videoli taskda nechanchi video (0 dan). null = qo'shish
-  Future<bool> completeTask(RequestTaskModel request, {int? slot}) async {
+  Future<bool> completeTask(
+    RequestTaskModel request, {
+    int? slot,
+    ProgressCallback? onProgress,
+  }) async {
     try {
       final compressedVideo = File(request.file!.path);
 
@@ -55,6 +60,8 @@ class TaskWorkerService {
       final response = await _dio.post(
         "${AppUrls.tasks}/${request.id}/submit",
         data: formData,
+        options: videoUploadOptions,
+        onSendProgress: onProgress,
       );
       return response.statusCode == 200;
     } catch (e) {
@@ -99,6 +106,7 @@ class TaskWorkerService {
     required int taskId,
     required List<XFile> segments,
     int? slot,
+    ProgressCallback? onProgress,
   }) async {
     try {
       if (segments.isEmpty) throw Exception('Сегменты отсутствуют');
@@ -121,10 +129,8 @@ class TaskWorkerService {
       final response = await _dio.post(
         "${AppUrls.tasks}/$taskId/submit",
         data: formData,
-        onSendProgress: (sent, total) {
-          final progress = (sent / total * 100).toStringAsFixed(0);
-          print('📤 Barcha segmentlar yuklanmoqda: $progress%');
-        },
+        options: videoUploadOptions,
+        onSendProgress: onProgress,
       );
 
       return response.statusCode == 200;

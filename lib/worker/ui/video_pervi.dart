@@ -33,6 +33,9 @@ class _VideoPreviewScreenState extends State<VideoPreviewScreen> {
   int _currentSegmentIndex = 0;
   bool _isLoadingNextSegment = false;
 
+  /// Tugma ikki marta bosilsa ekran ham ikki marta yopilmasin
+  bool _closing = false;
+
   @override
   void initState() {
     super.initState();
@@ -109,6 +112,7 @@ class _VideoPreviewScreenState extends State<VideoPreviewScreen> {
   }
 
   Future<void> _playNextSegment() async {
+    if (!mounted) return;
     setState(() {
       _isLoadingNextSegment = true;
     });
@@ -142,12 +146,16 @@ class _VideoPreviewScreenState extends State<VideoPreviewScreen> {
   }
 
   void _sendVideo() {
+    if (_closing) return;
+    _closing = true;
     Navigator.of(
       context,
     ).pop({'action': 'send', 'segments': widget.videoSegments});
   }
 
   void _retakeVideo() {
+    if (_closing) return;
+    _closing = true;
     Navigator.of(context).pop({'action': 'retake'});
   }
 
@@ -178,24 +186,31 @@ class _VideoPreviewScreenState extends State<VideoPreviewScreen> {
       backgroundColor: Colors.black,
       body: Stack(
         children: [
-          // Video player (to'liq ekran)
+          // Video player — kadrning markaziy kvadrati, ya'ni serverga
+          // saqlanadigan qismining o'zi
           if (_isInitialized)
-            Positioned.fill(
-              child: _useMediaKit && _mkController != null
-                  ? mkv.Video(
-                      controller: _mkController!,
-                      fill: Colors.black,
-                    )
-                  : (_controller != null
-                      ? FittedBox(
+            Center(
+              child: SizedBox.square(
+                dimension: circleRadius * 2,
+                child: ClipOval(
+                  child: _useMediaKit && _mkController != null
+                      ? mkv.Video(
+                          controller: _mkController!,
+                          fill: Colors.black,
                           fit: BoxFit.cover,
-                          child: SizedBox(
-                            width: _controller!.value.size.width,
-                            height: _controller!.value.size.height,
-                            child: VideoPlayer(_controller!),
-                          ),
                         )
-                      : const SizedBox.shrink()),
+                      : (_controller != null
+                          ? FittedBox(
+                              fit: BoxFit.cover,
+                              child: SizedBox(
+                                width: _controller!.value.size.width,
+                                height: _controller!.value.size.height,
+                                child: VideoPlayer(_controller!),
+                              ),
+                            )
+                          : const SizedBox.shrink()),
+                ),
+              ),
             ),
 
           // Yuklash indikatori

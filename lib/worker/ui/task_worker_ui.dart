@@ -20,6 +20,7 @@ import 'package:mone_task_app/home/ui/role_home.dart';
 import 'package:mone_task_app/shared/services/task_prefs_service.dart';
 import 'package:mone_task_app/shared/widgets/task_reorder_list.dart';
 import 'package:mone_task_app/shared/widgets/task_video_strip.dart';
+import 'package:mone_task_app/shared/widgets/upload_progress_dialog.dart';
 import 'package:mone_task_app/shared/widgets/user_avatar.dart';
 import 'package:mone_task_app/core/di/di.dart';
 import 'package:mone_task_app/home/service/login_service.dart';
@@ -344,23 +345,22 @@ class _TaskWorkerUiState extends State<TaskWorkerUi> {
 
   /// [slot] — ko'p videoli taskda qaysi joyga yoziladi (0 dan). null = keyingi bo'sh joy
   Future<void> _showVideoRecorder(TaskModel task, {int? slot}) async {
+    if (_isRecording) return;
     setState(() => _isRecording = true);
 
     final result = await Navigator.of(context).push(
       PageRouteBuilder(
-        opaque: false,
-        barrierColor: Colors.transparent,
         transitionDuration: const Duration(milliseconds: 300),
         reverseTransitionDuration: const Duration(milliseconds: 200),
         pageBuilder: (context, animation, secondaryAnimation) =>
-            _BlurCameraOverlay(taskId: task.taskId),
+            TelegramStyleVideoRecorder(taskId: task.taskId),
         transitionsBuilder: (context, animation, secondaryAnimation, child) =>
             FadeTransition(opacity: animation, child: child),
       ),
     );
 
+    if (!mounted) return;
     setState(() => _isRecording = false);
-    if (!context.mounted) return;
     if (result is List<XFile>) {
       await _uploadVideoSegments(task, result, slot);
     } else if (result is XFile) {
@@ -374,10 +374,15 @@ class _TaskWorkerUiState extends State<TaskWorkerUi> {
     int? slot,
   ) async {
     try {
-      final success = await TaskWorkerService().completeTaskWithSegments(
-        taskId: task.taskId,
-        segments: segments,
-        slot: slot,
+      final success = await runWithUploadProgress(
+        context,
+        title: "Отправка видео",
+        upload: (onProgress) => TaskWorkerService().completeTaskWithSegments(
+          taskId: task.taskId,
+          segments: segments,
+          slot: slot,
+          onProgress: onProgress,
+        ),
       );
       if (mounted)
         ScaffoldMessenger.of(context).showSnackBar(
@@ -402,9 +407,14 @@ class _TaskWorkerUiState extends State<TaskWorkerUi> {
 
   Future<void> _uploadVideo(TaskModel task, XFile video, int? slot) async {
     try {
-      final success = await TaskWorkerService().completeTask(
-        RequestTaskModel(id: task.taskId, file: video),
-        slot: slot,
+      final success = await runWithUploadProgress(
+        context,
+        title: "Отправка видео",
+        upload: (onProgress) => TaskWorkerService().completeTask(
+          RequestTaskModel(id: task.taskId, file: video),
+          slot: slot,
+          onProgress: onProgress,
+        ),
       );
       if (mounted)
         ScaffoldMessenger.of(context).showSnackBar(
@@ -850,28 +860,6 @@ class _TaskWorkerUiState extends State<TaskWorkerUi> {
     tokenStorage.putUserData({});
     await ActiveFilial.clear();
     if (mounted) context.pushAndRemove(LoginPage());
-  }
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Orqa sahifa (tasklar) ustiga blur + kamera overlay
-// ─────────────────────────────────────────────────────────────────────────────
-class _BlurCameraOverlay extends StatelessWidget {
-  final int taskId;
-  const _BlurCameraOverlay({required this.taskId});
-
-  @override
-  Widget build(BuildContext context) {
-    return Stack(
-      fit: StackFit.expand,
-      children: [
-        BackdropFilter(
-          filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
-          child: Container(color: Colors.black.withOpacity(0.4)),
-        ),
-        TelegramStyleVideoRecorder(taskId: taskId),
-      ],
-    );
   }
 }
 

@@ -7,6 +7,14 @@ import 'package:talker_dio_logger/talker_dio_logger_interceptor.dart';
 import 'package:talker_dio_logger/talker_dio_logger_settings.dart';
 import '../data/local/token_storage.dart';
 
+/// Video yuklash so'rovlari: sekin internetda fayl yuborish, keyin serverda
+/// qayta ishlash oddiy 30 soniyalik timeoutga sig'maydi. Yuborish esa cheksiz
+/// osilib qolmasligi kerak.
+final Options videoUploadOptions = Options(
+  sendTimeout: const Duration(minutes: 5),
+  receiveTimeout: const Duration(minutes: 3),
+);
+
 class AppDioClient {
   Dio createDio() {
     final dio = Dio(

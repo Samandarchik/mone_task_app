@@ -2315,31 +2315,38 @@ func findFFmpeg() (string, error) {
 	return "", fmt.Errorf("ffmpeg topilmadi")
 }
 
+// videoEncodeArgs - barcha videolar uchun bir xil siqish: markazdan kvadrat
+// kesib 500x500 qiladi (ilovada aylana bo'lib ko'rinadi).
+// -crf 26 + -maxrate - aylana video uchun yetarli sifat va cheklangan hajm
+// (-crf 18 telefondan kelgan videoni kichraytirish o'rniga kattalashtirardi)
+// -preset veryfast - server kam band bo'ladi
+// -c:a copy - audio o'zgarmaydi
+var videoEncodeArgs = []string{
+	"-vf", "crop=min(iw\\,ih):min(iw\\,ih),scale=500:500",
+	"-c:v", "libx264",
+	"-crf", "26",
+	"-preset", "veryfast",
+	"-maxrate", "700k",
+	"-bufsize", "1400k",
+	"-c:a", "copy",
+	"-movflags", "+faststart",
+	"-y",
+}
+
+// encodeVideoCmd - inputPath dan outputPath ga videoEncodeArgs bilan ffmpeg buyrug'i.
+func encodeVideoCmd(ffmpegPath, inputPath, outputPath string) *exec.Cmd {
+	args := append([]string{"-i", inputPath}, videoEncodeArgs...)
+	return exec.Command(ffmpegPath, append(args, outputPath)...)
+}
+
 // cropVideoTo500 - inputPath videoni 500x500 crop qilib outputPath ga saqlaydi.
-// Sifat o'zgarmaydi (-c:v copy ishlatilmaydi chunki crop filter kerak),
-// lekin -crf 18 bilan yuqori sifat saqlanadi.
 func cropVideoTo500(inputPath, outputPath string) error {
 	ffmpegPath, err := findFFmpeg()
 	if err != nil {
 		return err
 	}
 
-	// crop=min(iw\,ih):min(iw\,ih) - markazdan kvadrat kesib oladi
-	// scale=500:500 - 500x500 ga o'lchaydi
-	// -c:v libx264 -crf 18 - yuqori sifat (18 = deyarli lossless)
-	// -preset fast - tezlik/sifat balansi
-	// -c:a copy - audio o'zgarmaydi
-	cmd := exec.Command(ffmpegPath,
-		"-i", inputPath,
-		"-vf", "crop=min(iw\\,ih):min(iw\\,ih),scale=500:500",
-		"-c:v", "libx264",
-		"-crf", "18",
-		"-preset", "fast",
-		"-c:a", "copy",
-		"-movflags", "+faststart",
-		"-y",
-		outputPath,
-	)
+	cmd := encodeVideoCmd(ffmpegPath, inputPath, outputPath)
 
 	output, err := cmd.CombinedOutput()
 	if err != nil {
@@ -2420,17 +2427,7 @@ func mergeVideos(listFilePath, outputPath string) error {
 
 	// Merge bo'lgan faylni 500x500 crop qilamiz
 	tempFullPath := filepath.Join(workDir, tempOutput)
-	cropCmd := exec.Command(ffmpegPath,
-		"-i", tempOutput,
-		"-vf", "crop=min(iw\\,ih):min(iw\\,ih),scale=500:500",
-		"-c:v", "libx264",
-		"-crf", "18",
-		"-preset", "fast",
-		"-c:a", "copy",
-		"-movflags", "+faststart",
-		"-y",
-		filepath.Base(outputPath),
-	)
+	cropCmd := encodeVideoCmd(ffmpegPath, tempOutput, filepath.Base(outputPath))
 	cropCmd.Dir = workDir
 
 	cropOut, err := cropCmd.CombinedOutput()

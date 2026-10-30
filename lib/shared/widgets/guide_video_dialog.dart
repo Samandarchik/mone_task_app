@@ -12,6 +12,7 @@ import 'package:mone_task_app/admin/service/task_worker_service.dart'
 import 'package:mone_task_app/shared/models/task_model.dart';
 import 'package:mone_task_app/worker/ui/telegram_style_video_recorder.dart';
 import 'package:mone_task_app/shared/widgets/task_video_strip.dart';
+import 'package:mone_task_app/shared/widgets/upload_progress_dialog.dart';
 
 /// Namuna video — vazifa qanday bajarilishi kerakligi. Har bir rolda o'sha
 /// rolning oddiy videolari kabi ochiladi: ishchida — aylana pleyer,
@@ -87,20 +88,9 @@ Future<List<String>?> recordGuideVideo(BuildContext context, int taskId) async {
   }
   final result = await Navigator.of(context).push(
     PageRouteBuilder(
-      opaque: false,
-      barrierColor: Colors.transparent,
       transitionDuration: const Duration(milliseconds: 300),
       reverseTransitionDuration: const Duration(milliseconds: 200),
-      pageBuilder: (_, _, _) => Stack(
-        fit: StackFit.expand,
-        children: [
-          BackdropFilter(
-            filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
-            child: Container(color: Colors.black.withValues(alpha: 0.4)),
-          ),
-          TelegramStyleVideoRecorder(taskId: taskId),
-        ],
-      ),
+      pageBuilder: (_, _, _) => TelegramStyleVideoRecorder(taskId: taskId),
       transitionsBuilder: (_, animation, _, child) =>
           FadeTransition(opacity: animation, child: child),
     ),
@@ -187,37 +177,17 @@ Future<bool> uploadGuideVideoFlow(
   }
   if (paths == null || !context.mounted) return false;
 
-  final progress = ValueNotifier<double>(0);
-  showDialog(
-    context: context,
-    barrierDismissible: false,
-    builder: (_) => PopScope(
-      canPop: false,
-      child: AlertDialog(
-        title: const Text("Загрузка образца"),
-        content: ValueListenableBuilder<double>(
-          valueListenable: progress,
-          builder: (_, value, _) => Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              LinearProgressIndicator(value: value),
-              const SizedBox(height: 8),
-              Text("${(value * 100).round()}%"),
-            ],
-          ),
-        ),
-      ),
-    ),
-  );
-
+  final videoPaths = paths;
   String? error;
   try {
-    final url = await TemplateService().uploadGuideVideo(
-      templateId,
-      paths,
-      onProgress: (sent, total) {
-        if (total > 0) progress.value = sent / total;
-      },
+    final url = await runWithUploadProgress(
+      context,
+      title: "Загрузка образца",
+      upload: (onProgress) => TemplateService().uploadGuideVideo(
+        templateId,
+        videoPaths,
+        onProgress: onProgress,
+      ),
     );
     if (url == null) error = "Не удалось загрузить видео";
   } on DioException catch (e) {
@@ -225,9 +195,9 @@ Future<bool> uploadGuideVideoFlow(
     error = data is Map && data['error'] is String
         ? data['error']
         : "Не удалось загрузить видео";
+  } catch (_) {
+    error = "Не удалось загрузить видео";
   }
-  if (context.mounted) Navigator.of(context, rootNavigator: true).pop();
-  progress.dispose();
   if (error != null) {
     snack(error, Colors.red);
     return false;
