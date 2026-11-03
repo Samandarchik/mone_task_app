@@ -488,6 +488,8 @@ func main() {
 	r.HandleFunc("/api/attendance", authMiddleware(getAttendance)).Methods("GET")
 
 	r.HandleFunc("/api/my/demands", authMiddleware(getMyDemands)).Methods("GET")
+	r.HandleFunc("/api/device-token", authMiddleware(saveDeviceToken)).Methods("POST")
+	r.HandleFunc("/api/device-token", authMiddleware(deleteDeviceToken)).Methods("DELETE")
 
 	// Debug
 	r.HandleFunc("/api/debug/info", authMiddleware(getDebugInfo)).Methods("GET")
@@ -662,6 +664,7 @@ func createMainDB() {
 	db.Exec("ALTER TABLE users ADD COLUMN can_manage_tasks INTEGER DEFAULT 0")
 	migrateEmployees(db)
 	migrateDemands(db)
+	migrateDeviceTokens(db)
 
 	var needsUpdate int
 	db.QueryRow("SELECT COUNT(*) FROM task_templates WHERE order_index = 0").Scan(&needsUpdate)
@@ -1139,6 +1142,8 @@ func forceLogout(w http.ResponseWriter, r *http.Request) {
 		})
 		return
 	}
+	// Chiqarilgan odamning telefoniga talab bormasin
+	db.Exec("DELETE FROM device_tokens WHERE user_id = ?", targetUserID)
 
 	respondJSON(w, http.StatusOK, map[string]interface{}{
 		"success": true,

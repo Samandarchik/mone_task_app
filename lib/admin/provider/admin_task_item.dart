@@ -11,6 +11,7 @@ import 'package:mone_task_app/checker/model/checker_check_task_model.dart';
 import 'package:mone_task_app/checker/service/task_worker_service.dart';
 import 'package:mone_task_app/shared/widgets/guide_video_dialog.dart';
 import 'package:mone_task_app/shared/widgets/status_permission.dart';
+import 'package:mone_task_app/shared/widgets/task_card_header.dart';
 import 'package:mone_task_app/shared/widgets/task_video_strip.dart';
 import 'package:mone_task_app/utils/get_color.dart';
 import 'package:path_provider/path_provider.dart';
@@ -154,40 +155,58 @@ class AdminTaskListItem extends StatelessWidget {
   // ── Header: raqam + nom + status ──────────────────────────────────────────
 
   Widget _buildHeader(BuildContext context, bool isTablet) {
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Container(
-          width: 26,
-          height: 26,
-          margin: const EdgeInsets.only(top: 1),
-          alignment: Alignment.center,
-          decoration: BoxDecoration(
-            color: const Color(0xFFF3F4F6),
-            borderRadius: BorderRadius.circular(8),
-          ),
-          child: Text(
-            '$index',
-            style: const TextStyle(
-              fontSize: 12,
-              fontWeight: FontWeight.w700,
-              color: Color(0xFF4B5563),
-            ),
+    return TaskCardHeader(
+      leading: Container(
+        width: 26,
+        height: 26,
+        margin: const EdgeInsets.only(top: 1),
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          color: const Color(0xFFF3F4F6),
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: Text(
+          '$index',
+          style: const TextStyle(
+            fontSize: 12,
+            fontWeight: FontWeight.w700,
+            color: Color(0xFF4B5563),
           ),
         ),
-        const SizedBox(width: 10),
-        Expanded(
-          child: Text(
+      ),
+      title: Text(
+        task.task,
+        style: TextStyle(
+          fontSize: taskTitleFontSize(
+            context,
             task.task,
-            style: TextStyle(
-              fontSize: isTablet ? 18 : 15.5,
-              fontWeight: FontWeight.w700,
-              height: 1.3,
-              color: const Color(0xFF111827),
+            wide: isTablet ? 18 : 15.5,
+          ),
+          fontWeight: FontWeight.w700,
+          height: 1.3,
+          color: const Color(0xFF111827),
+        ),
+      ),
+      actions: [
+        // Videoni yuborish — boshqa tugmalar bilan bir qatorda
+        if (_hasVideo)
+          SizedBox(
+            width: 32,
+            height: 32,
+            child: IconButton(
+              padding: EdgeInsets.zero,
+              iconSize: 22,
+              color: const Color(0xFF6B7280),
+              tooltip: Platform.isWindows ? 'Копировать' : 'Отправить',
+              onPressed: onShareVideo,
+              icon: Icon(
+                Platform.isWindows
+                    ? CupertinoIcons.doc_on_doc
+                    : CupertinoIcons.share,
+              ),
             ),
           ),
-        ),
-        // ⓘ — namuna video; yo'q bo'lsa super admin yuklay oladi
+        // ▶ — namuna video; yo'q bo'lsa super admin yuklay oladi
         GuideInfoButton(
           task: task,
           canUpload: role == 'super_admin',
@@ -215,54 +234,31 @@ class AdminTaskListItem extends StatelessWidget {
         ? task.videoCount
         : _videos.length;
 
-    return Row(
+    return Wrap(
+      spacing: 6,
+      runSpacing: 6,
+      crossAxisAlignment: WrapCrossAlignment.center,
       children: [
-        Expanded(
-          child: Wrap(
-            spacing: 6,
-            runSpacing: 6,
-            crossAxisAlignment: WrapCrossAlignment.center,
-            children: [
-              _chip(
-                Icons.repeat_rounded,
-                getTypeName(task.type).replaceAll(':', '').trim(),
-              ),
-              // Vazifa kimga biriktirilgan (Эрталабги / Кечкурунгги Админ ...)
-              if (task.category.isNotEmpty)
-                _chip(Icons.label_outline, task.category),
-              if (slots > 1)
-                _chip(
-                  Icons.videocam_outlined,
-                  task.videosComplete || !_hasVideo
-                      ? "${_videos.length}/$slots"
-                      : "${_videos.length}/$slots · не все видео",
-                  color: task.videosComplete
-                      ? Colors.green
-                      : _hasVideo
-                      ? Colors.orange
-                      : const Color(0xFF2563EB),
-                ),
-              if (submitted != null) _chip(Icons.person_outline, submitted),
-              if (_hasVideo) _buildDownloadBadge(),
-            ],
-          ),
+        _chip(
+          Icons.repeat_rounded,
+          getTypeName(task.type).replaceAll(':', '').trim(),
         ),
-        if (_hasVideo)
-          SizedBox(
-            width: 32,
-            height: 32,
-            child: IconButton(
-              padding: EdgeInsets.zero,
-              iconSize: 18,
-              color: const Color(0xFF6B7280),
-              onPressed: onShareVideo,
-              icon: Icon(
-                Platform.isWindows
-                    ? CupertinoIcons.doc_on_doc
-                    : CupertinoIcons.share,
-              ),
-            ),
+        // Vazifa kimga biriktirilgan (Эрталабги / Кечкурунгги Админ ...)
+        if (task.category.isNotEmpty) _chip(Icons.label_outline, task.category),
+        if (slots > 1)
+          _chip(
+            Icons.videocam_outlined,
+            task.videosComplete || !_hasVideo
+                ? "${_videos.length}/$slots"
+                : "${_videos.length}/$slots · не все видео",
+            color: task.videosComplete
+                ? Colors.green
+                : _hasVideo
+                ? Colors.orange
+                : const Color(0xFF2563EB),
           ),
+        if (submitted != null) _chip(Icons.person_outline, submitted),
+        if (_hasVideo) _buildDownloadBadge(),
       ],
     );
   }
@@ -471,7 +467,8 @@ class _StatusButtonsState extends State<_StatusButtons> {
     final hasVideo = task.hasAnyVideo;
     // Barcha videolar yuklanmaguncha tasdiqlab (sariq) bo'lmaydi
     final complete = task.videosComplete;
-    final gap = widget.isTablet ? 14.0 : 8.0;
+    // Telefonda doiralar 32px bosish maydonida turadi — oraliq o'shandan
+    final gap = widget.isTablet ? 14.0 : 0.0;
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
@@ -511,17 +508,18 @@ class _StatusButtonsState extends State<_StatusButtons> {
     final isActive = current == level;
     final isHolding = _holdingLevel == level;
     final isWaiting = task.videosComplete && current == null;
-    final baseSize = widget.isTablet ? 38.0 : 28.0;
+    // Telefonda ▶ (namuna) belgisi bilan bir o'lchamda va yupqa chiziqda
+    final baseSize = widget.isTablet ? 38.0 : 22.0;
     final size = isHolding ? baseSize + 8 : baseSize;
     final letter = statusLetter(level);
 
-    final circle = AnimatedContainer(
+    final animated = AnimatedContainer(
       duration: const Duration(milliseconds: 120),
       width: size,
       height: size,
       decoration: BoxDecoration(
         shape: BoxShape.circle,
-        color: isActive || isHolding ? color : color.withValues(alpha: 0.08),
+        color: isActive || isHolding ? color : Colors.transparent,
         border: Border.all(
           color: isActive || isHolding
               ? color
@@ -539,7 +537,7 @@ class _StatusButtonsState extends State<_StatusButtons> {
           ? Text(
               letter,
               style: TextStyle(
-                fontSize: size * 0.45,
+                fontSize: size * (widget.isTablet ? 0.45 : 0.5),
                 fontWeight: FontWeight.w800,
                 height: 1,
                 color: isActive
@@ -557,6 +555,10 @@ class _StatusButtonsState extends State<_StatusButtons> {
             )
           : null,
     );
+    // Kichik doira — barmoq uchun bosish maydoni kattaroq
+    final circle = widget.isTablet
+        ? animated
+        : SizedBox.square(dimension: 32, child: Center(child: animated));
 
     // Yashil — qo'lda bosilmaydi
     if (letter == null) return circle;

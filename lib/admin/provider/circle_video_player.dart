@@ -24,7 +24,7 @@ class CircleVideoPlayer extends StatelessWidget {
   final void Function(int taskId)? onHalfWatched;
   final DateTime selectedDate;
 
-  /// Namuna video (ⓘ): faqat ko'rish — holat, ovozli izoh, ulashish va
+  /// Namuna video (▶): faqat ko'rish — holat, ovozli izoh, ulashish va
   /// oldinga/orqaga tugmalari yo'q, vaqt o'rnida «Образец»
   final bool guide;
 

@@ -6,8 +6,8 @@ package main
 // Vaqti o'tib bajarilmagan vazifa uchun revizor (checker / super_admin)
 // mas'ul xodimlardan bajarishni talab qiladi:
 //   - xodimga (va vazifa biriktirilgan sotrudnikka) ilovada yopib bo'lmaydigan
-//     oyna (WS "task_demand") + Telegram xabar;
-//   - vazifa bajarilmaguncha har 10 daqiqada WS eslatma qaytariladi;
+//     oyna (WS "task_demand"), telefonga ovozli push (FCM) + Telegram xabar;
+//   - vazifa bajarilmaguncha har 10 daqiqada WS va push eslatma qaytariladi;
 //   - videolar yuklangach talab o'z-o'zidan tushadi (alohida yopish shart emas).
 //
 // Talab faqat bugungi vazifaga beriladi va main DB'dagi task_demands da
@@ -183,13 +183,39 @@ func demandEventData(t OverdueTask) map[string]interface{} {
 	}
 }
 
-// pushDemand — mas'ullarga WS orqali talab oynasini yuboradi
-func pushDemand(t OverdueTask) int {
+// demandDelivery — talab kimga qaysi yo'l bilan yetgani
+type demandDelivery struct {
+	Online map[int]bool // ilovasi ochiq (WS)
+	Pushed map[int]bool // telefonga bildirishnoma (FCM)
+}
+
+// pushDemand — mas'ullarga talabni yuboradi: ilovasi ochiq bo'lsa majburiy
+// oyna (WS), ilova yopiq yoki telefon qulflangan bo'lsa ovozli push (FCM).
+func pushDemand(mainDB *sql.DB, t OverdueTask) demandDelivery {
 	who := map[int]bool{}
+	ids := make([]int, 0, len(t.Responsible))
 	for _, p := range t.Responsible {
 		who[p.UserID] = true
+		ids = append(ids, p.UserID)
 	}
-	return hub.sendTo(func(c *WSClient) bool { return who[c.userID] }, "task_demand", demandEventData(t))
+	online := map[int]bool{}
+	hub.sendTo(func(c *WSClient) bool {
+		if !who[c.userID] {
+			return false
+		}
+		online[c.userID] = true
+		return true
+	}, "task_demand", demandEventData(t))
+
+	body := t.Task
+	if t.FilialName != "" {
+		body = t.FilialName + " · " + t.Task
+	}
+	pushed := pushToUsers(mainDB, ids, "Ревизор требует выполнить", body, map[string]string{
+		"type":   "task_demand",
+		"taskId": strconv.Itoa(t.TaskID),
+	})
+	return demandDelivery{Online: online, Pushed: pushed}
 }
 
 func lateText(minutes int) string {
@@ -260,31 +286,36 @@ func demandTask(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	online := pushDemand(*task)
+	delivery := pushDemand(mainDB, *task)
 
 	msg := fmt.Sprintf(
 		"⚠️ REVIZOR TALABI\n\nFilial: %s\nVazifa: %s\nVaqti: %s (%s kechikdi)\nTalab qildi: %s\n\nDarhol bajaring va videoni ilovaga yuklang!",
 		task.FilialName, task.Task, task.Time, lateText(task.LateMinutes), by)
 	tgSent := 0
 	var noTelegram []string
+	notReached := []string{} // hech qaysi yo'l bilan yetmaganlar
 	for _, p := range task.Responsible {
-		chatID := userTelegramID(mainDB, p.UserID)
-		if chatID == 0 {
-			noTelegram = append(noTelegram, p.Username)
-			continue
+		sent := false
+		if chatID := userTelegramID(mainDB, p.UserID); chatID != 0 {
+			if err := sendCredsTgMessage(chatID, msg); err != nil {
+				log.Printf("demand: %s ga Telegram yuborilmadi: %v", p.Username, err)
+			} else {
+				sent = true
+				tgSent++
+			}
 		}
-		if err := sendCredsTgMessage(chatID, msg); err != nil {
-			log.Printf("demand: %s ga Telegram yuborilmadi: %v", p.Username, err)
+		if !sent {
 			noTelegram = append(noTelegram, p.Username)
-			continue
 		}
-		tgSent++
+		if !sent && !delivery.Online[p.UserID] && !delivery.Pushed[p.UserID] {
+			notReached = append(notReached, p.Username)
+		}
 	}
 	if noTelegram == nil {
 		noTelegram = []string{}
 	}
-	log.Printf("📣 Talab: '%s' (filial %d) — %s, %d mas'ul, ilovada %d, Telegram %d",
-		task.Task, task.FilialID, by, len(task.Responsible), online, tgSent)
+	log.Printf("📣 Talab: '%s' (filial %d) — %s, %d mas'ul, ilovada %d, push %d, Telegram %d, yetmadi %d",
+		task.Task, task.FilialID, by, len(task.Responsible), len(delivery.Online), len(delivery.Pushed), tgSent, len(notReached))
 
 	hub.sendTo(func(c *WSClient) bool {
 		return c.role == RoleChecker || c.role == RoleSuperAdmin
@@ -294,9 +325,11 @@ func demandTask(w http.ResponseWriter, r *http.Request) {
 		"success":     true,
 		"responsible": task.Responsible,
 		"demand":      task.Demand,
-		"online":      online,
+		"online":      len(delivery.Online),
+		"push":        len(delivery.Pushed),
 		"telegram":    tgSent,
 		"noTelegram":  noTelegram,
+		"notReached":  notReached,
 	})
 }
 
@@ -328,8 +361,18 @@ func getMyDemands(w http.ResponseWriter, r *http.Request) {
 
 // remindDemands — scheduler: bajarilmagan talablarni har 10 daqiqada qaytaradi
 func remindDemands(now time.Time) {
-	for _, t := range activeDemandTasks(now) {
-		sent := pushDemand(t)
-		log.Printf("📣 Talab eslatmasi: '%s' (filial %d) — %d xodimga", t.Task, t.FilialID, sent)
+	tasks := activeDemandTasks(now)
+	if len(tasks) == 0 {
+		return
+	}
+	mainDB, err := getMainDB()
+	if err != nil {
+		return
+	}
+	defer mainDB.Close()
+	for _, t := range tasks {
+		d := pushDemand(mainDB, t)
+		log.Printf("📣 Talab eslatmasi: '%s' (filial %d) — ilovada %d, push %d",
+			t.Task, t.FilialID, len(d.Online), len(d.Pushed))
 	}
 }

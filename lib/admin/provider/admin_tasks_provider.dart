@@ -6,6 +6,7 @@ import 'package:mone_task_app/admin/service/task_worker_service.dart';
 import 'package:mone_task_app/checker/model/checker_check_task_model.dart';
 import 'package:mone_task_app/checker/service/task_worker_service.dart';
 import 'package:mone_task_app/core/network/ws_service.dart';
+import 'package:mone_task_app/core/push/push_service.dart';
 import 'package:mone_task_app/shared/services/task_prefs_service.dart';
 import 'package:mone_task_app/shared/widgets/task_reorder_list.dart';
 
@@ -242,6 +243,8 @@ class AdminTasksProvider extends ChangeNotifier {
   void initWs() {
     final ws = WsService();
     ws.connect();
+    // Profil almashtiradigan xodim ham talabni telefoniga olishi uchun
+    PushService().register();
     _wsSub?.cancel();
     _wsSub = ws.onEvent.listen((event) {
       if (event['event'] != 'task_updated') return;

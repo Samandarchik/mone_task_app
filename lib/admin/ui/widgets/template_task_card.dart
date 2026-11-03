@@ -8,6 +8,7 @@ import 'package:mone_task_app/admin/service/task_worker_service.dart';
 import 'package:mone_task_app/admin/ui/widgets/category_manager_dialog.dart';
 import 'package:mone_task_app/shared/models/task_model.dart';
 import 'package:mone_task_app/shared/widgets/guide_video_dialog.dart';
+import 'package:mone_task_app/shared/widgets/task_card_header.dart';
 import 'package:mone_task_app/utils/get_color.dart';
 
 const _blue = Color(0xFF2563EB);
@@ -344,60 +345,57 @@ class _TemplateTaskCardState extends State<TemplateTaskCard> {
   }
 
   Widget _buildHeader() {
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Container(
-          constraints: const BoxConstraints(minWidth: 32),
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-          alignment: Alignment.center,
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(8),
-          ),
-          child: Text(
-            '${widget.number}',
-            style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700),
-          ),
+    final titleSize = taskTitleFontSize(context, _task, wide: 17);
+    return TaskCardHeader(
+      leading: Container(
+        constraints: const BoxConstraints(minWidth: 32),
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(8),
         ),
-        const SizedBox(width: 10),
-        Expanded(
-          child: _editingText
-              ? TextField(
-                  controller: _textCtrl,
-                  focusNode: _textFocus,
-                  maxLines: null,
-                  textInputAction: TextInputAction.done,
-                  onSubmitted: (_) => _finishTextEdit(),
-                  style: const TextStyle(fontSize: 17, height: 1.3),
-                  decoration: InputDecoration(
-                    isDense: true,
-                    contentPadding: const EdgeInsets.symmetric(
-                      horizontal: 8,
-                      vertical: 6,
-                    ),
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    focusedBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(8),
-                      borderSide: const BorderSide(color: _blue),
-                    ),
-                  ),
-                )
-              : GestureDetector(
-                  onTap: _startTextEdit,
-                  child: Text(
-                    _task,
-                    style: const TextStyle(
-                      fontSize: 17,
-                      fontWeight: FontWeight.w600,
-                      height: 1.3,
-                      color: Color(0xFF111827),
-                    ),
-                  ),
+        child: Text(
+          '${widget.number}',
+          style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700),
+        ),
+      ),
+      title: _editingText
+          ? TextField(
+              controller: _textCtrl,
+              focusNode: _textFocus,
+              maxLines: null,
+              textInputAction: TextInputAction.done,
+              onSubmitted: (_) => _finishTextEdit(),
+              style: TextStyle(fontSize: titleSize, height: 1.3),
+              decoration: InputDecoration(
+                isDense: true,
+                contentPadding: const EdgeInsets.symmetric(
+                  horizontal: 8,
+                  vertical: 6,
                 ),
-        ),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(8),
+                  borderSide: const BorderSide(color: _blue),
+                ),
+              ),
+            )
+          : GestureDetector(
+              onTap: _startTextEdit,
+              child: Text(
+                _task,
+                style: TextStyle(
+                  fontSize: titleSize,
+                  fontWeight: FontWeight.w600,
+                  height: 1.3,
+                  color: const Color(0xFF111827),
+                ),
+              ),
+            ),
+      actions: [
         const SizedBox(width: 8),
         if (_saving)
           const Padding(
@@ -733,7 +731,7 @@ class _TemplateTaskCardState extends State<TemplateTaskCard> {
     );
   }
 
-  /// Namuna video — ishchi vazifa kartasidagi ⓘ ni bossa shu video ochiladi
+  /// Namuna video — ishchi vazifa kartasidagi ▶ ni bossa shu video ochiladi
   Widget _buildGuideChip() {
     final progress = _guideProgress;
     if (progress != null) {

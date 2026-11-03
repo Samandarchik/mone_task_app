@@ -26,6 +26,7 @@ abstract final class AppUrls {
   static const String users = '$baseUrl/api/users';
   static const String reorder = '$baseUrl/api/tasks/reorder';
   static const String notifications = '$baseUrl/api/notifications';
+  static const String deviceToken = '$baseUrl/api/device-token';
   static const String categories = '$baseUrl/api/categories';
   static const String forceLogout = '$baseUrl/api/auth/force-logout';
   static const String myDemands = '$baseUrl/api/my/demands';

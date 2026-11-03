@@ -18,11 +18,13 @@ import 'package:mone_task_app/home/service/api_service.dart';
 import 'package:mone_task_app/home/ui/filial_select_page.dart';
 import 'package:mone_task_app/home/ui/role_home.dart';
 import 'package:mone_task_app/shared/services/task_prefs_service.dart';
+import 'package:mone_task_app/shared/widgets/task_card_header.dart';
 import 'package:mone_task_app/shared/widgets/task_reorder_list.dart';
 import 'package:mone_task_app/shared/widgets/task_video_strip.dart';
 import 'package:mone_task_app/shared/widgets/upload_progress_dialog.dart';
 import 'package:mone_task_app/shared/widgets/user_avatar.dart';
 import 'package:mone_task_app/core/di/di.dart';
+import 'package:mone_task_app/core/push/push_service.dart';
 import 'package:mone_task_app/home/service/login_service.dart';
 import 'package:mone_task_app/worker/model/task_worker_model.dart';
 import 'package:mone_task_app/worker/model/response_task_model.dart';
@@ -54,6 +56,7 @@ class _TaskWorkerUiState extends State<TaskWorkerUi> {
   TokenStorage tokenStorage = sl<TokenStorage>();
   UserModel? user;
   StreamSubscription? _wsSub;
+  StreamSubscription? _pushSub;
 
   /// Ishchi (Ревизор) — vazifaga namuna video yuklay oladi
   bool get _isOwner => user?.role == 'worker';
@@ -92,6 +95,10 @@ class _TaskWorkerUiState extends State<TaskWorkerUi> {
   void _initWs() {
     final ws = WsService();
     ws.connect();
+    PushService().register();
+    _pushSub = PushService().onDemand.listen((_) {
+      if (mounted) checkMyDemands(context);
+    });
     _wsSub = ws.onEvent.listen((event) {
       if (event['event'] == 'task_updated') {
         // O'zimiz sudragan tartib — ekranda allaqachon shunday
@@ -121,6 +128,7 @@ class _TaskWorkerUiState extends State<TaskWorkerUi> {
   @override
   void dispose() {
     _wsSub?.cancel();
+    _pushSub?.cancel();
     super.dispose();
   }
 
@@ -686,66 +694,66 @@ class _TaskWorkerUiState extends State<TaskWorkerUi> {
           // videoni uzoq bosish bilan to'qnashmaydi
           ReorderableDelayedDragStartListener(
             index: reorderIndex,
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Container(
-                  width: 26,
-                  height: 26,
-                  margin: const EdgeInsets.only(top: 1),
-                  alignment: Alignment.center,
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFF3F4F6),
-                    borderRadius: BorderRadius.circular(8),
+            child: TaskCardHeader(
+              leading: Container(
+                width: 26,
+                height: 26,
+                margin: const EdgeInsets.only(top: 1),
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  color: const Color(0xFFF3F4F6),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Text(
+                  '$number',
+                  style: const TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                    color: Color(0xFF4B5563),
                   ),
-                  child: Text(
-                    '$number',
-                    style: const TextStyle(
-                      fontSize: 12,
+                ),
+              ),
+              title: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    task.task,
+                    style: TextStyle(
                       fontWeight: FontWeight.w700,
-                      color: Color(0xFF4B5563),
+                      fontSize: taskTitleFontSize(
+                        context,
+                        task.task,
+                        wide: 15.5,
+                      ),
+                      height: 1.3,
+                      color: const Color(0xFF111827),
                     ),
                   ),
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        task.task,
-                        style: const TextStyle(
-                          fontWeight: FontWeight.w700,
-                          fontSize: 15.5,
-                          height: 1.3,
-                          color: Color(0xFF111827),
-                        ),
+                  if (task.submittedBy != null || slots > 1) ...[
+                    const SizedBox(height: 4),
+                    Text(
+                      [
+                        if (task.submittedBy != null)
+                          "${task.submittedBy} · "
+                              "${task.submittedAt?.toLocal().hour.toString().padLeft(2, '0')}:"
+                              "${task.submittedAt?.toLocal().minute.toString().padLeft(2, '0')}",
+                        if (slots > 1)
+                          videos.length > required
+                              ? "🎥 ${videos.length} · +${videos.length - required} доп."
+                              : task.videosComplete || videos.isEmpty
+                              ? "🎥 ${videos.length}/$slots"
+                              : "🎥 ${videos.length}/$slots · загрузите все видео",
+                      ].join("   "),
+                      style: const TextStyle(
+                        fontSize: 12,
+                        color: Color(0xFF6B7280),
                       ),
-                      if (task.submittedBy != null || slots > 1) ...[
-                        const SizedBox(height: 4),
-                        Text(
-                          [
-                            if (task.submittedBy != null)
-                              "${task.submittedBy} · "
-                                  "${task.submittedAt?.toLocal().hour.toString().padLeft(2, '0')}:"
-                                  "${task.submittedAt?.toLocal().minute.toString().padLeft(2, '0')}",
-                            if (slots > 1)
-                              videos.length > required
-                                  ? "🎥 ${videos.length} · +${videos.length - required} доп."
-                                  : task.videosComplete || videos.isEmpty
-                                  ? "🎥 ${videos.length}/$slots"
-                                  : "🎥 ${videos.length}/$slots · загрузите все видео",
-                          ].join("   "),
-                          style: const TextStyle(
-                            fontSize: 12,
-                            color: Color(0xFF6B7280),
-                          ),
-                        ),
-                      ],
-                    ],
-                  ),
-                ),
-                // ⓘ — vazifa qanday bajarilishi kerakligi (namuna video)
+                    ),
+                  ],
+                ],
+              ),
+              actions: [
+                // ▶ — vazifa qanday bajarilishi kerakligi (namuna video)
                 GuideInfoButton(
                   task: task,
                   canUpload: _isOwner,

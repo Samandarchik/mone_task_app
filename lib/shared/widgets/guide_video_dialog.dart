@@ -28,7 +28,7 @@ Future<void> showGuideVideo(
 }) async {
   final url = task.guideVideoUrl;
   if (url == null) {
-    // ⓘ tugmasining o'zi tagida chiqadi
+    // ▶ tugmasining o'zi tagida chiqadi
     final box = context.findRenderObject() as RenderBox?;
     final anchor = box != null && box.hasSize
         ? box.localToGlobal(Offset.zero) & box.size
@@ -102,7 +102,7 @@ Future<List<String>?> recordGuideVideo(BuildContext context, int taskId) async {
   return null;
 }
 
-/// Vazifa kartasidagi ⓘ: namuna bo'lsa ko'k (bosilsa video ochiladi),
+/// Vazifa kartasidagi ▶: namuna bo'lsa ko'k (bosilsa video ochiladi),
 /// bo'lmasa kulrang. [canUpload] — namuna yo'q bo'lsa yuklash taklif qilinadi.
 class GuideInfoButton extends StatelessWidget {
   final TaskModel task;
@@ -144,7 +144,7 @@ class GuideInfoButton extends StatelessWidget {
       child: Padding(
         padding: const EdgeInsets.fromLTRB(8, 4, 6, 4),
         child: Icon(
-          Icons.info_outline_rounded,
+          Icons.play_circle_outline_rounded,
           size: 24,
           color: url != null
               ? const Color(0xFF3B82F6)
@@ -206,7 +206,7 @@ Future<bool> uploadGuideVideoFlow(
   return true;
 }
 
-/// Namuna hali yuklanmagan — ⓘ tugmasi tagida chiqadigan kichik oyna
+/// Namuna hali yuklanmagan — ▶ tugmasi tagida chiqadigan kichik oyna
 /// (pastroqdagi kartada joy bo'lmasa — tepasida)
 class _GuideEmptyPopup extends StatelessWidget {
   final Rect? anchor;
@@ -233,7 +233,7 @@ class _GuideEmptyPopup extends StatelessWidget {
       screen.width - width - 12,
     );
     final below = a.bottom < screen.height * 0.7;
-    // Strelka ⓘ markaziga qaraydi
+    // Strelka ▶ markaziga qaraydi
     final arrowX = (a.center.dx - left - _arrow).clamp(16.0, width - 32);
 
     final arrow = Padding(

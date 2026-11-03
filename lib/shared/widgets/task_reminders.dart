@@ -86,6 +86,20 @@ String _lateText(int minutes) {
   return m == 0 ? '$h ч' : '$h ч $m мин';
 }
 
+/// Revizorga: talab kimga yetgani. Yetmagan odam «Потребовано» ortida
+/// yashirinib qolmasligi kerak.
+String demandResultText(Map data) {
+  final total = (data['responsible'] as List?)?.length ?? 0;
+  if (total == 0) return 'Нет ответственных — некому отправить';
+
+  final notReached = (data['notReached'] as List?)?.join(', ') ?? '';
+  final msg =
+      'Потребовано. В приложении: ${data['online'] ?? 0}, '
+      'уведомление: ${data['push'] ?? 0}, '
+      'Telegram: ${data['telegram'] ?? 0}';
+  return notReached.isEmpty ? msg : '$msg\nНе доставлено: $notReached';
+}
+
 /// Korrektor uchun 🔔: vaqti o'tib, hali bajarilmagan vazifalar.
 /// Server har 10 daqiqada WS "overdue_tasks" yuboradi — son yangilanadi va
 /// ekranda xabar chiqadi. Bosilsa — tugma tagida ro'yxat.
@@ -156,7 +170,7 @@ class _OverdueBellButtonState extends State<OverdueBellButton> {
     _listVersion.value++;
   }
 
-  /// Revizor talabi: xodimlarga majburiy oyna + Telegram
+  /// Revizor talabi: xodimlarga majburiy oyna, telefonga push + Telegram
   Future<void> _demand(_OverdueTask t) async {
     if (_demanding.contains(t.taskId)) return;
     _demanding.add(t.taskId);
@@ -168,10 +182,7 @@ class _OverdueBellButtonState extends State<OverdueBellButton> {
         '${AppUrls.tasks}/${t.taskId}/demand',
       );
       final data = response.data is Map ? response.data : const {};
-      final tg = data['telegram'] ?? 0;
-      final noTg = (data['noTelegram'] as List?)?.join(', ') ?? '';
-      msg = 'Потребовано. Telegram: $tg';
-      if (noTg.isNotEmpty) msg += '\nБез Telegram: $noTg';
+      msg = demandResultText(data);
     } catch (e) {
       msg = 'Не удалось отправить';
       if (e is DioException) {
