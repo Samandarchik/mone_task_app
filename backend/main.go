@@ -235,6 +235,7 @@ type videoConfig struct {
 	Count int    // super admin belgilagan videolar soni (kamida 1)
 	Multi bool   // bir nechta video saqlanadimi
 	Guide string // namuna video URL (bo'lmasa "")
+	Time  string // shablondagi muddat (notification_time), bo'lmasa ""
 }
 
 // getTemplateVideoConfigs - har bir template uchun videolar soni.
@@ -246,7 +247,7 @@ func getTemplateVideoConfigs() map[int]videoConfig {
 		return result
 	}
 	defer mainDB.Close()
-	rows, err := mainDB.Query("SELECT id, COALESCE(video_count, 1), COALESCE(multi_video, 0), COALESCE(guide_video, '') FROM task_templates")
+	rows, err := mainDB.Query("SELECT id, COALESCE(video_count, 1), COALESCE(multi_video, 0), COALESCE(guide_video, ''), COALESCE(notification_time, '') FROM task_templates")
 	if err != nil {
 		return result
 	}
@@ -254,12 +255,12 @@ func getTemplateVideoConfigs() map[int]videoConfig {
 	for rows.Next() {
 		var id, count int
 		var multi bool
-		var guide string
-		rows.Scan(&id, &count, &multi, &guide)
+		var guide, notif string
+		rows.Scan(&id, &count, &multi, &guide, &notif)
 		if count < 1 {
 			count = 1
 		}
-		result[id] = videoConfig{Count: count, Multi: multi || count > 1, Guide: guide}
+		result[id] = videoConfig{Count: count, Multi: multi || count > 1, Guide: guide, Time: notif}
 	}
 	return result
 }
@@ -1301,6 +1302,11 @@ func getTasks(w http.ResponseWriter, r *http.Request) {
 		}
 		if notifTime.Valid {
 			t.NotificationTime = notifTime.String
+		}
+		// Muddat shablondan: keyin o'zgartirilgan bo'lsa bugungi vazifada ham
+		// yangisi ko'rinadi (eslatmalar ham shablon vaqtidan ishlaydi)
+		if cfg, ok := videoConfigs[t.TemplateID]; ok && cfg.Time != "" {
+			t.NotificationTime = cfg.Time
 		}
 		if workerIDsStr.Valid && workerIDsStr.String != "" {
 			t.WorkerIDs = parseFilialIDs(workerIDsStr.String)

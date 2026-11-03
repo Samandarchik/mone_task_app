@@ -37,6 +37,16 @@ import 'package:mone_task_app/core/network/ws_service.dart';
 import 'package:mone_task_app/worker/ui/telegram_style_video_recorder.dart';
 import 'package:mone_task_app/shared/widgets/guide_video_dialog.dart';
 
+/// Vazifa muddati «HH:MM» ko'rinishida («5:0» → «05:00»); yo'q yoki
+/// noto'g'ri bo'lsa null («null:null» ham server'dan kelib qolgan).
+String? taskDeadline(String? raw) {
+  final m = RegExp(r'^\s*(\d{1,2}):(\d{1,2})\s*$').firstMatch(raw ?? '');
+  if (m == null) return null;
+  final h = int.parse(m[1]!), min = int.parse(m[2]!);
+  if (h > 23 || min > 59) return null;
+  return '${h.toString().padLeft(2, '0')}:${min.toString().padLeft(2, '0')}';
+}
+
 /// Ishchiga ko'rinadigan vazifalar: aktiv filial tanlangan bo'lsa — faqat
 /// o'sha filialniki.
 ///
@@ -719,6 +729,28 @@ class _TaskWorkerUiState extends State<TaskWorkerUi> {
                       color: const Color(0xFF111827),
                     ),
                   ),
+                  if (taskDeadline(task.notificationTime)
+                      case final until?) ...[
+                    const SizedBox(height: 4),
+                    Row(
+                      children: [
+                        const Icon(
+                          Icons.schedule_rounded,
+                          size: 14,
+                          color: Color(0xFFD97706),
+                        ),
+                        const SizedBox(width: 4),
+                        Text(
+                          'Загрузить до $until',
+                          style: const TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                            color: Color(0xFFD97706),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
                   if (task.submittedBy != null || slots > 1) ...[
                     const SizedBox(height: 4),
                     Text(
