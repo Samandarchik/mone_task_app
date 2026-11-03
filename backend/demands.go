@@ -198,14 +198,16 @@ func pushDemand(mainDB *sql.DB, t OverdueTask) demandDelivery {
 		who[p.UserID] = true
 		ids = append(ids, p.UserID)
 	}
+	// Har biriga alohida: «ilovada» faqat xabar haqiqatan navbatga tushganda
+	// hisoblanadi (WS buferi to'la bo'lsa yuborilmaydi)
 	online := map[int]bool{}
-	hub.sendTo(func(c *WSClient) bool {
-		if !who[c.userID] {
-			return false
+	event := demandEventData(t)
+	for id := range who {
+		uid := id
+		if hub.sendTo(func(c *WSClient) bool { return c.userID == uid }, "task_demand", event) > 0 {
+			online[uid] = true
 		}
-		online[c.userID] = true
-		return true
-	}, "task_demand", demandEventData(t))
+	}
 
 	body := t.Task
 	if t.FilialName != "" {

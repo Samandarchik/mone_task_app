@@ -41,6 +41,9 @@ jobs:
           (Get-Content $f -Raw) -replace 'L"mone_task_app"', "L`"mone_task_app v$env:VERSION`"" | Set-Content $f -Encoding UTF8
 
       - run: flutter pub get
+      # Testlar yiqilsa — reliz chiqmaydi
+      - run: flutter analyze --no-fatal-warnings --no-fatal-infos lib test
+      - run: flutter test
       - run: flutter build windows --release
 
       - name: VC++ runtime DLL lari va zip

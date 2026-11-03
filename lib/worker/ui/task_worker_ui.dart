@@ -37,6 +37,17 @@ import 'package:mone_task_app/core/network/ws_service.dart';
 import 'package:mone_task_app/worker/ui/telegram_style_video_recorder.dart';
 import 'package:mone_task_app/shared/widgets/guide_video_dialog.dart';
 
+/// Ishchiga ko'rinadigan vazifalar: aktiv filial tanlangan bo'lsa — faqat
+/// o'sha filialniki.
+///
+/// Kategoriya bo'yicha bu yerda qayta filtrlanmaydi: server buni o'zi qiladi
+/// va kategoriyasiz vazifalarni hammaga beradi. Ilovadagi ikkinchi filtr ularni
+/// yashirib qo'yardi — tekshiruvchida ko'rinib, ishchida chiqmay qolardi.
+List<TaskModel> workerVisibleTasks(List<TaskModel> tasks, int? activeFilialId) {
+  if (activeFilialId == null) return tasks;
+  return tasks.where((t) => t.filialId == activeFilialId).toList();
+}
+
 class TaskWorkerUi extends StatefulWidget {
   const TaskWorkerUi({super.key});
 
@@ -176,29 +187,8 @@ class _TaskWorkerUiState extends State<TaskWorkerUi> {
     if (mounted) _refresh();
   }
 
-  /// Aktiv filial tanlangan bo'lsa — faqat o'sha filial tasklari ko'rinadi.
-  /// Worker uchun qo'shimcha: faqat o'ziga biriktirilgan kategoriyalardagi
-  /// tasklar ko'rinadi (kategoriyalar bo'sh/null bo'lsa — cheklov yo'q).
-  List<TaskModel> get _visibleTasks {
-    var tasks = _tasks;
-
-    final fid = ActiveFilial.id;
-    if (fid != null) {
-      tasks = tasks.where((t) => t.filialId == fid).toList();
-    }
-
-    // Kategoriya bo'yicha filtrlash — faqat worker rolida.
-    // Kategoriya tanlanmagan bo'lsa — hech qanday vazifa ko'rinmaydi
-    // (backend ham shunday qaytaradi).
-    if (user?.role == 'worker') {
-      final allowed = (user?.categories ?? const <String>[]).toSet();
-      tasks = allowed.isEmpty
-          ? const <TaskModel>[]
-          : tasks.where((t) => allowed.contains(t.category)).toList();
-    }
-
-    return tasks;
-  }
+  List<TaskModel> get _visibleTasks =>
+      workerVisibleTasks(_tasks, ActiveFilial.id);
 
   bool get _canSwitchFilial => (user?.filialIds?.length ?? 0) > 1;
 

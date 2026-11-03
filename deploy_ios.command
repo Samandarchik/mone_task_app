@@ -414,6 +414,14 @@ asc() {
     BUNDLE_ID="$BUNDLE_ID" "$PY_BIN" "$ASC_PY" "$@"
 }
 
+# --- 1c. Reliz tekshiruvi ---
+# Versiya oshirilishidan OLDIN: testlar yiqilsa hech narsa o'zgarmaydi.
+# Shoshilinch holatda: SKIP_RELEASE_CHECK=1 ./deploy_ios.command
+if ! ./release_check.sh; then
+    echo "Reliz tekshiruvi o'tmadi — iOS reliz to'xtatildi." >&2
+    exit 1
+fi
+
 # --- 2. Versiya ---
 
 version_line() {

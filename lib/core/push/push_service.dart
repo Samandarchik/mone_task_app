@@ -106,10 +106,16 @@ class PushService {
 
   /// Hisobdan chiqishda — chiqib ketgan odamning telefoniga talab bormasin
   Future<void> unregister() async {
-    final token = _token;
-    if (token == null) return;
+    var token = _token;
     _token = null;
     try {
+      // Ro'yxatdan o'tish hali tugamagan yoki saqlash yiqilgan bo'lsa ham
+      // serverdagi token o'chishi kerak — aks holda chiqib ketgan odamga
+      // talablar borib turadi
+      if (token == null && Firebase.apps.isNotEmpty) {
+        token = await FirebaseMessaging.instance.getToken();
+      }
+      if (token == null) return;
       await sl<Dio>().delete(AppUrls.deviceToken, data: {'token': token});
     } catch (e) {
       debugPrint("Push token o'chirilmadi: $e");

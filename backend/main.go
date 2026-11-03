@@ -854,6 +854,8 @@ func authMiddleware(next http.HandlerFunc) http.HandlerFunc {
 		r.Header.Set("UserID", strconv.Itoa(claims.UserID))
 		r.Header.Set("Username", claims.Username)
 		r.Header.Set("Role", claims.Role)
+		// Mijoz o'zi yuborgan FilialIDs hech qachon o'tmasin — faqat tokendagisi
+		r.Header.Del("FilialIDs")
 		if len(claims.FilialIDs) > 0 {
 			filialIDsStr := strings.Trim(strings.Join(strings.Fields(fmt.Sprint(claims.FilialIDs)), ","), "[]")
 			r.Header.Set("FilialIDs", filialIDsStr)
@@ -1800,6 +1802,11 @@ func updateTask(w http.ResponseWriter, r *http.Request) {
 		})
 		return
 	}
+	// Vazifa boshqa filialga ko'chgan bo'lsa — eski filialdagi bo'sh nusxasi
+	// darhol tushadi (yangisini 10 daqiqalik refresh yaratadi)
+	if len(req.FilialIDs) > 0 {
+		cleanupTodayOrphans()
+	}
 
 	respondJSON(w, http.StatusOK, map[string]interface{}{
 		"success": true,
@@ -1840,6 +1847,8 @@ func deleteTask(w http.ResponseWriter, r *http.Request) {
 		})
 		return
 	}
+	// Bugungi bo'sh nusxasi tekshiruvchida «bajarilmagan» bo'lib qolmasin
+	cleanupTodayOrphans()
 
 	respondJSON(w, http.StatusOK, map[string]interface{}{
 		"success": true,
@@ -3160,6 +3169,8 @@ func deleteFilial(w http.ResponseWriter, r *http.Request) {
 		})
 		return
 	}
+	db.Close()
+	cleanupTodayOrphans()
 
 	respondJSON(w, http.StatusOK, map[string]interface{}{
 		"success": true,
@@ -4086,9 +4097,14 @@ func refreshTodayTasks() {
 	createDailyTasks()
 	createWeeklyTasks()
 	createMonthlyTasks()
-	// Avval yaratilib qolgan bo'sh dublikatlarni tozalaymiz
+	// Avval yaratilib qolgan bo'sh dublikatlarni va shabloni/filiali
+	// o'chirilgan bo'sh vazifalarni tozalaymiz
 	if taskDB, err := getTaskDB(time.Now()); err == nil {
 		removeUntouchedDuplicates(taskDB)
+		if mainDB, err := getMainDB(); err == nil {
+			removeUntouchedOrphans(mainDB, taskDB)
+			mainDB.Close()
+		}
 		taskDB.Close()
 	}
 	log.Println("=== Task creation completed ===")

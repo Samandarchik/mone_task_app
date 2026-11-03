@@ -21,6 +21,9 @@ echo "  Build: ${APP_NAME}_${VERSION}.apk"
 echo "============================================"
 echo
 
+# --- Reliz tekshiruvi: testlar yiqilsa APK yig'ilmaydi ---
+./release_check.sh || { echo "[XATO] Reliz tekshiruvi o'tmadi — APK yig'ilmadi."; read -p "Yopish uchun Enter bosing..."; exit 1; }
+
 # --- APK build ---
 flutter build apk --release || { echo "[XATO] Build muvaffaqiyatsiz tugadi."; exit 1; }
 

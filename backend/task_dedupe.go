@@ -3,6 +3,7 @@ package main
 import (
 	"database/sql"
 	"log"
+	"time"
 )
 
 // taskHasData - vazifaga biror narsa kiritilganmi (status, video, ovozli izoh,
@@ -81,4 +82,96 @@ func removeUntouchedDuplicates(taskDB *sql.DB) {
 			log.Printf("Bo'sh dublikat vazifa o'chirildi: id=%d", id)
 		}
 	}
+}
+
+// removeUntouchedOrphans - shabloni o'chirilgan, boshqa filialga ko'chirilgan
+// yoki filiali o'chirilgan bugungi vazifalarni olib tashlaydi. Aks holda ular
+// kun oxirigacha tekshiruvchida bo'sh (bajarilmagan) bo'lib turadi, ishchi esa
+// ularni bajara olmaydi. Faqat tegilmaganlari o'chadi — videosi, statusi yoki
+// ovozli izohi borlari tarix sifatida qoladi.
+func removeUntouchedOrphans(mainDB, taskDB *sql.DB) {
+	type candidate struct{ id, template, filial int }
+	rows, err := taskDB.Query(`
+		SELECT id, template_id, filial_id FROM tasks
+		WHERE template_id IS NOT NULL AND template_id != 0` + untouchedTaskSQL)
+	if err != nil {
+		return
+	}
+	var candidates []candidate
+	for rows.Next() {
+		var c candidate
+		if rows.Scan(&c.id, &c.template, &c.filial) == nil {
+			candidates = append(candidates, c)
+		}
+	}
+	readErr := rows.Err()
+	rows.Close()
+	if readErr != nil {
+		return
+	}
+
+	for _, c := range candidates {
+		// Har biri o'chirishdan oldin alohida, yangidan tekshiriladi: o'qishda
+		// xato bo'lsa yoki shablon shu orada yaratilgan bo'lsa — tegilmaydi
+		if !isOrphanTask(mainDB, c.template, c.filial) {
+			continue
+		}
+		// Shu orada video/status kelgan bo'lsa — o'chmaydi
+		res, err := taskDB.Exec("DELETE FROM tasks WHERE id = ?"+untouchedTaskSQL, c.id)
+		if err != nil {
+			continue
+		}
+		if n, _ := res.RowsAffected(); n > 0 {
+			log.Printf("Shabloni/filiali yo'q bo'sh vazifa o'chirildi: id=%d", c.id)
+		}
+	}
+}
+
+// untouchedTaskSQL - vazifaga hech kim tegmagan (video, status, ovozli izoh yo'q)
+const untouchedTaskSQL = `
+	AND status IS NULL
+	AND COALESCE(video_url, '') IN ('', '[]')
+	AND COALESCE(checker_audio_url, '') IN ('', '[]')
+	AND COALESCE(submitted_at, '') = ''`
+
+// isOrphanTask - shablon o'chirilgan, shablon endi bu filialga tegishli emas
+// yoki filialning o'zi o'chirilgan. Aniq bilinmasa (DB xatosi) — false.
+func isOrphanTask(mainDB *sql.DB, templateID, filialID int) bool {
+	var filials string
+	err := mainDB.QueryRow("SELECT COALESCE(filial_ids, '') FROM task_templates WHERE id = ?", templateID).Scan(&filials)
+	if err == sql.ErrNoRows {
+		return true
+	}
+	if err != nil {
+		return false
+	}
+	inTemplate := false
+	for _, f := range parseFilialIDs(filials) {
+		if f == filialID {
+			inTemplate = true
+			break
+		}
+	}
+	if !inTemplate {
+		return true
+	}
+	var one int
+	err = mainDB.QueryRow("SELECT 1 FROM filials WHERE id = ?", filialID).Scan(&one)
+	return err == sql.ErrNoRows
+}
+
+// cleanupTodayOrphans - shablon yoki filial o'chirilgach darhol chaqiriladi
+// (aks holda 10 daqiqalik refresh'gacha ko'rinib turadi).
+func cleanupTodayOrphans() {
+	mainDB, err := getMainDB()
+	if err != nil {
+		return
+	}
+	defer mainDB.Close()
+	taskDB, err := getTaskDB(time.Now())
+	if err != nil {
+		return
+	}
+	defer taskDB.Close()
+	removeUntouchedOrphans(mainDB, taskDB)
 }

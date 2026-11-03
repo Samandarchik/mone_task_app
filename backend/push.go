@@ -237,16 +237,29 @@ func pushToUsers(mainDB *sql.DB, userIDs []int, title, body string, data map[str
 		log.Printf("push: OAuth xatosi: %v", err)
 		return reached
 	}
+	// Parallel: revizor «Потребовать» bosganda har qurilmani navbat kutmasin
+	type outcome struct {
+		d     device
+		stale bool
+		err   error
+	}
+	results := make(chan outcome, len(devices))
 	for _, d := range devices {
-		stale, err := fcmSend(creds.ProjectID, accessToken, fcmMessage(d.token, title, body, data))
-		if stale {
-			mainDB.Exec("DELETE FROM device_tokens WHERE token = ?", d.token)
+		go func(d device) {
+			stale, err := fcmSend(creds.ProjectID, accessToken, fcmMessage(d.token, title, body, data))
+			results <- outcome{d, stale, err}
+		}(d)
+	}
+	for range devices {
+		r := <-results
+		if r.stale {
+			mainDB.Exec("DELETE FROM device_tokens WHERE token = ?", r.d.token)
 		}
-		if err != nil {
-			log.Printf("push: user %d ga yuborilmadi: %v", d.userID, err)
+		if r.err != nil {
+			log.Printf("push: user %d ga yuborilmadi: %v", r.d.userID, r.err)
 			continue
 		}
-		reached[d.userID] = true
+		reached[r.d.userID] = true
 	}
 	return reached
 }

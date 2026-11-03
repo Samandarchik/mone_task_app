@@ -104,14 +104,17 @@ func TestSplitMultiFilialTemplates(t *testing.T) {
 	if len(got) != 3+1+4 {
 		t.Fatalf("shablonlar soni: %d (%v)", len(got), got)
 	}
-	newID := 0
 	for id, f := range got {
 		if strings.Contains(f, ",") || f == "" {
 			t.Fatalf("shablon %d hali ko'p filialli: %q", id, f)
 		}
-		if id > 12 && f == "2" && newID == 0 {
-			newID = id
-		}
+	}
+	// «Hamma» ham 2-filialga nusxa beradi — map tartibi tasodifiy bo'lgani
+	// uchun «Ikki filial» nusxasini nomi bo'yicha aniq topamiz
+	newID := 0
+	if db, err := getMainDB(); err == nil {
+		db.QueryRow("SELECT id FROM task_templates WHERE task = 'Ikki filial' AND filial_ids = '2'").Scan(&newID)
+		db.Close()
 	}
 	if got[10] != "1" || got[11] != "1" || got[12] != "1" {
 		t.Fatalf("asl shablonlar: %v", got)

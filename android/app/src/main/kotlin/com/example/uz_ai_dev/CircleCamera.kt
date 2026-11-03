@@ -78,11 +78,11 @@ class CircleCamera(private val activity: FlutterActivity) : MethodChannel.Method
             "start" -> start(result)
             "stop" -> stop(result)
             "pause" -> {
-                recording?.pause()
+                safely { recording?.pause() }
                 result.success(null)
             }
             "resume" -> {
-                recording?.resume()
+                safely { recording?.resume() }
                 result.success(null)
             }
             "setZoom" -> {
@@ -101,6 +101,19 @@ class CircleCamera(private val activity: FlutterActivity) : MethodChannel.Method
                 )
             }
             else -> result.notImplemented()
+        }
+    }
+
+    /**
+     * Kamera yozuvni o'zicha to'xtatgan bo'lsa (uzilish, fon), Finalize hodisasi
+     * kelguncha pause/resume "The recording has been stopped" xatosini beradi.
+     * Bu holatda xato ko'rsatilmaydi: tayyor fayl onFinalized'da saqlanadi va
+     * «Отправить» bosilganda stop() uni qaytaradi.
+     */
+    private inline fun safely(action: () -> Unit) {
+        try {
+            action()
+        } catch (_: IllegalStateException) {
         }
     }
 
