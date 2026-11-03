@@ -6,7 +6,7 @@ package main
 // Vaqti o'tib bajarilmagan vazifa uchun revizor (checker / super_admin)
 // mas'ul xodimlardan bajarishni talab qiladi:
 //   - xodimga (va vazifa biriktirilgan sotrudnikka) ilovada yopib bo'lmaydigan
-//     oyna (WS "task_demand"), telefonga ovozli push (FCM) + Telegram xabar;
+//     oyna (WS "task_demand") va telefonga ovozli push (FCM). Telegram ishlatilmaydi;
 //   - vazifa bajarilmaguncha har 10 daqiqada WS va push eslatma qaytariladi;
 //   - videolar yuklangach talab o'z-o'zidan tushadi (alohida yopish shart emas).
 //
@@ -158,17 +158,6 @@ func activeDemandTasks(now time.Time) []OverdueTask {
 	return result
 }
 
-// userTelegramID — HR sinxronidagi telegram_id, bo'lmasa rezumedagi tg_user_id
-func userTelegramID(mainDB *sql.DB, userID int) int64 {
-	var tgID int64
-	var profile sql.NullString
-	mainDB.QueryRow("SELECT COALESCE(telegram_id, 0), profile_json FROM users WHERE id = ?", userID).Scan(&tgID, &profile)
-	if tgID == 0 && profile.Valid {
-		tgID = telegramIDFromProfileJSON(profile.String)
-	}
-	return tgID
-}
-
 func demandEventData(t OverdueTask) map[string]interface{} {
 	d := t.Demand
 	return map[string]interface{}{
@@ -218,16 +207,6 @@ func pushDemand(mainDB *sql.DB, t OverdueTask) demandDelivery {
 		"taskId": strconv.Itoa(t.TaskID),
 	})
 	return demandDelivery{Online: online, Pushed: pushed}
-}
-
-func lateText(minutes int) string {
-	if minutes < 60 {
-		return fmt.Sprintf("%d daqiqa", minutes)
-	}
-	if minutes%60 == 0 {
-		return fmt.Sprintf("%d soat", minutes/60)
-	}
-	return fmt.Sprintf("%d soat %d daqiqa", minutes/60, minutes%60)
 }
 
 // POST /api/tasks/{id}/demand — revizor bugungi bajarilmagan vazifani talab qiladi
@@ -290,34 +269,15 @@ func demandTask(w http.ResponseWriter, r *http.Request) {
 
 	delivery := pushDemand(mainDB, *task)
 
-	msg := fmt.Sprintf(
-		"⚠️ REVIZOR TALABI\n\nFilial: %s\nVazifa: %s\nVaqti: %s (%s kechikdi)\nTalab qildi: %s\n\nDarhol bajaring va videoni ilovaga yuklang!",
-		task.FilialName, task.Task, task.Time, lateText(task.LateMinutes), by)
-	tgSent := 0
-	var noTelegram []string
+	// Telegram ishlatilmaydi: talab faqat ilova orqali (ilova ichida va push)
 	notReached := []string{} // hech qaysi yo'l bilan yetmaganlar
 	for _, p := range task.Responsible {
-		sent := false
-		if chatID := userTelegramID(mainDB, p.UserID); chatID != 0 {
-			if err := sendCredsTgMessage(chatID, msg); err != nil {
-				log.Printf("demand: %s ga Telegram yuborilmadi: %v", p.Username, err)
-			} else {
-				sent = true
-				tgSent++
-			}
-		}
-		if !sent {
-			noTelegram = append(noTelegram, p.Username)
-		}
-		if !sent && !delivery.Online[p.UserID] && !delivery.Pushed[p.UserID] {
+		if !delivery.Online[p.UserID] && !delivery.Pushed[p.UserID] {
 			notReached = append(notReached, p.Username)
 		}
 	}
-	if noTelegram == nil {
-		noTelegram = []string{}
-	}
-	log.Printf("📣 Talab: '%s' (filial %d) — %s, %d mas'ul, ilovada %d, push %d, Telegram %d, yetmadi %d",
-		task.Task, task.FilialID, by, len(task.Responsible), len(delivery.Online), len(delivery.Pushed), tgSent, len(notReached))
+	log.Printf("📣 Talab: '%s' (filial %d) — %s, %d mas'ul, ilovada %d, push %d, yetmadi %d",
+		task.Task, task.FilialID, by, len(task.Responsible), len(delivery.Online), len(delivery.Pushed), len(notReached))
 
 	hub.sendTo(func(c *WSClient) bool {
 		return c.role == RoleChecker || c.role == RoleSuperAdmin
@@ -329,8 +289,6 @@ func demandTask(w http.ResponseWriter, r *http.Request) {
 		"demand":      task.Demand,
 		"online":      len(delivery.Online),
 		"push":        len(delivery.Pushed),
-		"telegram":    tgSent,
-		"noTelegram":  noTelegram,
 		"notReached":  notReached,
 	})
 }

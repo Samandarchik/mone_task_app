@@ -95,8 +95,7 @@ String demandResultText(Map data) {
   final notReached = (data['notReached'] as List?)?.join(', ') ?? '';
   final msg =
       'Потребовано. В приложении: ${data['online'] ?? 0}, '
-      'уведомление: ${data['push'] ?? 0}, '
-      'Telegram: ${data['telegram'] ?? 0}';
+      'уведомление: ${data['push'] ?? 0}';
   return notReached.isEmpty ? msg : '$msg\nНе доставлено: $notReached';
 }
 
@@ -170,7 +169,7 @@ class _OverdueBellButtonState extends State<OverdueBellButton> {
     _listVersion.value++;
   }
 
-  /// Revizor talabi: xodimlarga majburiy oyna, telefonga push + Telegram
+  /// Revizor talabi: xodimlarga majburiy oyna va telefonga push
   Future<void> _demand(_OverdueTask t) async {
     if (_demanding.contains(t.taskId)) return;
     _demanding.add(t.taskId);
