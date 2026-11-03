@@ -271,20 +271,26 @@ def token():
     return _tok["value"]
 
 
-def api(path, method="GET", body=None):
+def api(path, method="GET", body=None, retry_not_found=False):
     data = json.dumps(body).encode() if body is not None else None
-    req = urllib.request.Request(BASE + path, data=data, method=method, headers={
-        "Authorization": "Bearer " + token(),
-        "Content-Type": "application/json",
-    })
-    # Apple serveri vaqtincha yiqilsa (5xx/429) yoki tarmoq uzilsa — qayta urinadi
-    for attempt in range(1, 6):
+    # Apple serveri vaqtincha yiqilsa (5xx/429) yoki tarmoq uzilsa — qayta urinadi.
+    # retry_not_found: yangi build VALID bo'lgach ham Apple'ning boshqa qismlari
+    # uni bir necha daqiqa "ko'rmaydi" (404) — shu holda ham kutib qayta urinadi.
+    for attempt in range(1, 8 if retry_not_found else 6):
+        req = urllib.request.Request(BASE + path, data=data, method=method, headers={
+            "Authorization": "Bearer " + token(),
+            "Content-Type": "application/json",
+        })
         try:
             with urllib.request.urlopen(req, timeout=60, context=SSL_CTX) as resp:
                 raw = resp.read()
                 return json.loads(raw) if raw else {}
         except urllib.error.HTTPError as e:
             detail = e.read().decode(errors="replace")
+            if retry_not_found and e.code == 404 and attempt < 7:
+                print(f"  build hali tarqatishga tayyor emas (404) — 20 soniyadan keyin qayta ({attempt}/7)...")
+                time.sleep(20)
+                continue
             if (e.code >= 500 or e.code == 429) and attempt < 5:
                 print(f"  App Store Connect {e.code} — {attempt * 10} soniyadan keyin qayta urinish ({attempt}/5)...")
                 time.sleep(attempt * 10)
@@ -371,7 +377,7 @@ def set_notes(build, notes):
             "type": "betaBuildLocalizations",
             "attributes": {"locale": locale, "whatsNew": notes},
             "relationships": {"build": {"data": {"type": "builds", "id": build["id"]}}},
-        }})
+        }}, retry_not_found=True)
     print("  'What to Test' izohi yozildi", flush=True)
 
 
@@ -396,7 +402,7 @@ def distribute(build, wanted):
                   flush=True)
             continue
         api(f"/v1/betaGroups/{g['id']}/relationships/builds", "POST",
-            {"data": [{"type": "builds", "id": build["id"]}]})
+            {"data": [{"type": "builds", "id": build["id"]}]}, retry_not_found=True)
         kind = "internal" if attrs.get("isInternalGroup") else "external"
         print(f"  guruhga qo'shildi: {attrs['name']} ({kind})", flush=True)
         external = external or not attrs.get("isInternalGroup")
