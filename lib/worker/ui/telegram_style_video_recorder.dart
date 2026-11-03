@@ -480,7 +480,27 @@ class _TelegramStyleVideoRecorderState extends State<TelegramStyleVideoRecorder>
         setState(() => _isPaused = true);
       }
     } catch (e) {
-      _showError("Ошибка паузы/возобновления: $e");
+      // Kamera yozuvni o'zi to'xtatgan (uzilish, xotira, tizim) — texnik xato
+      // ko'rsatilmaydi: yetarli yozilgan bo'lsa saqlanadi, aks holda qayta yozish
+      if (!mounted) return;
+      debugPrint('Pauza/davom xatosi: $e');
+      if (_recordedSeconds >= _minSeconds) {
+        _stopRecording();
+        return;
+      }
+      _timer?.cancel();
+      try {
+        if (_camera!.isRecording) await _camera!.stop();
+      } catch (_) {}
+      await WakelockPlus.disable();
+      if (!mounted) return;
+      setState(() {
+        _isRecording = false;
+        _isPaused = false;
+        _recordedSeconds = 0;
+        _videoSegments.clear();
+      });
+      _showError("Запись прервалась. Запишите видео заново");
     }
   }
 
@@ -534,7 +554,8 @@ class _TelegramStyleVideoRecorderState extends State<TelegramStyleVideoRecorder>
           _isStopping = false;
         });
       }
-      _showError("Ошибка при сохранении видео: $e");
+      debugPrint('Video saqlanmadi: $e');
+      _showError("Не удалось сохранить видео. Запишите заново");
     }
   }
 

@@ -195,7 +195,7 @@ class AdminTaskListItem extends StatelessWidget {
             height: 32,
             child: IconButton(
               padding: EdgeInsets.zero,
-              iconSize: 22,
+              iconSize: 18,
               color: const Color(0xFF6B7280),
               tooltip: Platform.isWindows ? 'Копировать' : 'Отправить',
               onPressed: onShareVideo,

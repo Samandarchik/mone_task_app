@@ -147,9 +147,7 @@ class _AdminTaskUiState extends State<AdminTaskUi>
         .toList();
 
     final templateId = TaskViewSync.templateId;
-    final tab = ordered.indexWhere(
-      (f) => f.filialId == TaskViewSync.filialId,
-    );
+    final tab = ordered.indexWhere((f) => f.filialId == TaskViewSync.filialId);
     final controller = _tabController;
     if (tab >= 0 && controller != null && tab < controller.length) {
       controller.index = tab; // tinglovchi templateId ni tozalaydi
@@ -568,153 +566,167 @@ class _AdminTaskUiState extends State<AdminTaskUi>
     return Scaffold(
       appBar: AppBar(
         titleSpacing: 8,
-        title: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            UserAvatar(user: _user, radius: 16),
-            const SizedBox(width: 8),
-            Flexible(
-              child: Text(
-                _user?.fullName ?? "",
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(fontWeight: FontWeight.w700),
-              ),
-            ),
-          ],
+        // Joy qolmasa avatar va ism ko'rinmaydi — overflow bo'lmasin
+        title: LayoutBuilder(
+          builder: (context, box) => box.maxWidth < 48
+              ? const SizedBox.shrink()
+              : Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    UserAvatar(user: _user, radius: 16),
+                    const SizedBox(width: 8),
+                    Flexible(
+                      child: Text(
+                        _user?.fullName ?? "",
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(fontWeight: FontWeight.w700),
+                      ),
+                    ),
+                  ],
+                ),
         ),
+        // Tugmalar ekranga sig'masa — surib ko'riladi (aks holda overflow va
+        // o'ngdagi menyu kesilib qolardi)
         actions: [
-          if (_canSwitchFilial)
-            IconButton(
-              onPressed: _switchFilial,
-              icon: const Icon(Icons.swap_horiz),
-              tooltip: 'Сменить филиал',
-            ),
-          _StatusFilterButton(
-            status: 3,
-            color: Colors.green,
-            provider: tasksProvider,
-          ),
-          _StatusFilterButton(
-            status: 2,
-            color: Colors.orange,
-            label: 'Р',
-            provider: tasksProvider,
-          ),
-          _StatusFilterButton(
-            status: 1,
-            color: Colors.red,
-            label: 'А',
-            provider: tasksProvider,
-          ),
-          _ToggleFilterButton(
-            selected: tasksProvider.filterHasAudio,
-            onTap: tasksProvider.toggleHasAudioFilter,
-            icon: Icons.mic_rounded,
-            color: Colors.deepPurple.shade300,
-            tooltip: 'Голосовые загружены',
-          ),
-          _ToggleFilterButton(
-            selected: tasksProvider.filterNoVideo,
-            onTap: tasksProvider.toggleNoVideoFilter,
-            icon: Icons.videocam_off,
-            color: Colors.blueGrey,
-            tooltip: 'Видео не загружены',
-          ),
+          _ScrollableActions(
+            children: [
+              if (_canSwitchFilial)
+                IconButton(
+                  onPressed: _switchFilial,
+                  icon: const Icon(Icons.swap_horiz),
+                  tooltip: 'Сменить филиал',
+                ),
+              _StatusFilterButton(
+                status: 3,
+                color: Colors.green,
+                provider: tasksProvider,
+              ),
+              _StatusFilterButton(
+                status: 2,
+                color: Colors.orange,
+                label: 'Р',
+                provider: tasksProvider,
+              ),
+              _StatusFilterButton(
+                status: 1,
+                color: Colors.red,
+                label: 'А',
+                provider: tasksProvider,
+              ),
+              _ToggleFilterButton(
+                selected: tasksProvider.filterHasAudio,
+                onTap: tasksProvider.toggleHasAudioFilter,
+                icon: Icons.mic_rounded,
+                color: Colors.deepPurple.shade300,
+                tooltip: 'Голосовые загружены',
+              ),
+              _ToggleFilterButton(
+                selected: tasksProvider.filterNoVideo,
+                onTap: tasksProvider.toggleNoVideoFilter,
+                icon: Icons.videocam_off,
+                color: Colors.blueGrey,
+                tooltip: 'Видео не загружены',
+              ),
 
-          if (tasksProvider.isFilterActive)
-            IconButton(
-              onPressed: () => tasksProvider.clearStatusFilter(),
-              icon: const Icon(Icons.filter_alt_off, size: 18),
-              tooltip: 'Сбросить фильтр',
-              padding: EdgeInsets.zero,
-              constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
-            ),
+              if (tasksProvider.isFilterActive)
+                IconButton(
+                  onPressed: () => tasksProvider.clearStatusFilter(),
+                  icon: const Icon(Icons.filter_alt_off, size: 18),
+                  tooltip: 'Сбросить фильтр',
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints(
+                    minWidth: 32,
+                    minHeight: 32,
+                  ),
+                ),
 
-          GestureDetector(
-            onTap: _handleDateSelection,
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 8),
-              child: Center(
-                child: Text(
-                  _buildDateLabel(selectedDate),
-                  style: const TextStyle(fontSize: 13),
+              GestureDetector(
+                onTap: _handleDateSelection,
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 8),
+                  child: Center(
+                    child: Text(
+                      _buildDateLabel(selectedDate),
+                      style: const TextStyle(fontSize: 13),
+                    ),
+                  ),
                 ),
               ),
-            ),
-          ),
 
-          // ── Menyu elementlari (drawer o'rniga) ─────────────────────────
-          // Telefonda joy yetmaydi — menyu "⋯" ichida
-          if (MediaQuery.of(context).size.shortestSide < 600 && _showBell)
-            const OverdueBellButton(),
-          if (MediaQuery.of(context).size.shortestSide < 600)
-            const Padding(
-              padding: EdgeInsets.symmetric(horizontal: 6),
-              child: Center(child: ProfileSwitchButton()),
-            ),
-          if (MediaQuery.of(context).size.shortestSide < 600)
-            PopupMenuButton<VoidCallback>(
-              icon: const Icon(Icons.more_vert),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(14),
-              ),
-              onSelected: (action) => action(),
-              itemBuilder: (_) => [
-                _menuItem(
-                  CupertinoIcons.list_bullet,
-                  'Все задачи',
-                  () => _openAllTasks(categories),
+              // ── Menyu elementlari (drawer o'rniga) ─────────────────────────
+              // Telefonda joy yetmaydi — menyu "⋯" ichida
+              if (MediaQuery.of(context).size.shortestSide < 600 && _showBell)
+                const OverdueBellButton(),
+              if (MediaQuery.of(context).size.shortestSide < 600)
+                const Padding(
+                  padding: EdgeInsets.symmetric(horizontal: 6),
+                  child: Center(child: ProfileSwitchButton()),
                 ),
-                _menuItem(
-                  CupertinoIcons.trash,
-                  'Очистить кэш видео',
-                  _clearVideoCache,
+              if (MediaQuery.of(context).size.shortestSide < 600)
+                PopupMenuButton<VoidCallback>(
+                  icon: const Icon(Icons.more_vert),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                  onSelected: (action) => action(),
+                  itemBuilder: (_) => [
+                    _menuItem(
+                      CupertinoIcons.list_bullet,
+                      'Все задачи',
+                      () => _openAllTasks(categories),
+                    ),
+                    _menuItem(
+                      CupertinoIcons.trash,
+                      'Очистить кэш видео',
+                      _clearVideoCache,
+                    ),
+                    _menuItem(
+                      CupertinoIcons.doc_plaintext,
+                      'Отчеты',
+                      () => context.push(ExcelReportPage(filials: categories)),
+                    ),
+                    _menuItem(
+                      Icons.logout,
+                      'Выйти',
+                      _handleLogout,
+                      color: Colors.red,
+                    ),
+                  ],
+                )
+              else ...[
+                IconButton(
+                  onPressed: () => _openAllTasks(categories),
+                  icon: const Icon(Icons.edit_outlined),
+                  tooltip: 'Все задачи',
                 ),
-                _menuItem(
-                  CupertinoIcons.doc_plaintext,
-                  'Отчеты',
-                  () => context.push(ExcelReportPage(filials: categories)),
+                IconButton(
+                  onPressed: _clearVideoCache,
+                  icon: const Icon(CupertinoIcons.trash),
+                  tooltip: 'Очистить кэш видео',
                 ),
-                _menuItem(
-                  Icons.logout,
-                  'Выйти',
-                  _handleLogout,
-                  color: Colors.red,
+                IconButton(
+                  onPressed: () =>
+                      context.push(ExcelReportPage(filials: categories)),
+                  icon: const Icon(CupertinoIcons.list_bullet),
+                  tooltip: 'Отчеты',
+                ),
+                // Korrektor: vaqti o'tib, bajarilmagan vazifalar — profil oldida
+                if (_showBell) const OverdueBellButton(),
+                // Super admin: boshqa profilga kirish / orqaga qaytish
+                const Padding(
+                  padding: EdgeInsets.symmetric(horizontal: 6),
+                  child: Center(child: ProfileSwitchButton()),
+                ),
+                IconButton(
+                  onPressed: _handleLogout,
+                  icon: const Icon(Icons.logout, color: Colors.red),
+                  tooltip: 'Выйти',
                 ),
               ],
-            )
-          else ...[
-            IconButton(
-              onPressed: () => _openAllTasks(categories),
-              icon: const Icon(Icons.edit_outlined),
-              tooltip: 'Все задачи',
-            ),
-            IconButton(
-              onPressed: _clearVideoCache,
-              icon: const Icon(CupertinoIcons.trash),
-              tooltip: 'Очистить кэш видео',
-            ),
-            IconButton(
-              onPressed: () =>
-                  context.push(ExcelReportPage(filials: categories)),
-              icon: const Icon(CupertinoIcons.list_bullet),
-              tooltip: 'Отчеты',
-            ),
-            // Korrektor: vaqti o'tib, bajarilmagan vazifalar — profil oldida
-            if (_showBell) const OverdueBellButton(),
-            // Super admin: boshqa profilga kirish / orqaga qaytish
-            const Padding(
-              padding: EdgeInsets.symmetric(horizontal: 6),
-              child: Center(child: ProfileSwitchButton()),
-            ),
-            IconButton(
-              onPressed: _handleLogout,
-              icon: const Icon(Icons.logout, color: Colors.red),
-              tooltip: 'Выйти',
-            ),
-          ],
-          const SizedBox(width: 6),
+              const SizedBox(width: 6),
+            ],
+          ),
         ],
         bottom: PreferredSize(
           preferredSize: const Size.fromHeight(kTextTabBarHeight),
@@ -959,6 +971,27 @@ class _ToggleFilterButton extends StatelessWidget {
             ),
           ),
         ),
+      ),
+    );
+  }
+}
+
+/// AppBar tugmalari: ekranga sig'masa gorizontal suriladi. Oxiri (profil,
+/// menyu) doim ko'rinib turadi, chap tomonda sarlavha uchun joy qoladi.
+class _ScrollableActions extends StatelessWidget {
+  final List<Widget> children;
+
+  const _ScrollableActions({required this.children});
+
+  @override
+  Widget build(BuildContext context) {
+    final maxWidth = MediaQuery.sizeOf(context).width - 56;
+    return ConstrainedBox(
+      constraints: BoxConstraints(maxWidth: maxWidth < 0 ? 0 : maxWidth),
+      child: SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        reverse: true,
+        child: Row(mainAxisSize: MainAxisSize.min, children: children),
       ),
     );
   }

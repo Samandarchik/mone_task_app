@@ -143,6 +143,9 @@ class FakeCamera extends CameraPlatform with MockPlatformInterfaceMixin {
     }
   }
 
+  /// Tizim yozuvni o'zi to'xtatdi (kamera uzildi) — pauza endi xato beradi
+  void interrupt() => rec?.closed = true;
+
   @override
   Future<void> pauseVideoRecording(int cameraId) async => _check();
   @override
@@ -300,6 +303,38 @@ void main() {
     await tester.pump();
     await tester.pump(const Duration(seconds: 1));
     expect(errorText('Ошибка паузы'), findsNothing);
+    await leave(tester);
+  });
+
+  testWidgets('kamera yozuvni o\'zi to\'xtatsa pauza texnik xato '
+      'ko\'rsatmaydi, yozilgani saqlanadi', (tester) async {
+    await open(tester);
+    await startAndRecord(tester, 10);
+    camera.interrupt();
+    await tester.tap(find.byIcon(Icons.pause));
+    await tester.pump();
+    await tester.pump(const Duration(seconds: 1));
+    expect(errorText('Ошибка паузы'), findsNothing);
+    expect(errorText('IllegalStateException'), findsNothing);
+    expect(camera.stopCalls, 1);
+    await leave(tester);
+  });
+
+  testWidgets('kalta yozuv o\'zicha to\'xtasa — qayta yozishni so\'raydi', (
+    tester,
+  ) async {
+    await open(tester);
+    await startAndRecord(tester, 3);
+    camera.interrupt();
+    await tester.tap(find.byIcon(Icons.pause));
+    await tester.pump();
+    await tester.pump(const Duration(seconds: 1));
+    expect(errorText('IllegalStateException'), findsNothing);
+    expect(errorText('Запись прервалась'), findsOneWidget);
+    // Yangi yozuvni boshlasa bo'ladi
+    await tester.tap(_record);
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(camera.startCalls, 2);
     await leave(tester);
   });
 

@@ -117,6 +117,7 @@ class _OverdueBellButtonState extends State<OverdueBellButton> {
   /// Ochiq ro'yxat dialogini qayta chizish uchun (talabdan keyin)
   final _listVersion = ValueNotifier<int>(0);
   final Set<int> _demanding = {};
+  bool _demandingAll = false;
 
   @override
   void initState() {
@@ -169,28 +170,107 @@ class _OverdueBellButtonState extends State<OverdueBellButton> {
     _listVersion.value++;
   }
 
+  /// Bitta vazifa bo'yicha talab — server javobi (xato bo'lsa DioException)
+  Future<Map> _postDemand(int taskId) async {
+    final response = await sl<Dio>().post('${AppUrls.tasks}/$taskId/demand');
+    return response.data is Map ? response.data as Map : const {};
+  }
+
+  String _demandError(Object e) {
+    if (e is DioException) {
+      final data = e.response?.data;
+      if (data is Map && data['error'] != null) return '${data['error']}';
+    }
+    return 'Не удалось отправить';
+  }
+
   /// Revizor talabi: xodimlarga majburiy oyna va telefonga push
   Future<void> _demand(_OverdueTask t) async {
-    if (_demanding.contains(t.taskId)) return;
+    if (_demandingAll || _demanding.contains(t.taskId)) return;
     _demanding.add(t.taskId);
     _listVersion.value++;
     final messenger = ScaffoldMessenger.of(context);
     String msg;
     try {
-      final response = await sl<Dio>().post(
-        '${AppUrls.tasks}/${t.taskId}/demand',
-      );
-      final data = response.data is Map ? response.data : const {};
-      msg = demandResultText(data);
+      msg = demandResultText(await _postDemand(t.taskId));
     } catch (e) {
-      msg = 'Не удалось отправить';
-      if (e is DioException) {
-        final data = e.response?.data;
-        if (data is Map && data['error'] != null) msg = '${data['error']}';
-      }
+      msg = _demandError(e);
     }
     _demanding.remove(t.taskId);
     await _load();
+    messenger.showSnackBar(
+      SnackBar(behavior: SnackBarBehavior.floating, content: Text(msg)),
+    );
+  }
+
+  /// Ro'yxatdagi hamma vazifa bo'yicha birdan talab (mas'uli borlari)
+  Future<void> _demandAll() async {
+    final targets = [
+      for (final t in _tasks)
+        if (t.responsible.isNotEmpty) t,
+    ];
+    if (_demandingAll || targets.isEmpty) return;
+
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Потребовать у всех?'),
+        content: Text(
+          'Требование уйдёт по ${targets.length} задачам — '
+          'всем ответственным сразу.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('Отмена'),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(
+              backgroundColor: const Color(0xFFDC2626),
+            ),
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: const Text('Потребовать'),
+          ),
+        ],
+      ),
+    );
+    if (ok != true || !mounted) return;
+
+    final messenger = ScaffoldMessenger.of(context);
+    _demandingAll = true;
+    _demanding.addAll(targets.map((t) => t.taskId));
+    _listVersion.value++;
+
+    var sent = 0;
+    final failed = <String>[];
+    final notReached = <String>{};
+    // 4 tadan parallel — server va tarmoqni bir zumda to'ldirib yubormaslik uchun
+    for (var i = 0; i < targets.length; i += 4) {
+      final batch = targets.skip(i).take(4);
+      await Future.wait(
+        batch.map((t) async {
+          try {
+            final data = await _postDemand(t.taskId);
+            sent++;
+            for (final name in (data['notReached'] as List? ?? const [])) {
+              notReached.add('$name');
+            }
+          } catch (e) {
+            failed.add(t.task);
+          } finally {
+            _demanding.remove(t.taskId);
+            _listVersion.value++;
+          }
+        }),
+      );
+    }
+    _demandingAll = false;
+    await _load();
+
+    var msg = 'Потребовано: $sent из ${targets.length}';
+    if (notReached.isNotEmpty)
+      msg += '\nНе доставлено: ${notReached.join(', ')}';
+    if (failed.isNotEmpty) msg += '\nНе удалось: ${failed.length}';
     messenger.showSnackBar(
       SnackBar(behavior: SnackBarBehavior.floating, content: Text(msg)),
     );
@@ -315,12 +395,45 @@ class _OverdueBellButtonState extends State<OverdueBellButton> {
       );
     }
 
+    final withResponsible = _tasks.where((t) => t.responsible.isNotEmpty);
+    final demandAllButton = Padding(
+      padding: const EdgeInsets.fromLTRB(14, 0, 14, 10),
+      child: SizedBox(
+        width: double.infinity,
+        child: FilledButton.icon(
+          onPressed: _demandingAll || withResponsible.isEmpty
+              ? null
+              : _demandAll,
+          style: FilledButton.styleFrom(
+            backgroundColor: const Color(0xFFDC2626),
+            visualDensity: VisualDensity.compact,
+          ),
+          icon: _demandingAll
+              ? const SizedBox(
+                  width: 16,
+                  height: 16,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    color: Colors.white,
+                  ),
+                )
+              : const Icon(Icons.campaign_rounded, size: 18),
+          label: Text(
+            _demandingAll
+                ? 'Отправляется...'
+                : 'Потребовать у всех (${withResponsible.length})',
+          ),
+        ),
+      ),
+    );
+
     return ConstrainedBox(
-      constraints: const BoxConstraints(maxHeight: 440),
+      constraints: const BoxConstraints(maxHeight: 480),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
           header,
+          demandAllButton,
           const Divider(height: 1),
           Flexible(
             child: ListView.builder(
@@ -433,7 +546,9 @@ class _OverdueBellButtonState extends State<OverdueBellButton> {
             ),
           ),
           TextButton(
-            onPressed: busy || t.responsible.isEmpty ? null : () => _demand(t),
+            onPressed: busy || _demandingAll || t.responsible.isEmpty
+                ? null
+                : () => _demand(t),
             style: TextButton.styleFrom(
               foregroundColor: const Color(0xFFDC2626),
               visualDensity: VisualDensity.compact,
