@@ -15,6 +15,9 @@
 #   ./deploy_ios.command --groups "A,B"   faqat shu TestFlight guruhlariga
 #   ./deploy_ios.command --notes "matn"   "What to Test" izohi
 #   ./deploy_ios.command --no-wait        yuklab qo'yadi, TestFlight tarqatishni kutmaydi
+#   ./deploy_ios.command --only-testflight yig'maydi/yuklamaydi: pubspec'dagi versiyani
+#                                         TestFlight'ga tarqatadi (yuklangan-u tarqatish
+#                                         yiqilgan bo'lsa)
 #   ./deploy_ios.command --validate       yuklamaydi, faqat App Store tekshiruvidan o'tkazadi
 #   ./deploy_ios.command --clean          Xcode keshini tozalab build qiladi
 #   ./deploy_ios.command --analyze        build'dan oldin `flutter analyze lib` ishlatadi
@@ -87,6 +90,7 @@ BUMP=patch          # patch | minor | major | build | none
 VALIDATE=0
 CLEAN=0
 NO_WAIT=0
+ONLY_TF=0
 ANALYZE=0
 GIT_PUSH=1
 NEW_VERSION=""
@@ -105,6 +109,7 @@ while [ $# -gt 0 ]; do
         --major)            BUMP=major ;;
         --no-git)   GIT_PUSH=0 ;;
         --no-wait)  NO_WAIT=1 ;;
+        --only-testflight) ONLY_TF=1 ;;
         --validate) VALIDATE=1 ;;
         --clean)    CLEAN=1 ;;
         --analyze)  ANALYZE=1 ;;
@@ -272,13 +277,25 @@ def api(path, method="GET", body=None):
         "Authorization": "Bearer " + token(),
         "Content-Type": "application/json",
     })
-    try:
-        with urllib.request.urlopen(req, timeout=60, context=SSL_CTX) as resp:
-            raw = resp.read()
-            return json.loads(raw) if raw else {}
-    except urllib.error.HTTPError as e:
-        detail = e.read().decode(errors="replace")
-        raise SystemExit(f"App Store Connect xatosi {e.code} ({method} {path}):\n{detail[:600]}")
+    # Apple serveri vaqtincha yiqilsa (5xx/429) yoki tarmoq uzilsa — qayta urinadi
+    for attempt in range(1, 6):
+        try:
+            with urllib.request.urlopen(req, timeout=60, context=SSL_CTX) as resp:
+                raw = resp.read()
+                return json.loads(raw) if raw else {}
+        except urllib.error.HTTPError as e:
+            detail = e.read().decode(errors="replace")
+            if (e.code >= 500 or e.code == 429) and attempt < 5:
+                print(f"  App Store Connect {e.code} — {attempt * 10} soniyadan keyin qayta urinish ({attempt}/5)...")
+                time.sleep(attempt * 10)
+                continue
+            raise SystemExit(f"App Store Connect xatosi {e.code} ({method} {path}):\n{detail[:600]}")
+        except (urllib.error.URLError, TimeoutError) as e:
+            if attempt < 5:
+                print(f"  Tarmoq xatosi ({e}) — {attempt * 10} soniyadan keyin qayta urinish ({attempt}/5)...")
+                time.sleep(attempt * 10)
+                continue
+            raise SystemExit(f"App Store Connect'ga ulanib bo'lmadi ({method} {path}): {e}")
 
 
 def app_id():
@@ -413,6 +430,15 @@ asc() {
     ASC_KEY_FILE="$KEY_FILE" ASC_KEY_ID="$ASC_KEY_ID" ASC_ISSUER_ID="$ASC_ISSUER_ID" \
     BUNDLE_ID="$BUNDLE_ID" "$PY_BIN" "$ASC_PY" "$@"
 }
+
+# --- 1c'. Faqat TestFlight (build allaqachon yuklangan) ---
+if [ "$ONLY_TF" -eq 1 ]; then
+    CUR="$(grep '^version:' pubspec.yaml | head -1 | sed 's/^version: *//; s/[[:space:]]*#.*//; s/[[:space:]]*$//')"
+    asc distribute "${CUR%%+*}" "${CUR##*+}" "$NOTES" "$WAIT_MIN" "$TF_GROUPS"
+    echo
+    echo "Tayyor — $CUR TestFlight'da testerlarga tarqatildi."
+    exit 0
+fi
 
 # --- 1c. Reliz tekshiruvi ---
 # Versiya oshirilishidan OLDIN: testlar yiqilsa hech narsa o'zgarmaydi.
